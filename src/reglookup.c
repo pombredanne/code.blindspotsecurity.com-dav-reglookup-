@@ -1,5 +1,7 @@
 /*
- * $Id: $
+ * $Id$
+ *
+ * A utility to edit a Windows NT/2K etc registry file.
  *
  * This code was taken from Richard Sharpe''s editreg utility, in the 
  * Samba CVS tree.  It has since been simplified and turned into a
@@ -10,8 +12,7 @@
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * the Free Software Foundation; version 2 of the License.
  * 
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -24,290 +25,20 @@
  */
  
 /*************************************************************************
-                                                    
- A utility to edit a Windows NT/2K etc registry file.
-                                     
- Many of the ideas in here come from other people and software. 
- I first looked in Wine in misc/registry.c and was also influenced by
- http://www.wednesday.demon.co.uk/dosreg.html
 
- Which seems to contain comments from someone else. I reproduce them here
- incase the site above disappears. It actually comes from 
- http://home.eunet.no/~pnordahl/ntpasswd/WinReg.txt. 
+ A note from Richard Sharpe:
+  Many of the ideas in here come from other people and software. 
+  I first looked in Wine in misc/registry.c and was also influenced by
+  http://www.wednesday.demon.co.uk/dosreg.html
 
- The goal here is to read the registry into memory, manipulate it, and then
- write it out if it was changed by any actions of the user.
-
-The windows NT registry has 2 different blocks, where one can occur many
-times...
-
-the "regf"-Block
-================
+  Which seems to contain comments from someone else. I reproduce them here
+  incase the site above disappears. It actually comes from 
+  http://home.eunet.no/~pnordahl/ntpasswd/WinReg.txt. 
  
-"regf" is obviosly the abbreviation for "Registry file". "regf" is the
-signature of the header-block which is always 4kb in size, although only
-the first 64 bytes seem to be used and a checksum is calculated over
-the first 0x200 bytes only!
+ NOTE: the comments he refers to have been moved to doc/winntreg.txt
 
-Offset            Size      Contents
-0x00000000      D-Word      ID: ASCII-"regf" = 0x66676572
-0x00000004      D-Word      ???? //see struct REGF
-0x00000008      D-Word      ???? Always the same value as at 0x00000004
-0x0000000C      Q-Word      last modify date in WinNT date-format
-0x00000014      D-Word      1
-0x00000018      D-Word      3
-0x0000001C      D-Word      0
-0x00000020      D-Word      1
-0x00000024      D-Word      Offset of 1st key record
-0x00000028      D-Word      Size of the data-blocks (Filesize-4kb)
-0x0000002C      D-Word      1
-0x000001FC      D-Word      Sum of all D-Words from 0x00000000 to
-0x000001FB  //XOR of all words. Nigel
+**************************************************************************/
 
-I have analyzed more registry files (from multiple machines running
-NT 4.0 german version) and could not find an explanation for the values
-marked with ???? the rest of the first 4kb page is not important...
-
-the "hbin"-Block
-================
-I dont know what "hbin" stands for, but this block is always a multiple
-of 4kb in size.
-
-Inside these hbin-blocks the different records are placed. The memory-
-management looks like a C-compiler heap management to me...
-
-hbin-Header
-===========
-Offset      Size      Contents
-0x0000      D-Word      ID: ASCII-"hbin" = 0x6E696268
-0x0004      D-Word      Offset from the 1st hbin-Block
-0x0008      D-Word      Offset to the next hbin-Block
-0x001C      D-Word      Block-size
-
-The values in 0x0008 and 0x001C should be the same, so I dont know
-if they are correct or swapped...
-
-From offset 0x0020 inside a hbin-block data is stored with the following
-format:
-
-Offset      Size      Contents
-0x0000      D-Word      Data-block size    //this size must be a
-multiple of 8. Nigel
-0x0004      ????      Data
- 
-If the size field is negative (bit 31 set), the corresponding block
-is free and has a size of -blocksize!
-
-That does not seem to be true. All block lengths seem to be negative! 
-(Richard Sharpe) 
-
-The data is stored as one record per block. Block size is a multiple
-of 4 and the last block reaches the next hbin-block, leaving no room.
-
-(That also seems incorrect, in that the block size if a multiple of 8.
-That is, the block, including the 4 byte header, is always a multiple of
-8 bytes. Richard Sharpe.)
-
-Records in the hbin-blocks
-==========================
-
-nk-Record
-
-      The nk-record can be treated as a kombination of tree-record and
-      key-record of the win 95 registry.
-
-lf-Record
-
-      The lf-record is the counterpart to the RGKN-record (the
-      hash-function)
-
-vk-Record
-
-      The vk-record consists information to a single value.
-
-sk-Record
-
-      sk (? Security Key ?) is the ACL of the registry.
-
-Value-Lists
-
-      The value-lists contain information about which values are inside a
-      sub-key and dont have a header.
-
-Datas
-
-      The datas of the registry are (like the value-list) stored without a
-      header.
-
-All offset-values are relative to the first hbin-block and point to the
-block-size field of the record-entry. to get the file offset, you have to add
-the header size (4kb) and the size field (4 bytes)...
-
-the nk-Record
-=============
-Offset      Size      Contents
-0x0000      Word      ID: ASCII-"nk" = 0x6B6E
-0x0002      Word      for the root-key: 0x2C, otherwise 0x20  //key symbolic links 0x10. Nigel
-0x0004      Q-Word      write-date/time in windows nt notation
-0x0010      D-Word      Offset of Owner/Parent key
-0x0014      D-Word      number of sub-Keys
-0x001C      D-Word      Offset of the sub-key lf-Records
-0x0024      D-Word      number of values
-0x0028      D-Word      Offset of the Value-List
-0x002C      D-Word      Offset of the sk-Record
-
-0x0030      D-Word      Offset of the Class-Name //see NK structure for the use of these fields. Nigel
-0x0044      D-Word      Unused (data-trash)  //some kind of run time index. Does not appear to be important. Nigel
-0x0048      Word      name-length
-0x004A      Word      class-name length
-0x004C      ????      key-name
-
-the Value-List
-==============
-Offset      Size      Contents
-0x0000      D-Word      Offset 1st Value
-0x0004      D-Word      Offset 2nd Value
-0x????      D-Word      Offset nth Value
-
-To determine the number of values, you have to look at the owner-nk-record!
-
-Der vk-Record
-=============
-Offset      Size      Contents
-0x0000      Word      ID: ASCII-"vk" = 0x6B76
-0x0002      Word      name length
-0x0004      D-Word      length of the data   //if top bit is set when offset contains data. Nigel
-0x0008      D-Word      Offset of Data
-0x000C      D-Word      Type of value
-0x0010      Word      Flag
-0x0012      Word      Unused (data-trash)
-0x0014      ????      Name
-
-If bit 0 of the flag-word is set, a name is present, otherwise the value has no name (=default)
-
-If the data-size is lower 5, the data-offset value is used to store the data itself!
-
-The data-types
-==============
-Wert      Beteutung
-0x0001      RegSZ:             character string (in UNICODE!)
-0x0002      ExpandSZ:   string with "%var%" expanding (UNICODE!)
-0x0003      RegBin:           raw-binary value
-0x0004      RegDWord:   Dword
-0x0007      RegMultiSZ:      multiple strings, seperated with 0
-                  (UNICODE!)
-
-The "lf"-record
-===============
-Offset      Size      Contents
-0x0000      Word      ID: ASCII-"lf" = 0x666C
-0x0002      Word      number of keys
-0x0004      ????      Hash-Records
-
-Hash-Record
-===========
-Offset      Size      Contents
-0x0000      D-Word      Offset of corresponding "nk"-Record
-0x0004      D-Word      ASCII: the first 4 characters of the key-name, padded with 0-s. Case sensitiv!
-
-Keep in mind, that the value at 0x0004 is used for checking the data-consistency! If you change the 
-key-name you have to change the hash-value too!
-
-//These hashrecords must be sorted low to high within the lf record. Nigel.
-
-The "sk"-block
-==============
-(due to the complexity of the SAM-info, not clear jet)
-(This is just a self-relative security descriptor in the data. R Sharpe.) 
-
-
-Offset      Size      Contents
-0x0000      Word      ID: ASCII-"sk" = 0x6B73
-0x0002      Word      Unused
-0x0004      D-Word      Offset of previous "sk"-Record
-0x0008      D-Word      Offset of next "sk"-Record
-0x000C      D-Word      usage-counter
-0x0010      D-Word      Size of "sk"-record in bytes
-????                                             //standard self
-relative security desciptor. Nigel
-????  ????      Security and auditing settings...
-????
-
-The usage counter counts the number of references to this
-"sk"-record. You can use one "sk"-record for the entire registry!
-
-Windows nt date/time format
-===========================
-The time-format is a 64-bit integer which is incremented every
-0,0000001 seconds by 1 (I dont know how accurate it really is!)
-It starts with 0 at the 1st of january 1601 0:00! All values are
-stored in GMT time! The time-zone is important to get the real
-time!
-
-Common values for win95 and win-nt
-==================================
-Offset values marking an "end of list", are either 0 or -1 (0xFFFFFFFF).
-If a value has no name (length=0, flag(bit 0)=0), it is treated as the
-"Default" entry...
-If a value has no data (length=0), it is displayed as empty.
-
-simplyfied win-3.?? registry:
-=============================
-
-+-----------+
-| next rec. |---+                      +----->+------------+
-| first sub |   |                      |      | Usage cnt. |
-| name      |   |  +-->+------------+  |      | length     |
-| value     |   |  |   | next rec.  |  |      | text       |------->+-------+
-+-----------+   |  |   | name rec.  |--+      +------------+        | xxxxx |
-   +------------+  |   | value rec. |-------->+------------+        +-------+
-   v               |   +------------+         | Usage cnt. |
-+-----------+      |                          | length     |
-| next rec. |      |                          | text       |------->+-------+
-| first sub |------+                          +------------+        | xxxxx |
-| name      |                                                       +-------+
-| value     |
-+-----------+    
-
-Greatly simplyfied structure of the nt-registry:
-================================================
-   
-+---------------------------------------------------------------+
-|                                                               |
-v                                                               |
-+---------+     +---------->+-----------+  +----->+---------+   |
-| "nk"    |     |           | lf-rec.   |  |      | nk-rec. |   |
-| ID      |     |           | # of keys |  |      | parent  |---+
-| Date    |     |           | 1st key   |--+      | ....    |
-| parent  |     |           +-----------+         +---------+
-| suk-keys|-----+
-| values  |--------------------->+----------+
-| SK-rec. |---------------+      | 1. value |--> +----------+
-| class   |--+            |      +----------+    | vk-rec.  |
-+---------+  |            |                      | ....     |
-             v            |                      | data     |--> +-------+
-      +------------+      |                      +----------+    | xxxxx |
-      | Class name |      |                                      +-------+
-      +------------+      |
-                          v
-          +---------+    +---------+
-   +----->| next sk |--->| Next sk |--+
-   |  +---| prev sk |<---| prev sk |  |
-   |  |   | ....    |    | ...     |  |
-   |  |   +---------+    +---------+  |
-   |  |                    ^          |
-   |  |                    |          |
-   |  +--------------------+          |
-   +----------------------------------+
-
----------------------------------------------------------------------------
-
-Hope this helps....  (Although it was *fun* for me to uncover this things,
-                  it took me several sleepless nights ;)
-
-            B.D.
-
-*************************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1153,8 +884,10 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
   unsigned int i;
   unsigned short num_nulls;
   unsigned char* ascii;
-  unsigned int ascii_max;
-  int str_rem;
+  unsigned char* cur_str;
+  unsigned int cur_str_len;
+  unsigned int ascii_max, cur_str_max;
+  unsigned int str_rem, cur_str_rem, alen;
 
   switch (type) 
   {
@@ -1215,6 +948,8 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 
   case REG_TYPE_MULTISZ:
     ascii_max = sizeof(char)*len*4;
+    cur_str_max = sizeof(char)*len+1;
+    cur_str = malloc(cur_str_max);
     ascii = malloc(ascii_max+4);
     if(ascii == NULL)
       return NULL;
@@ -1227,17 +962,43 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     asciip = ascii;
     num_nulls = 0;
     str_rem = ascii_max;
-    for(i=0; (i < len) && (num_nulls < 4) && str_rem > 0; i++)
+    cur_str_rem = cur_str_max;
+    cur_str_len = 0;
+
+    *asciip = '"';
+    asciip +=1;
+    
+    for(i=0; (i < len) && str_rem > 0; i++)
     {
-      asciip += snprintf((char*)asciip, str_rem, "%02x ", 
-			 *(unsigned char *)(datap+i));
-      str_rem -= 3;
-      if(*(datap+i) == 0)
+      *(cur_str+cur_str_len) = *(datap+i);
+      if(*(cur_str+cur_str_len) == 0)
 	num_nulls++;
       else
 	num_nulls = 0;
+      cur_str_len++;
+
+      if(num_nulls == 2)
+      {
+	uni_to_ascii(cur_str, asciip, str_rem, 0);
+	alen = strlen((char*)asciip);
+	asciip += alen;
+	str_rem -= alen;
+	if(*(datap+i+1) == 0 && *(datap+i+2) == 0)
+	  break;
+	else
+	{
+	  alen = snprintf((char*)asciip, str_rem, "%s", "\" \"");
+	  asciip += alen;
+	  str_rem -= alen;
+	  memset(cur_str, 0, cur_str_max);
+	  cur_str_len = 0;
+	  num_nulls = 0;
+	  /* To eliminate leading nulls in subsequent strings. */
+	  i++;
+	}
+      }
     }
-    *asciip = '\0';
+    snprintf((char*)asciip, str_rem, "%s", "\"");
     return ascii;
     break;
 
@@ -2310,7 +2071,6 @@ void usage(void)
   fprintf(stderr, "Version: 0.1\n\n");
   fprintf(stderr, "\n\t-v\t sets verbose mode");
   fprintf(stderr, "\n\t-f\t a simple prefix filter.");
-  fprintf(stderr, "\n\t-p\t prints the registry");
   fprintf(stderr, "\n\t-s\t prints security descriptors");
   fprintf(stderr, "\n");
 }
@@ -2406,12 +2166,6 @@ int main(int argc, char *argv[])
    * to iterate over it.
    */
   nt_key_iterator(regf, regf->root, 0, "", filter_prefix);
-
-  /* XXX: debugging; remove me. */
-  printf("%d,%d,%d\n", 
-	 str_is_prefix("foo", "foobar"),
-	 str_is_prefix("", "xyz"),
-	 str_is_prefix("foo", "foo"));
 
   return 0;
 }
