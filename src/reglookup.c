@@ -416,6 +416,42 @@ unsigned int str_is_prefix(const char* p, const char* s)
 }
 
 
+/* Returns a newly malloc()ed string which contains original string, 
+ * except for non-printable or special characters are quoted in hex
+ * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
+ * character.
+ */
+static
+char* quote_string(const char* str, char* special)
+{
+  unsigned int i;
+  unsigned int num_written=0;
+  unsigned int len = strlen(str);
+  unsigned int out_len = sizeof(char)*len+1;
+  char* ret_val = malloc(out_len);
+  if(ret_val == NULL)
+    return NULL;
+
+  for(i=0; i<len; i++)
+  {
+    if(str[i] < 32 || str[i] > 126 || strchr(special, str[i]) != NULL)
+    {
+      out_len += 3;
+      ret_val = realloc(ret_val, out_len);
+      if(ret_val == NULL)
+	break;
+      num_written += snprintf(ret_val+num_written, out_len-num_written,
+			      "\\x%.2X", str[i]);
+    }
+    else
+      ret_val[num_written++] = str[i];
+  }
+  ret_val[num_written] = '\0';
+
+  return ret_val;
+}
+
+
 /*
  * Iterate over the keys, depth first, calling a function for each key
  * and indicating if it is terminal or non-terminal and if it has values.
@@ -885,6 +921,8 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
   unsigned short num_nulls;
   unsigned char* ascii;
   unsigned char* cur_str;
+  unsigned char* cur_ascii;
+  char* cur_quoted;
   unsigned int cur_str_len;
   unsigned int ascii_max, cur_str_max;
   unsigned int str_rem, cur_str_rem, alen;
@@ -950,6 +988,7 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     ascii_max = sizeof(char)*len*4;
     cur_str_max = sizeof(char)*len+1;
     cur_str = malloc(cur_str_max);
+    cur_ascii = malloc(cur_str_max);
     ascii = malloc(ascii_max+4);
     if(ascii == NULL)
       return NULL;
@@ -965,9 +1004,6 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     cur_str_rem = cur_str_max;
     cur_str_len = 0;
 
-    *asciip = '"';
-    asciip +=1;
-    
     for(i=0; (i < len) && str_rem > 0; i++)
     {
       *(cur_str+cur_str_len) = *(datap+i);
@@ -979,15 +1015,18 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 
       if(num_nulls == 2)
       {
-	uni_to_ascii(cur_str, asciip, str_rem, 0);
-	alen = strlen((char*)asciip);
+	uni_to_ascii(cur_str, cur_ascii, cur_str_max, 0);
+	cur_quoted = quote_string((char*)cur_ascii, "|");
+	alen = snprintf((char*)asciip, str_rem, "%s", cur_quoted);
 	asciip += alen;
 	str_rem -= alen;
+	free(cur_quoted);
+
 	if(*(datap+i+1) == 0 && *(datap+i+2) == 0)
 	  break;
 	else
 	{
-	  alen = snprintf((char*)asciip, str_rem, "%s", "\" \"");
+	  alen = snprintf((char*)asciip, str_rem, "%c", '|');
 	  asciip += alen;
 	  str_rem -= alen;
 	  memset(cur_str, 0, cur_str_max);
@@ -998,7 +1037,7 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 	}
       }
     }
-    snprintf((char*)asciip, str_rem, "%s", "\"");
+    *asciip = 0;
     return ascii;
     break;
 
