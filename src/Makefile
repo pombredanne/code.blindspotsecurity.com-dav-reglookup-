@@ -1,3 +1,5 @@
+# $Id$
+
 OPTS=-ggdb -std=gnu89 -pedantic -Wall
 
 all: reglookup
