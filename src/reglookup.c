@@ -42,6 +42,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <assert.h>
 #include <sys/types.h>
@@ -385,10 +386,9 @@ typedef struct regf_struct_s {
 /* Function prototypes */
 
 static int nt_val_list_iterator(REGF *regf,  REG_KEY *key_tree, int bf, 
-                                char *path, int terminal, 
-                                const char* filter_prefix);
+                                char *path, int terminal);
 static int nt_key_iterator(REGF *regf, REG_KEY *key_tree, int bf,
-			   const char *path, const char* filter_prefix);
+			   const char *path);
 static REG_KEY *nt_find_key_by_name(REG_KEY *tree, char *key);
 static int print_key(const char *path, char *name, char *class_name, int root,
                      int terminal, int vals, char* newline);
@@ -396,8 +396,15 @@ static int print_val(const char *path, char *val_name, int val_type,
                      int data_len, void *data_blk, int terminal, int first, 
                      int last);
 
-static
-int print_sec(SEC_DESC *sec_desc);
+static int print_sec(SEC_DESC *sec_desc);
+
+
+/* Globals */
+
+char* prefix_filter = "";
+char* type_filter = "";
+bool type_filter_enabled = false;
+
 
 unsigned int str_is_prefix(const char* p, const char* s)
 {
@@ -461,29 +468,26 @@ char* quote_string(const char* str, char* special)
 
 static
 int nt_val_list_iterator(REGF *regf,  REG_KEY *key_tree, int bf, char *path,
-			 int terminal, const char* filter_prefix)
+			 int terminal)
 {
   int i;
   VAL_LIST* val_list = key_tree->values;
 
-  if (str_is_prefix(filter_prefix, path))
-  {  
-    for (i=0; i<val_list->val_count; i++) 
-    {
-      /*XXX: print_key() is doing nothing right now, can probably be removed. */
-      if (!print_key(path, key_tree->name,
-		     key_tree->class_name,
-		     (key_tree->type == REG_ROOT_KEY),
-		     (key_tree->sub_keys == NULL),
-		     (key_tree->values?(key_tree->values->val_count):0),
-		     "\n") ||
-	  !print_val(path, val_list->vals[i]->name,val_list->vals[i]->data_type,
-		     val_list->vals[i]->data_len, val_list->vals[i]->data_blk,
-		     terminal,
-		     (i == 0),
-		     (i == val_list->val_count)))
-      { return 0; }
-    }
+  for (i=0; i<val_list->val_count; i++) 
+  {
+    /*XXX: print_key() is doing nothing right now, can probably be removed. */
+    if (!print_key(path, key_tree->name,
+		   key_tree->class_name,
+		   (key_tree->type == REG_ROOT_KEY),
+		   (key_tree->sub_keys == NULL),
+		   (key_tree->values?(key_tree->values->val_count):0),
+		   "\n") ||
+	!print_val(path, val_list->vals[i]->name,val_list->vals[i]->data_type,
+		   val_list->vals[i]->data_len, val_list->vals[i]->data_blk,
+		   terminal,
+		   (i == 0),
+		   (i == val_list->val_count)))
+    { return 0; }
   }
 
   return 1;
@@ -491,7 +495,7 @@ int nt_val_list_iterator(REGF *regf,  REG_KEY *key_tree, int bf, char *path,
 
 static
 int nt_key_list_iterator(REGF *regf, KEY_LIST *key_list, int bf, 
-			 const char *path, const char* filter_prefix)
+			 const char *path)
 {
   int i;
 
@@ -500,7 +504,7 @@ int nt_key_list_iterator(REGF *regf, KEY_LIST *key_list, int bf,
 
   for (i=0; i < key_list->key_count; i++) 
   {
-    if (!nt_key_iterator(regf, key_list->keys[i], bf, path, filter_prefix)) 
+    if (!nt_key_iterator(regf, key_list->keys[i], bf, path)) 
       return 0;
   }
   return 1;
@@ -508,7 +512,7 @@ int nt_key_list_iterator(REGF *regf, KEY_LIST *key_list, int bf,
 
 static
 int nt_key_iterator(REGF *regf, REG_KEY *key_tree, int bf, 
-		    const char *path, const char* filter_prefix)
+		    const char *path)
 {
   int path_len = strlen(path);
   char *new_path;
@@ -516,10 +520,21 @@ int nt_key_iterator(REGF *regf, REG_KEY *key_tree, int bf,
   if (!regf || !key_tree)
     return -1;
 
+  new_path = (char *)malloc(path_len + 1 + strlen(key_tree->name) + 1);
+  if (!new_path) 
+    return 0; /* Errors? */
+  new_path[0] = '\0';
+  strcat(new_path, path);
+  strcat(new_path, key_tree->name);
+  strcat(new_path, "/");
+
   /* List the key first, then the values, then the sub-keys */
-  /*printf("filter_prefix: %s, path: %s\n", filter_prefix, path);*/
-  if (str_is_prefix(filter_prefix, path))
+  /*printf("prefix_filter: %s, path: %s\n", prefix_filter, path);*/
+  if (str_is_prefix(prefix_filter, new_path))
   {
+    if (!type_filter_enabled || (strcmp(type_filter, "KEY") == 0))
+      printf("%s%s:KEY\n", path, key_tree->name);
+
     /*XXX: print_key() is doing nothing right now, can probably be removed. */
     if (!print_key(path, key_tree->name,
 		   key_tree->class_name,
@@ -537,20 +552,12 @@ int nt_key_iterator(REGF *regf, REG_KEY *key_tree, int bf,
       return 0;
   }
 
-  new_path = (char *)malloc(path_len + 1 + strlen(key_tree->name) + 1);
-  if (!new_path) 
-    return 0; /* Errors? */
-  new_path[0] = '\0';
-  strcat(new_path, path);
-  strcat(new_path, key_tree->name);
-  strcat(new_path, "\\");
-
   /*
    * Now, iterate through the values in the val_list 
    */
   if (key_tree->values &&
       !nt_val_list_iterator(regf, key_tree, bf, new_path, 
-			    (key_tree->values!=NULL), filter_prefix))
+			    (key_tree->values!=NULL)))
   {
     free(new_path);
     return 0;
@@ -561,7 +568,7 @@ int nt_key_iterator(REGF *regf, REG_KEY *key_tree, int bf,
    */
   if (key_tree->sub_keys && 
       !nt_key_list_iterator(regf, key_tree->sub_keys, bf, 
-                            new_path, filter_prefix)) 
+                            new_path)) 
   {
     free(new_path);
     return 0;
@@ -614,7 +621,7 @@ static REG_KEY* nt_find_key_by_name(REG_KEY* tree, char* key)
    * Make sure that the first component is correct ...
    */
   c1 = lname;
-  c2 = strchr(c1, '\\');
+  c2 = strchr(c1, '/');
   if (c2) 
   { /* Split here ... */
     *c2 = 0;
@@ -755,7 +762,7 @@ REG_KEY *nt_add_reg_key_list(REGF *regf, REG_KEY *key, char * name, int create)
   if (!lname) return NULL;
 
   c1 = lname;
-  c2 = strchr(c1, '\\');
+  c2 = strchr(c1, '/');
   if (c2) { /* Split here ... */
     *c2 = 0;
     c2++;
@@ -863,11 +870,12 @@ REG_KEY *nt_add_reg_key_list(REGF *regf, REG_KEY *key, char * name, int create)
 #define LOCN(base, f) ((base) + OFF(f))
 
 const VAL_STR reg_type_names[] = {
-   { REG_TYPE_REGSZ,    "REG_SZ" },
-   { REG_TYPE_EXPANDSZ, "REG_EXPAND_SZ" },
-   { REG_TYPE_BIN,      "REG_BIN" },
-   { REG_TYPE_DWORD,    "REG_DWORD" },
-   { REG_TYPE_MULTISZ,  "REG_MULTI_SZ" },
+   { REG_TYPE_REGSZ,    "SZ" },
+   { REG_TYPE_EXPANDSZ, "EXPAND_SZ" },
+   { REG_TYPE_BIN,      "BIN" },
+   { REG_TYPE_DWORD,    "DWORD" },
+   { REG_TYPE_MULTISZ,  "MULTI_SZ" },
+   /*   { REG_TYPE_KEY,      "KEY" },*/
    { 0, NULL },
 };
 
@@ -932,12 +940,12 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
   case REG_TYPE_REGSZ:
     if (verbose)
       fprintf(stderr, "Len: %d\n", len);
-
+    
     ascii_max = sizeof(char)*len;
     ascii = malloc(ascii_max+4);
     if(ascii == NULL)
       return NULL;
-
+    
     /* FIXME. This has to be fixed. It has to be UNICODE */ 
     uni_to_ascii(datap, ascii, len, ascii_max);
     return ascii;
@@ -1945,7 +1953,7 @@ int print_key(const char *path, char *name, char *class_name, int root,
 	      int terminal, int vals, char* newline)
 {
   if (full_print)
-    fprintf(stdout, "%s%s\\%s", path, name, newline);
+    fprintf(stdout, "%s%s/%s", path, name, newline);
 
   return 1;
 }
@@ -2089,28 +2097,51 @@ int print_val(const char *path, char *val_name, int val_type, int data_len,
 	      void *data_blk, int terminal, int first, int last)
 {
   unsigned char* data_asc;
-  
-  if(!val_name)
-    val_name = "<No Name>";
+  char* new_path;
+  const char* str_type = val_to_str(val_type,reg_type_names);
 
-  fprintf(stdout, "%s", path);
-  data_asc = data_to_ascii((unsigned char *)data_blk, data_len, val_type);
-  fprintf(stdout, "%s:%s=%s\n", val_name, val_to_str(val_type, reg_type_names),
-	  data_asc);
-  
-  free(data_asc);
+  if(!val_name)
+    val_name = "";
+  if(!str_type)
+    str_type = "";
+  if(!path)
+    path = "";
+
+  new_path = (char *)malloc(strlen(path)+ strlen(val_name) + 1);
+  if (!new_path)
+    return 0; /* Errors? */
+  new_path[0] = '\0';
+  strcat(new_path, path);
+  strcat(new_path, val_name);
+
+  if (str_is_prefix(prefix_filter, new_path))
+  {
+    if (!type_filter_enabled || (strcmp(type_filter, str_type) == 0))
+    {
+      if(!val_name)
+	val_name = "<No Name>";
+      
+      data_asc = data_to_ascii((unsigned char *)data_blk, data_len, val_type);
+      fprintf(stdout, "%s:%s=%s\n", new_path, str_type, data_asc);
+      
+      free(data_asc);
+    }
+  }
+
+  free(new_path);
   return 1;
 }
 
 static
 void usage(void)
 {
-  fprintf(stderr, "Usage: readreg [-f<filterprefix>] [-v] [-p] [-k] [-s]"
-	  "<registryfile>\n");
-  fprintf(stderr, "Version: 0.1\n\n");
-  fprintf(stderr, "\n\t-v\t sets verbose mode");
+  fprintf(stderr, "Usage: readreg [-f<PREFIX_FILTER>] [-t<TYPE_FILTER>] "
+                  "[-v] [-p] [-k] [-s] <REGISTRY_FILE>\n");
+  fprintf(stderr, "Version: 0.1\n");
+  fprintf(stderr, "\n\t-v\t sets verbose mode.");
   fprintf(stderr, "\n\t-f\t a simple prefix filter.");
-  fprintf(stderr, "\n\t-s\t prints security descriptors");
+  fprintf(stderr, "\n\t-t\t restrict results to a specific type.");
+  fprintf(stderr, "\n\t-s\t prints security descriptors.");
   fprintf(stderr, "\n");
 }
 
@@ -2122,7 +2153,6 @@ int main(int argc, char *argv[])
   extern int optind;
   int opt; 
   int regf_opt = 1;
-  char* filter_prefix = "";
 
   if (argc < 2)
   {
@@ -2134,13 +2164,22 @@ int main(int argc, char *argv[])
    * Now, process the arguments
    */
 
-  while ((opt = getopt(argc, argv, "svkf:o:c:")) != EOF)
+  while ((opt = getopt(argc, argv, "svkf:t:o:c:")) != EOF)
   {
     switch (opt)
     {
     case 'f':
       /*full_print = 1;*/
-      filter_prefix = strdup(optarg);
+      prefix_filter = strdup(optarg);
+      regf_opt++;
+      break;
+
+    case 't':
+      /* XXX: this should be converted to the integer form of types up front,
+       *      and then used to filter with a simple comparison later.
+       */
+      type_filter = strdup(optarg);
+      type_filter_enabled = true;
       regf_opt++;
       break;
 
@@ -2204,7 +2243,7 @@ int main(int argc, char *argv[])
    * At this point, we should have a registry in memory and should be able
    * to iterate over it.
    */
-  nt_key_iterator(regf, regf->root, 0, "", filter_prefix);
+  nt_key_iterator(regf, regf->root, 0, "");
 
   return 0;
 }
