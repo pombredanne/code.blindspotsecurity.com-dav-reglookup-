@@ -1,7 +1,7 @@
 /*
  * $Id$
  *
- * A utility to edit a Windows NT/2K etc registry file.
+ * A utility to read a Windows NT/2K etc registry file.
  *
  * This code was taken from Richard Sharpe''s editreg utility, in the 
  * Samba CVS tree.  It has since been simplified and turned into a
@@ -331,6 +331,8 @@ typedef struct vk_struct {
 #define REG_TYPE_BIN       3  
 #define REG_TYPE_DWORD     4
 #define REG_TYPE_MULTISZ   7
+/* Not a real type in the registry */
+#define REG_TYPE_KEY       255
 
 typedef struct _val_str { 
   unsigned int val;
@@ -402,7 +404,7 @@ static int print_sec(SEC_DESC *sec_desc);
 /* Globals */
 
 char* prefix_filter = "";
-char* type_filter = "";
+int type_filter = 0;
 bool type_filter_enabled = false;
 
 
@@ -423,19 +425,20 @@ unsigned int str_is_prefix(const char* p, const char* s)
 }
 
 
-/* Returns a newly malloc()ed string which contains original string, 
+/* Returns a newly malloc()ed string which contains original buffer,
  * except for non-printable or special characters are quoted in hex
  * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
- * character.
+ * character.  A null terminator is added, as only ascii, not binary, 
+ * is returned.
  */
 static
-char* quote_string(const char* str, char* special)
+char* quote_buffer(const unsigned char* str, char* special, unsigned int len)
 {
   unsigned int i;
   unsigned int num_written=0;
-  unsigned int len = strlen(str);
   unsigned int out_len = sizeof(char)*len+1;
   char* ret_val = malloc(out_len);
+
   if(ret_val == NULL)
     return NULL;
 
@@ -444,10 +447,11 @@ char* quote_string(const char* str, char* special)
     if(str[i] < 32 || str[i] > 126 || strchr(special, str[i]) != NULL)
     {
       out_len += 3;
+      /* XXX: may not be the most efficient way of getting enough memory. */
       ret_val = realloc(ret_val, out_len);
       if(ret_val == NULL)
 	break;
-      num_written += snprintf(ret_val+num_written, out_len-num_written,
+      num_written += snprintf(ret_val+num_written, (out_len)-num_written,
 			      "\\x%.2X", str[i]);
     }
     else
@@ -457,6 +461,22 @@ char* quote_string(const char* str, char* special)
 
   return ret_val;
 }
+
+
+/* Returns a newly malloc()ed string which contains original string, 
+ * except for non-printable or special characters are quoted in hex
+ * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
+ * character.
+ */
+static
+char* quote_string(const char* str, char* special)
+{
+  unsigned int len = strlen(str);
+  char* ret_val = quote_buffer((const unsigned char*)str, special, len);
+
+  return ret_val;
+}
+
 
 
 /*
@@ -532,7 +552,7 @@ int nt_key_iterator(REGF *regf, REG_KEY *key_tree, int bf,
   /*printf("prefix_filter: %s, path: %s\n", prefix_filter, path);*/
   if (str_is_prefix(prefix_filter, new_path))
   {
-    if (!type_filter_enabled || (strcmp(type_filter, "KEY") == 0))
+    if (!type_filter_enabled || (type_filter == REG_TYPE_KEY))
       printf("%s%s:KEY\n", path, key_tree->name);
 
     /*XXX: print_key() is doing nothing right now, can probably be removed. */
@@ -796,7 +816,7 @@ REG_KEY *nt_add_reg_key_list(REGF *regf, REG_KEY *key, char * name, int create)
 
   /*
    * add the new key at the new slot 
-   * FIXME: Sort the list someday
+   * XXX: Sort the list someday
    */
 
   /*
@@ -875,27 +895,43 @@ const VAL_STR reg_type_names[] = {
    { REG_TYPE_BIN,      "BIN" },
    { REG_TYPE_DWORD,    "DWORD" },
    { REG_TYPE_MULTISZ,  "MULTI_SZ" },
-   /*   { REG_TYPE_KEY,      "KEY" },*/
+   { REG_TYPE_KEY,      "KEY" },
    { 0, NULL },
 };
+
 
 static
 const char *val_to_str(unsigned int val, const VAL_STR *val_array)
 {
-  int i = 0;
+  int i;
 
-  if (!val_array) return NULL;
+  if (!val_array) 
+    return NULL;
 
-  while (val_array[i].val && val_array[i].str) {
-
-    if (val_array[i].val == val) return val_array[i].str;
-    i++;
-
-  }
+  for(i=0; val_array[i].val && val_array[i].str; i++) 
+    if (val_array[i].val == val) 
+      return val_array[i].str;
 
   return NULL;
-
 }
+
+
+/* Returns 0 on error */
+static
+int str_to_val(const char* str, const VAL_STR *val_array)
+{
+  int i;
+
+  if (!val_array) 
+    return 0;
+
+  for(i=0; val_array[i].val && val_array[i].str; i++) 
+    if (strcmp(val_array[i].str, str) == 0) 
+      return val_array[i].val;
+
+  return 0;
+}
+
 
 /*
  * Convert from UniCode to Ascii ... Does not take into account other lang
@@ -946,7 +982,7 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     if(ascii == NULL)
       return NULL;
     
-    /* FIXME. This has to be fixed. It has to be UNICODE */ 
+    /* XXX: This has to be fixed. It has to be UNICODE */
     uni_to_ascii(datap, ascii, len, ascii_max);
     return ascii;
     break;
@@ -962,20 +998,7 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     break;
 
   case REG_TYPE_BIN:
-    ascii_max = sizeof(char)*len*3;
-    ascii = malloc(ascii_max+4);
-    if(ascii == NULL)
-      return NULL;
-
-    asciip = ascii;
-    for (i=0; (i<len)&&(i+1)*3<ascii_max; i++) { 
-      int str_rem = ascii_max - ((int)asciip - (int)ascii);
-      asciip += snprintf((char*)asciip, str_rem, "%02x", 
-			 *(unsigned char *)(datap+i));
-      if (i < len && str_rem > 0)
-	*asciip = ' '; asciip++;	
-    }
-    *asciip = '\0';
+    ascii = (unsigned char*)quote_buffer(datap, "\\", len);
     return ascii;
     break;
 
@@ -1024,6 +1047,7 @@ unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
       if(num_nulls == 2)
       {
 	uni_to_ascii(cur_str, cur_ascii, cur_str_max, 0);
+	/* XXX: Should backslashes be quoted as well? */
 	cur_quoted = quote_string((char*)cur_ascii, "|");
 	alen = snprintf((char*)asciip, str_rem, "%s", cur_quoted);
 	asciip += alen;
@@ -1258,7 +1282,8 @@ ACE *dup_ace(REG_ACE *ace)
 
   tmp = (ACE *)malloc(sizeof(ACE));
 
-  if (!tmp) return NULL;
+  if (!tmp) 
+    return NULL;
 
   tmp->type = CVAL(&ace->type);
   tmp->flags = CVAL(&ace->flags);
@@ -1291,7 +1316,7 @@ ACL *dup_acl(REG_ACL *acl)
   for (i=0; i<num_aces; i++) {
     tmp->aces[i] = dup_ace(ace);
     ace = (REG_ACE *)((char *)ace + SVAL(&ace->length));
-    /* XXX: FIXME, should handle malloc errors */
+    /* XXX: should handle NULLs returned from dup_ace() */
   }
 
   return tmp;
@@ -1492,19 +1517,17 @@ VAL_KEY *process_vk(REGF *regf, VK_HDR *vk_hdr, int size)
     if ((dat_len&0x80000000) == 0) 
     { /* The data is pointed to by the offset */
       char *dat_ptr = LOCN(regf->base, dat_off);
-      /* XXX: replace with memcpy */
-      bcopy(dat_ptr, dtmp, dat_len);
+      memcpy(dtmp, dat_ptr, dat_len);
     }
     else { /* The data is in the offset or type */
       /*
-       * FIXME.
+       * XXX:
        * Some registry files seem to have wierd fields. If top bit is set,
        * but len is 0, the type seems to be the value ...
        * Not sure how to handle this last type for the moment ...
        */
       dat_len = dat_len & 0x7FFFFFFF;
-      /* XXX: replace with memcpy */
-      bcopy(&dat_off, dtmp, dat_len);
+      memcpy(dtmp, &dat_off, dat_len);
     }
 
     tmp->data_len = dat_len;
@@ -1563,7 +1586,7 @@ VAL_LIST *process_vl(REGF *regf, VL_TYPE vl, int count, int size)
   return tmp;
 
  error:
-  /* XXX: FIXME, free the partially allocated structure */
+  /* XXX: free the partially allocated structure */
   return NULL;
 } 
 
@@ -1709,10 +1732,10 @@ REG_KEY *nt_get_key_tree(REGF *regf, NK_HDR *nk_hdr, int size, REG_KEY *parent)
     uni_to_ascii(clsnamep, cls_name, sizeof(cls_name), clsname_len);
     
     /*
+     * XXX:
      * I am keeping class name as an ascii string for the moment.
      * That means it needs to be converted on output.
      * It will also piss off people who need Unicode/UTF-8 strings. Sorry. 
-     * XXX: FIXME
      */
     tmp->class_name = strdup((char*)cls_name);
     if (!tmp->class_name) {
@@ -2098,12 +2121,10 @@ int print_val(const char *path, char *val_name, int val_type, int data_len,
 {
   unsigned char* data_asc;
   char* new_path;
-  const char* str_type = val_to_str(val_type,reg_type_names);
+  const char* str_type;
 
   if(!val_name)
     val_name = "";
-  if(!str_type)
-    str_type = "";
   if(!path)
     path = "";
 
@@ -2116,10 +2137,14 @@ int print_val(const char *path, char *val_name, int val_type, int data_len,
 
   if (str_is_prefix(prefix_filter, new_path))
   {
-    if (!type_filter_enabled || (strcmp(type_filter, str_type) == 0))
+    if (!type_filter_enabled || (type_filter == val_type))
     {
       if(!val_name)
 	val_name = "<No Name>";
+
+      str_type = val_to_str(val_type,reg_type_names);
+      if(!str_type)
+	str_type = "";
       
       data_asc = data_to_ascii((unsigned char *)data_blk, data_len, val_type);
       fprintf(stdout, "%s:%s=%s\n", new_path, str_type, data_asc);
@@ -2137,6 +2162,7 @@ void usage(void)
 {
   fprintf(stderr, "Usage: readreg [-f<PREFIX_FILTER>] [-t<TYPE_FILTER>] "
                   "[-v] [-p] [-k] [-s] <REGISTRY_FILE>\n");
+  /* XXX: replace version string with Subversion tag? */
   fprintf(stderr, "Version: 0.1\n");
   fprintf(stderr, "\n\t-v\t sets verbose mode.");
   fprintf(stderr, "\n\t-f\t a simple prefix filter.");
@@ -2175,10 +2201,7 @@ int main(int argc, char *argv[])
       break;
 
     case 't':
-      /* XXX: this should be converted to the integer form of types up front,
-       *      and then used to filter with a simple comparison later.
-       */
-      type_filter = strdup(optarg);
+      type_filter = str_to_val(optarg, reg_type_names);
       type_filter_enabled = true;
       regf_opt++;
       break;
