@@ -1,8 +1,11 @@
-# $Id: Makefile 3 2005-02-18 03:59:23Z tim $
+# $Id$
 
-# Installation prefix.  Change to install elsewhere
+# Installation prefixes.  Change to install elsewhere.
 
 PREFIX=/usr/local
+BIN_PREFIX=$(PREFIX)/bin
+DOC_PREFIX=$(PREFIX)/share/doc/reglookup
+MAN_PREFIX=$(PREFIX)/man
 
 ################################################################################
 
@@ -25,10 +28,14 @@ export
 all: $(BUILD_TREE) $(SUB_DIRS)
 
 install: all
-	mkdir -p $(PREFIX)/bin
-	mkdir -p $(PREFIX)/share/doc/reglookup
-	cp -r build/bin/* $(PREFIX)/bin/
-	cp -r build/doc/* $(PREFIX)/share/doc/reglookup/
+	mkdir -p $(BIN_PREFIX)
+	mkdir -p $(DOC_PREFIX)
+	cp -r $(BUILD_BIN)/* $(BIN_PREFIX)
+	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)
+	#XXX: This should be more generalized.  
+	#     Possibly move it to doc/Makefile
+	cp -s $(DOC_PREFIX)/man/man1/*  $(MAN_PREFIX)/man1
+
 
 $(SUB_DIRS):
 	$(MAKE) -C $@
