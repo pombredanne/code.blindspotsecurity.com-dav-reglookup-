@@ -14,9 +14,10 @@ OPTS=-ggdb -std=gnu89 -pedantic -Wall
 BUILD=$(CURDIR)/build
 BUILD_BIN=$(BUILD)/bin
 BUILD_ETC=$(BUILD)/etc
+BUILD_DOC=$(BUILD)/doc
 
-BUILD_TREE=$(BUILD_BIN) $(BUILD_ETC)
-SUB_DIRS=src
+BUILD_TREE=$(BUILD_BIN) $(BUILD_ETC) $(BUILD_DOC)
+SUB_DIRS=src doc
 
 FILES=$(REGLOOKUP)
 .PHONY: $(SUB_DIRS) clean
