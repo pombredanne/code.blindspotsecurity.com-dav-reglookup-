@@ -1,4 +1,4 @@
-# $Id: Makefile 3 2005-02-18 03:59:23Z tim $
+# $Id$
 
 default:
 	cp -r man $(BUILD_DOC)	
