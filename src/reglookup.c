@@ -2161,7 +2161,7 @@ static
 void usage(void)
 {
   fprintf(stderr, "Usage: readreg [-f<PREFIX_FILTER>] [-t<TYPE_FILTER>] "
-                  "[-v] [-p] [-k] [-s] <REGISTRY_FILE>\n");
+                  "[-v] [-s] <REGISTRY_FILE>\n");
   /* XXX: replace version string with Subversion tag? */
   fprintf(stderr, "Version: 0.1\n");
   fprintf(stderr, "\n\t-v\t sets verbose mode.");
@@ -2190,7 +2190,7 @@ int main(int argc, char *argv[])
    * Now, process the arguments
    */
 
-  while ((opt = getopt(argc, argv, "svkf:t:o:c:")) != EOF)
+  while ((opt = getopt(argc, argv, "svf:t:o:c:")) != EOF)
   {
     switch (opt)
     {
@@ -2208,16 +2208,12 @@ int main(int argc, char *argv[])
 
     case 's':
       print_security++;
-      full_print++;
+      /*full_print++;*/
       regf_opt++;
       break;
 
     case 'v':
       verbose++;
-      regf_opt++;
-      break;
-
-    case 'k':
       regf_opt++;
       break;
 

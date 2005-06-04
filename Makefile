@@ -34,7 +34,7 @@ install: all
 	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)
 	#XXX: This should be more generalized.  
 	#     Possibly move it to doc/Makefile
-	cp -s $(DOC_PREFIX)/man/man1/*  $(MAN_PREFIX)/man1
+	cp -sf $(DOC_PREFIX)/man/man1/*  $(MAN_PREFIX)/man1
 
 
 $(SUB_DIRS):

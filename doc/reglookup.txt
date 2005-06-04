@@ -20,11 +20,9 @@ reglookup
 		Specify a path filter.  Only keys/values under this
 		registry path will be output.
 
-	-k	TODO
-
-	-p	TODO
-
-	-s	TODO
+	-s	Print security descriptors as well as keys/values/data.
+		(This feature's output is not standardized, and probably
+		contains bugs.) 
 	
 	-t<TYPE_FILTER>
 		Specify a type filter.  Only elements which match this
