@@ -53,8 +53,7 @@ RELEASE_DEST=.
 .release:
 	rm -rf .release
 	mkdir .release
-	# XXX: checkout version should be based on RELEASE_VER
-	svn export svn+ssh://pascal/home/projects/subversion/reglookup/\
+	svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/releases/release-$(RELEASE_VER)/\
 		.release/reglookup-$(RELEASE_VER)
 	cd .release/reglookup-$(RELEASE_VER)/doc && make generate
 	cd .release\
