@@ -1,0 +1,89 @@
+reglookup
+
+
+=NAME=
+	reglookup - Windoze NT/2K/XP registry reader/lookup tool
+
+
+=SYNOPSIS=
+	reglookup [options] <REGISTRY_FILE>
+
+
+=DESCRIPTION=
+	reglookup is designed to read Windoze registry elements and
+	print them out to stdout.  It has several filtering options to
+	narrow the focus of the output.
+
+
+=OPTIONS=
+	-f<PREFIX_FILTER>	
+		Specify a path filter.  Only keys/values under this
+		registry path will be output.
+
+	-t<TYPE_FILTER>
+		Specify a type filter.  Only elements which match this
+		registry data type will be printed.  Acceptable values
+		are: SZ,EXPAND_SZ,BIN,DWORD,MULTI_SZ,KEY
+
+	-s	Print security descriptors as well as keys/values/data.
+		(This feature's output is not standardized, and probably
+		contains bugs.) 
+	
+	-v	Verbose output.
+
+
+	REGISTRY_FILE
+		Required argument.  Specifies the location of the
+		registry file to read.  Typically, these files will be
+		found on a Windoze partition under
+		%SystemRoot%/system32/config. 
+
+
+=EXAMPLES=
+	To read and print an entire registry:
+
+	**reglookup /mnt/win/c/WINNT/system32/config/system**
+
+	To limit the output to just those entries under the Services
+	key: 
+
+	**reglookup -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
+
+	To limit the output to all registry values of type BIN:
+
+	**reglookup -tBIN /mnt/win/c/WINNT/system32/config/system**
+	
+	And to limit the output to BIN values under the Services key:
+
+	**reglookup -tBIN -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
+
+
+=BUGS=
+	Path filtering is currently a slow hack.
+
+	The current incarnation of this program has only been tested on
+	Windoze 2000.
+
+	You'll notice that registry paths aren't all the same as the
+	ones the equivalents you see in Windoze.  Don't ask me why that
+	is.  I just work here.
+
+	This software should be considered unstable at this time.
+
+
+=CREDITS=
+	This program is based on editreg.c by Richard Sharpe.
+
+	It has since been modified by Timothy D. Morgan.
+
+	Please see source code for a full list of copyrights.
+
+
+=LICENSE=
+	Please see the file "LICENSE" included with this software
+	distribution.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License version 2 for more details.
