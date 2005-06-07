@@ -27,12 +27,13 @@ export
 
 all: $(BUILD_TREE) $(SUB_DIRS)
 
+#XXX: This should be more generalized.
 install: all
 	mkdir -p $(BIN_PREFIX)
 	mkdir -p $(DOC_PREFIX)
+	mkdir -p $(MAN_PREFIX)/man1
 	cp -r $(BUILD_BIN)/* $(BIN_PREFIX)
 	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)
-	#XXX: This should be more generalized.  
 	#     Possibly move it to doc/Makefile
 	cp -sf $(DOC_PREFIX)/man/man1/*  $(MAN_PREFIX)/man1
 
@@ -48,12 +49,14 @@ clean:
 
 
 # For developer use only
-RELEASE_VER=0.1
+RELEASE_VER=0.1.1
+#RELEASE_SRC=releases/release-$(RELEASE_VER)
+RELEASE_SRC=trunk
 RELEASE_DEST=.
 .release:
 	rm -rf .release
 	mkdir .release
-	svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/releases/release-$(RELEASE_VER)/\
+	svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/$(RELEASE_SRC)/\
 		.release/reglookup-$(RELEASE_VER)
 	cd .release/reglookup-$(RELEASE_VER)/doc && make generate
 	cd .release\
