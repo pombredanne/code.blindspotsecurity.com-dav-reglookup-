@@ -8,4 +8,4 @@ FILES=$(REGLOOKUP)
 all: $(FILES)
 
 $(REGLOOKUP): reglookup.c
-	$(CC) $(OPTS) -o $@ reglookup.c
+	$(CC) $(CFLAGS) $(OPTS) -o $@ reglookup.c

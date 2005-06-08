@@ -10,8 +10,7 @@ MAN_PREFIX=$(PREFIX)/man
 ################################################################################
 
 CC=gcc
-OPTS=-ggdb -std=gnu89 -pedantic -Wall
-#OPTS=-std=gnu89 -pedantic -Wall
+OPTS=-std=gnu89 -pedantic -Wall
 
 BUILD=$(CURDIR)/build
 BUILD_BIN=$(BUILD)/bin
