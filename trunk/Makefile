@@ -17,7 +17,7 @@ BUILD=$(CURDIR)/build
 BUILD_BIN=$(BUILD)/bin
 BUILD_DOC=$(BUILD)/doc
 
-BUILD_TREE=$(BUILD_BIN) $(BUILD_ETC) $(BUILD_DOC)
+BUILD_TREE=$(BUILD_BIN) $(BUILD_DOC)
 SUB_DIRS=src doc
 
 FILES=$(REGLOOKUP)
@@ -47,20 +47,3 @@ $(BUILD_TREE):
 clean:
 	rm -rf $(BUILD)/*
 
-
-# For developer use only
-RELEASE_VER=0.1.1
-#RELEASE_SRC=releases/release-$(RELEASE_VER)
-RELEASE_SRC=trunk
-RELEASE_DEST=.
-.release:
-	rm -rf .release
-	mkdir .release
-	svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/$(RELEASE_SRC)/\
-		.release/reglookup-$(RELEASE_VER)
-	cd .release/reglookup-$(RELEASE_VER)/doc && make generate
-	cd .release\
-		&& tar cf reglookup-$(RELEASE_VER).tar reglookup-$(RELEASE_VER)\
-		&& gzip -9 reglookup-$(RELEASE_VER).tar
-	mv .release/reglookup-$(RELEASE_VER).tar.gz $(RELEASE_DEST)
-	rm -rf .release
