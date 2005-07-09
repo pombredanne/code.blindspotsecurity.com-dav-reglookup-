@@ -9,3 +9,6 @@ generate:
 	cd man/man1 && gzip -9 reglookup.1
 
 build: generate default
+
+install:
+	ln -sf $(DOC_PREFIX)/man/man1/*  $(MAN_PREFIX)/man1

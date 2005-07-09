@@ -1,6 +1,15 @@
 RegLookup Installation
 ======================
 
+Prerequisites
+-------------
+
+This package doesn't require much for installation.  Just what typically
+comes with any free operating system.  Be sure you have:
+
+ - GNU Make
+ - GCC
+
 
 Survival Commands
 -----------------
@@ -8,6 +17,8 @@ Survival Commands
 make
 # and as root
 make install
+
+If GNU Make isn't your default, you may need to run `gmake' instead.
 
 
 Advanced Installation
