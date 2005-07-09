@@ -1,0 +1,17 @@
+$Id$
+
+If you are interested in contributing to this project, here's a few
+things you could look into:
+
+ - Testing, testing, and more testing.  reglookup needs to be tested on 
+   NT/XP/2k3.  A regression test suite would be nice too.
+
+ - Build system.  I do not wish to use automake/autoconf in this
+   project.  However, more intelligent use of make would be nice.
+   I don't know it that well.
+
+ - Unicode support.  I have never internationalized any software
+   before.  This would be a big help for the SZ, EXPAND_SZ, and MULTI_SZ
+   data types.
+
+ - Grep through the source for 'XXX', and you'll find more.
