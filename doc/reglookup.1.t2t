@@ -42,20 +42,20 @@ reglookup
 =EXAMPLES=
 	To read and print an entire registry:
 
-	**reglookup /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup /mnt/win/c/WINNT/system32/config/system**
 
 	To limit the output to just those entries under the Services
 	key: 
 
-	**reglookup -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
 
 	To limit the output to all registry values of type BIN:
 
-	**reglookup -tBIN /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup -tBIN /mnt/win/c/WINNT/system32/config/system**
 	
 	And to limit the output to BIN values under the Services key:
 
-	**reglookup -tBIN -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup -tBIN -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
 
 
 =BUGS=
