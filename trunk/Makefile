@@ -31,8 +31,7 @@ install: all
 	mkdir -p $(BIN_PREFIX)
 	mkdir -p $(DOC_PREFIX)
 	mkdir -p $(MAN_PREFIX)/man1
-	cp -r $(BUILD_BIN)/* $(BIN_PREFIX)
-	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)
+	$(MAKE) -C src install
 	$(MAKE) -C doc install
 
 
@@ -44,4 +43,3 @@ $(BUILD_TREE):
 
 clean:
 	rm -rf $(BUILD)/*
-
