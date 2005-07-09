@@ -11,5 +11,5 @@ install:
 
 #XXX: Used during release only
 generate:
-	txt2tags --mask-email -t man -o man/man1/reglookup.1 reglookup.txt
+	txt2tags --mask-email -t man -o man/man1/reglookup.1 reglookup.1.t2t
 	cd man/man1 && gzip -9 reglookup.1
