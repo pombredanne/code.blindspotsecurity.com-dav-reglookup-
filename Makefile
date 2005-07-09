@@ -33,8 +33,7 @@ install: all
 	mkdir -p $(MAN_PREFIX)/man1
 	cp -r $(BUILD_BIN)/* $(BIN_PREFIX)
 	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)
-	#     Possibly move it to doc/Makefile
-	cp -sf $(DOC_PREFIX)/man/man1/*  $(MAN_PREFIX)/man1
+	$(MAKE) -C doc install
 
 
 $(SUB_DIRS):
