@@ -32,7 +32,7 @@
 void* zalloc(size_t size)
 {
   void* ret_val = NULL;
-  if(ret_val = (void*)malloc(size))
+  if((ret_val = (void*)malloc(size)) != NULL)
     memset(ret_val, 0, size);
   return ret_val;
 }
@@ -41,13 +41,6 @@ void* zcalloc(size_t size, unsigned int count)
 {
   return zalloc(size*count);
 }
-
-void zerop(void* p)
-{
-  if(p)
-    memset((char*)p, 0, sizeof(*p));
-}
-
 
 /* From lib/time.c */
 
@@ -181,26 +174,26 @@ bool prs_align(prs_struct *ps)
 
 bool prs_init(prs_struct *ps, uint32 size, void *ctx, bool io)
 {
-	zerop(ps);
-	ps->io = io;
-	ps->bigendian_data = RPC_LITTLE_ENDIAN;
-	ps->align = RPC_PARSE_ALIGN;
-	ps->is_dynamic = false;
-	ps->data_offset = 0;
-	ps->buffer_size = 0;
-	ps->data_p = NULL;
-	ps->mem_ctx = ctx;
-
-	if (size != 0) {
-		ps->buffer_size = size;
-		if((ps->data_p = (char *)zalloc((size_t)size)) == NULL) {
-			return false;
-		}
-		memset(ps->data_p, '\0', (size_t)size);
-		ps->is_dynamic = true; /* We own this memory. */
-	}
-
-	return true;
+  memset(ps, 0, sizeof(prs_struct));
+  ps->io = io;
+  ps->bigendian_data = RPC_LITTLE_ENDIAN;
+  ps->align = RPC_PARSE_ALIGN;
+  ps->is_dynamic = false;
+  ps->data_offset = 0;
+  ps->buffer_size = 0;
+  ps->data_p = NULL;
+  ps->mem_ctx = ctx;
+  
+  if (size != 0) {
+    ps->buffer_size = size;
+    if((ps->data_p = (char *)zalloc((size_t)size)) == NULL) {
+      return false;
+    }
+    memset(ps->data_p, '\0', (size_t)size);
+    ps->is_dynamic = true; /* We own this memory. */
+  }
+  
+  return true;
 }
 
 
@@ -528,7 +521,7 @@ size_t sid_size(const DOM_SID *sid)
 /*****************************************************************
  Compare the auth portion of two sids.
 *****************************************************************/  
-static int sid_compare_auth(const DOM_SID *sid1, const DOM_SID *sid2)
+int sid_compare_auth(const DOM_SID *sid1, const DOM_SID *sid2)
 {
 	int i;
 

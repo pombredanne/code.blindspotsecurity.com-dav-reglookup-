@@ -33,9 +33,12 @@
 #ifndef _REGFIO_H
 #define _REGFIO_H
 
-#include <stdbool.h>
+#include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 #include <errno.h>
+#include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
