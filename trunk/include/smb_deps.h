@@ -23,8 +23,10 @@
  * $Id$
  */
 
+#include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -37,8 +39,6 @@
 
 void* zalloc(size_t size);
 void* zcalloc(size_t size, unsigned int count);
-void zerop(void* p);
-
 
 /* From includes.h */
 
@@ -412,7 +412,7 @@ bool smb_io_dom_sid(const char *desc, DOM_SID *sid, prs_struct *ps, int depth);
 /* From lib/util_sid.c */
 
 size_t sid_size(const DOM_SID *sid);
-static int sid_compare_auth(const DOM_SID *sid1, const DOM_SID *sid2);
+int sid_compare_auth(const DOM_SID *sid1, const DOM_SID *sid2);
 int sid_compare(const DOM_SID *sid1, const DOM_SID *sid2);
 bool sid_equal(const DOM_SID *sid1, const DOM_SID *sid2);
 
