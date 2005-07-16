@@ -73,36 +73,58 @@ char* getStackPath(void_stack* nk_stack)
     buf[buf_len-buf_left-1] = '\0';
   }
 
+  /* Cut trailing slash */  
+  if(buf[buf_len-buf_left-2] == '/')
+    buf[buf_len-buf_left-2] = '\0';
+
   return buf;
 }
 
 
-void printKeyTree(REGF_FILE* f,  void_stack* nk_stack)
+void printKeyList(REGF_NK_REC* nk, char* prefix)
+{
+  unsigned int i;
+  const char* str_type;
+  
+  for(i=0; i < nk->num_values; i++)
+  {
+    str_type = type_val2str(nk->values[i].type);
+    printf("%s/%s:%s=\n", prefix, nk->values[i].valuename, str_type);
+  }
+}
+
+
+void printKeyTree(REGF_FILE* f, void_stack* nk_stack)
 {
   REGF_NK_REC* cur;
   REGF_NK_REC* sub;
   char* path;
 
-  while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
+  if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
   {
-    if((sub = regfio_fetch_subkey(f, cur)) != NULL)
+    printf("%s:KEY\n", cur->keyname);
+    while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
     {
-      path = getStackPath(nk_stack);
-      if(path != NULL)
+      if((sub = regfio_fetch_subkey(f, cur)) != NULL)
       {
-	printf("%s%s:KEY\n", path, sub->keyname);
-	free(path);
+	void_stack_push(nk_stack, sub);
+	path = getStackPath(nk_stack);
+	if(path != NULL)
+	{
+	  printKeyList(cur, path);
+	  printf("%s:KEY\n", path);
+	  free(path);
+	}
       }
-      void_stack_push(nk_stack, sub);
-    }
-    else
-    {
-      cur = void_stack_pop(nk_stack);
-      /* XXX: This is just a shallow free.  Need to write deep free
-       * routines to replace the Samba code for this. 
-       */ 
-      if(cur != NULL)
-	free(cur);
+      else
+      {
+	cur = void_stack_pop(nk_stack);
+	/* XXX: This is just a shallow free.  Need to write deep free
+	 * routines to replace the Samba code for this. 
+	 */ 
+	if(cur != NULL)
+	  free(cur);
+      }
     }
   }
 }

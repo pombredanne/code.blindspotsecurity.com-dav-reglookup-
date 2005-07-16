@@ -47,10 +47,30 @@
 
 #include "smb_deps.h"
 
-
 /******************************************************************************/
 /* Macros */
  
+/* Registry data types */
+#define REG_NONE                       0
+#define REG_SZ		               1
+#define REG_EXPAND_SZ                  2
+#define REG_BINARY 	               3
+#define REG_DWORD	               4
+#define REG_DWORD_LE	               4	/* DWORD, little endian */
+#define REG_DWORD_BE	               5	/* DWORD, big endian */
+#define REG_LINK                       6
+#define REG_MULTI_SZ  	               7
+#define REG_RESOURCE_LIST              8
+#define REG_FULL_RESOURCE_DESCRIPTOR   9
+#define REG_RESOURCE_REQUIREMENTS_LIST 10
+/* Not a real type in the registry */
+#define REG_KEY                        255
+
+typedef struct _val_str { 
+  unsigned int val;
+  const char * str;
+} VAL_STR;
+
 #define REGF_BLOCKSIZE		0x1000
 #define REGF_ALLOC_BLOCK	0x1000
 
@@ -229,6 +249,9 @@ typedef struct {
 
 /* Function Declarations */
  
+const char* type_val2str(unsigned int val);
+int type_str2val(const char* str);
+
 REGF_FILE*    regfio_open( const char *filename );
 int           regfio_close( REGF_FILE *r );
 
