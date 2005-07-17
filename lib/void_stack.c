@@ -58,6 +58,12 @@ void void_stack_destroy(void_stack* stack)
 }
 
 
+unsigned short void_stack_size(void_stack* stack)
+{
+  return stack->top;
+}
+
+
 bool void_stack_push(void_stack* stack, void* e)
 {
   if(stack->top < stack->max_size)
@@ -120,7 +126,7 @@ void void_stack_iterator_destroy(void_stack_iterator* iter)
 }
 
 
-void* void_stack_iterator_next(void_stack_iterator* iter)
+const void* void_stack_iterator_next(void_stack_iterator* iter)
 {
   if(iter->cur < iter->stack->top)
     return iter->stack->elements[iter->cur++];

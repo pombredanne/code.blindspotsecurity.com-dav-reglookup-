@@ -253,7 +253,8 @@ static bool prs_hbin_block( const char *desc, prs_struct *ps, int depth, REGF_HB
 
 /*******************************************************************
  *******************************************************************/
-static bool prs_nk_rec( const char *desc, prs_struct *ps, int depth, REGF_NK_REC *nk )
+static bool prs_nk_rec( const char *desc, prs_struct *ps, 
+			int depth, REGF_NK_REC *nk )
 {
   uint16 class_length, name_length;
   uint32 start;
@@ -265,15 +266,14 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps, int depth, REGF_NK_REC
 	
   depth++;
 	
-  /* back up and get the data_size */
-	
+  /* back up and get the data_size */	
   if ( !prs_set_offset( ps, ps->data_offset-sizeof(uint32)) )
     return false;
   start_off = ps->data_offset;
   if ( !prs_uint32( "rec_size", ps, depth, &nk->rec_size ))
     return false;
 	
-  if ( !prs_uint8s( true, "header", ps, depth, nk->header, sizeof( nk->header )) )
+  if (!prs_uint8s(true, "header", ps, depth, nk->header, sizeof(nk->header)))
     return false;
 		
   if ( !prs_uint16( "key_type", ps, depth, &nk->key_type ))
@@ -306,10 +306,11 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps, int depth, REGF_NK_REC
   if ( !prs_uint32( "classname_off", ps, depth, &nk->classname_off ))
     return false;
 
-  if ( !prs_uint32( "max_bytes_subkeyname", ps, depth, &nk->max_bytes_subkeyname))
+  if (!prs_uint32("max_bytes_subkeyname", ps, depth, &nk->max_bytes_subkeyname))
     return false;
-  if ( !prs_uint32( "max_bytes_subkeyclassname", ps, depth, &nk->max_bytes_subkeyclassname))
-    return false;
+  if ( !prs_uint32( "max_bytes_subkeyclassname", ps, 
+		    depth, &nk->max_bytes_subkeyclassname))
+  { return false; }
   if ( !prs_uint32( "max_bytes_valuename", ps, depth, &nk->max_bytes_valuename))
     return false;
   if ( !prs_uint32( "max_bytes_value", ps, depth, &nk->max_bytes_value))
@@ -324,15 +325,15 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps, int depth, REGF_NK_REC
   if ( !prs_uint16( "class_length", ps, depth, &class_length ))
     return false;	
 		
-  if ( class_length ) {
+  if ( class_length ) 
+  {
     ;;
   }
 	
-  if ( name_length ) {
-    if ( ps->io ) {
-      if ( !(nk->keyname = (char*)zcalloc(sizeof(char), name_length+1 )) )
+  if ( name_length ) 
+  {
+    if(ps->io && !(nk->keyname = (char*)zcalloc(sizeof(char), name_length+1)))
 	return false;
-    }
 
     if ( !prs_uint8s( true, "name", ps, depth, nk->keyname, name_length) )
       return false;
@@ -343,15 +344,17 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps, int depth, REGF_NK_REC
 
   end_off = ps->data_offset;
 
-  /* data_size must be divisible by 8 and large enough to hold the original record */
+  /* data_size must be divisible by 8 and large enough to hold 
+     the original record */
 
   data_size = ((start_off - end_off) & 0xfffffff8 );
-  if ( data_size > nk->rec_size )
-    /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, nk->rec_size));*/
+  /*if ( data_size > nk->rec_size )
+      DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, nk->rec_size));*/
 
-    if ( !ps->io )
-      nk->hbin->dirty = true;
-
+  if ( !ps->io )
+    nk->hbin->dirty = true;
+  
+  nk->subkey_index = 0;
   return true;
 }
 
@@ -626,11 +629,11 @@ static bool hbin_prs_lf_records( const char *desc, REGF_HBIN *hbin, int depth, R
   /* data_size must be divisible by 8 and large enough to hold the original record */
 
   data_size = ((start_off - end_off) & 0xfffffff8 );
-  if ( data_size > lf->rec_size )
+  /*  if ( data_size > lf->rec_size )*/
     /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, lf->rec_size));*/
 
-    if ( !hbin->ps.io )
-      hbin->dirty = true;
+  if ( !hbin->ps.io )
+    hbin->dirty = true;
 
   return true;
 }
@@ -680,11 +683,11 @@ static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_
   /* data_size must be divisible by 8 and large enough to hold the original record */
 
   data_size = ((start_off - end_off) & 0xfffffff8 );
-  if ( data_size > sk->rec_size )
+  /*  if ( data_size > sk->rec_size )*/
     /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, sk->rec_size));*/
 
-    if ( !hbin->ps.io )
-      hbin->dirty = true;
+  if ( !hbin->ps.io )
+    hbin->dirty = true;
 
   return true;
 }
@@ -936,12 +939,10 @@ static bool hbin_prs_key( REGF_FILE *file, REGF_HBIN *hbin, REGF_NK_REC *nk )
   depth++;
 
   /* get the initial nk record */
-	
-  if ( !prs_nk_rec( "nk_rec", &hbin->ps, depth, nk ))
+  if (!prs_nk_rec("nk_rec", &hbin->ps, depth, nk))
     return false;
 
   /* fill in values */
-	
   if ( nk->num_values && (nk->values_off!=REGF_OFFSET_NONE) ) 
   {
     sub_hbin = hbin;
@@ -1223,6 +1224,10 @@ REGF_NK_REC* regfio_rootkey( REGF_FILE *file )
 }
 
 
+/* XXX: An interator struct should be used instead, and this function
+ *   should operate on it, so the state of iteration isn't stored in the
+ * REGF_NK_REC struct itself.
+ */
 /*******************************************************************
  This acts as an interator over the subkeys defined for a given 
  NK record.  Remember that offsets are from the *first* HBIN block.
