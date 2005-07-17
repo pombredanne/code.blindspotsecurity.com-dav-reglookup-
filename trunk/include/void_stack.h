@@ -43,4 +43,4 @@ bool void_stack_push(void_stack* stack, void* e);
 const void* void_stack_cur(void_stack* stack);
 void_stack_iterator* void_stack_iterator_new(void_stack* stack);
 void void_stack_iterator_destroy(void_stack_iterator* iter);
-void* void_stack_iterator_next(void_stack_iterator* iter);
+const void* void_stack_iterator_next(void_stack_iterator* iter);
