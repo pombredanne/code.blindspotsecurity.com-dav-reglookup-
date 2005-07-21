@@ -1,4 +1,4 @@
-# $Id: Makefile 20 2005-06-07 23:54:16Z tim $
+# $Id$
 
 # This Makefile is used only for packaging releases out of Subversion.
 ################################################################################
@@ -23,7 +23,7 @@ $(SUB_DIRS):
 	mkdir .release
 	svn export $(SVN_URL)/$@/ .release/$(RELEASE_NAME)
 	#XXX: Can this be less of a hack?
-	cd .release/$(RELEASE_NAME)/doc && make generate
+	cd .release/$(RELEASE_NAME)/doc && make release
 	cd .release\
 		&& tar cf $(RELEASE_NAME).tar $(RELEASE_NAME)\
 		&& gzip -9 $(RELEASE_NAME).tar
