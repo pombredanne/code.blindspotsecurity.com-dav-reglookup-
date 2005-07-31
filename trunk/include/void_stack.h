@@ -36,7 +36,10 @@ typedef struct _void_stack_iterator
 
 
 void_stack* void_stack_new(unsigned short max_size);
+void_stack* void_stack_copy(const void_stack* v);
+void_stack* void_stack_copy_reverse(const void_stack* v);
 void void_stack_destroy(void_stack* stack);
+void void_stack_destroy_deep(void_stack* stack);
 unsigned short void_stack_size(void_stack* stack);
 void* void_stack_pop(void_stack* stack);
 bool void_stack_push(void_stack* stack, void* e);

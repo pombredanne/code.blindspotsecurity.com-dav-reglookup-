@@ -1,8 +1,12 @@
 # $Id$
 
-default:
+BUILD_FILES=$(BUILD_DOC)/man/man1/reglookup.1.gz
+
+default: $(BUILD_FILES)
+
+$(BUILD_DOC)/man/man1/reglookup.1.gz: man/man1/reglookup.1.gz
 	mkdir -p $(BUILD_DOC)/man/man1
-	cp man/man1/reglookup.1.gz $(BUILD_DOC)/man/man1/reglookup.1.gz
+	cp man/man1/reglookup.1.gz $@
 
 install:
 	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)

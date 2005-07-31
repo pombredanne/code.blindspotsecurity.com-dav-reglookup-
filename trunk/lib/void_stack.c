@@ -49,7 +49,51 @@ void_stack* void_stack_new(unsigned short max_size)
 }
 
 
+void_stack* void_stack_copy(const void_stack* v)
+{
+  unsigned int i;
+  void_stack* ret_val;
+  if(v == NULL)
+    return NULL;
+
+  ret_val = void_stack_new(v->max_size);
+  if(ret_val == NULL)
+    return NULL;
+
+  for(i = 0; i < v->top; i++)
+    ret_val->elements[i] = v->elements[i];
+  ret_val->top = v->top;
+
+  return ret_val;
+}
+
+
+void_stack* void_stack_copy_reverse(const void_stack* v)
+{
+  unsigned int i;
+  void_stack* ret_val;
+  if(v == NULL)
+    return NULL;
+
+  ret_val = void_stack_new(v->max_size);
+  if(ret_val == NULL)
+    return NULL;
+
+  for(i = 0; i < v->top; i++)
+    ret_val->elements[i] = v->elements[v->top-i-1];
+  ret_val->top = v->top;
+
+  return ret_val;
+}
+
+
 void void_stack_destroy(void_stack* stack)
+{
+  free(stack);
+}
+
+
+void void_stack_destroy_deep(void_stack* stack)
 {
   unsigned short i;
   for(i=0; i < stack->top; i++)
