@@ -27,27 +27,49 @@
 #include "../include/regfio.h"
 #include "../include/void_stack.h"
 
-/* XXX: this needs to be rewritten to malloc each resulting string, instead of
- *      altering them in place
- */
+
+void bailOut(int code, char* message)
+{
+  fprintf(stderr, message);
+  exit(code);
+}
+
+
 void_stack* path2Stack(const char* s)
 {
-  void_stack* ret_val = void_stack_new(1024);
+  void_stack* ret_val;
+  void_stack* rev_ret = void_stack_new(1024);
+  const char* cur = s;
   char* next = NULL;
-  char* cur;
-  if (s == NULL)
-    return ret_val;
-  else
-    cur = strdup(s);
+  char* copy;
 
-  while((next = strrchr(cur, '/')) != NULL)
+  if (rev_ret == NULL)
+    return NULL;
+  if (s == NULL)
+    return rev_ret;
+  
+  while((next = strchr(cur, '/')) != NULL)
   {
-    next[0] = '\0';
-    if(strlen(next+1) > 0)
-      void_stack_push(ret_val, next+1);
+    if ((next-cur) > 0)
+    {
+      copy = (char*)malloc((next-cur+1)*sizeof(char));
+      if(copy == NULL)
+	bailOut(2, "ERROR: Memory allocation problem.\n");
+	  
+      memcpy(copy, cur, next-cur);
+      copy[next-cur] = '\0';
+      void_stack_push(rev_ret, copy);
+    }
+    cur = next+1;
   }
   if(strlen(cur) > 0)
-    void_stack_push(ret_val, cur);
+  {
+    copy = strdup(cur);
+    void_stack_push(rev_ret, copy);
+  }
+
+  ret_val = void_stack_copy_reverse(rev_ret);
+  void_stack_destroy(rev_ret);
 
   return ret_val;
 }
@@ -283,9 +305,8 @@ int main(int argc, char** argv)
   /* Process command line arguments */
   if(argc < 2)
   {
-    printf("ERROR: Requires 1 argument.\n");
     usage();
-    exit(1);
+    bailOut(1, "ERROR: Requires 1 argument.\n");
   }
   
   for(argi = 1; argi < argc; argi++)
@@ -294,30 +315,24 @@ int main(int argc, char** argv)
     {
       if(++argi > argc)
       {
-	fprintf(stderr, "ERROR: '-f' option requires parameter.\n");
 	usage();
-	exit(1);
+	bailOut(1, "ERROR: '-f' option requires parameter.\n");
       }
       if((prefix_filter = strdup(argv[argi])) == NULL)
-      {
-	fprintf(stderr, "ERROR: Memory allocation problem.\n");
-	exit(2);
-      }
+	bailOut(2, "ERROR: Memory allocation problem.\n");
+
       prefix_filter_enabled = true;
     }
     else if (strcmp("-t", argv[argi]) == 0)
     {
       if(++argi > argc)
       {
-	fprintf(stderr, "ERROR: '-t' option requires parameter.\n");
 	usage();
-	exit(1);
+	bailOut(1, "ERROR: '-t' option requires parameter.\n");
       }
       if((prefix_filter = strdup(argv[argi])) == NULL)
-      {
-	fprintf(stderr, "ERROR: Memory allocation problem.\n");
-	exit(2);
-      }
+	bailOut(2, "ERROR: Memory allocation problem.\n");
+
       type_filter_enabled = true;
     }
     else if (strcmp("-s", argv[argi]) == 0)
@@ -326,17 +341,14 @@ int main(int argc, char** argv)
       print_verbose = true;
     else if (argv[argi][0] == '-')
     {
-      fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
       usage();
-      exit(1);
+      fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
+      bailOut(1, "");
     }
     else
     {
       if((registry_file = strdup(argv[argi])) == NULL)
-      {
-	fprintf(stderr, "ERROR: Memory allocation problem.\n");
-	exit(2);
-      }      
+	bailOut(2, "ERROR: Memory allocation problem.\n");
     }
   }
 
@@ -344,8 +356,9 @@ int main(int argc, char** argv)
   if(f == NULL)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
-    exit(1);
+    bailOut(3, "");
   }
+
   root = regfio_rootkey(f);
   nk_stack = void_stack_new(1024);
 
@@ -360,16 +373,13 @@ int main(int argc, char** argv)
       if(retr_path_ret == 1)
 	fprintf(stderr, "WARNING: specified path not found.\n");
       else if(retr_path_ret != 0)
-	fprintf(stderr, "ERROR:\n");
+	bailOut(4, "ERROR:\n");
     }
   }
   else
-  {
-    fprintf(stderr, "ERROR: Memory allocation problem.\n");
-    exit(2);
-  }
-  void_stack_destroy(nk_stack);
+    bailOut(2, "ERROR: Memory allocation problem.\n");
 
+  void_stack_destroy_deep(nk_stack);
   regfio_close(f);
 
   return 0;
