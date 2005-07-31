@@ -2,8 +2,6 @@
 
 ################################################################################
 
-CC=gcc
-OPTS=-ggdb -std=gnu89 -pedantic -Wall
 FILES=regfio.o smb_deps.o void_stack.o
 
 all: $(FILES)
