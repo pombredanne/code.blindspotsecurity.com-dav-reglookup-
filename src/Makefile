@@ -11,7 +11,7 @@ all: $(FILES)
 $(REGLOOKUP): reglookup.o $(LIBS)
 	$(CC) $(CFLAGS) $(OPTS) -o $@ reglookup.o $(LIBS)
 
-reglookup.o:
+reglookup.o: reglookup.c
 	$(CC) $(CFLAGS) $(OPTS) -c -o $@ reglookup.c
 
 install:
