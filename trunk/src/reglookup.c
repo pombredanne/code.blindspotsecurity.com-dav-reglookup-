@@ -185,8 +185,8 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 	/* XXX: This is just a shallow free.  Need to write deep free
 	 * routines to replace the Samba code for this. 
 	 */ 
-	/*	if(cur != NULL)
-	  free(cur);*/
+	if(cur != NULL)
+	  free(cur);
       }
     }
   }
@@ -236,6 +236,7 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 	found_cur = true;
       }
     }
+    free(cur_str);
 
     if(!found_cur)
       return 1;
@@ -272,14 +273,16 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 
 static void usage(void)
 {
-  fprintf(stderr, "Usage: readreg [-f <PREFIX_FILTER>] [-t <TYPE_FILTER>] "
-                  "[-v] [-s] <REGISTRY_FILE>\n");
+  fprintf(stderr, "Usage: readreg [-v] [-s]"
+	  " [-f <PREFIX_FILTER>] [-t <TYPE_FILTER>]"
+	  " <REGISTRY_FILE>\n");
   /* XXX: replace version string with Subversion property? */
   fprintf(stderr, "Version: 0.2\n");
-  fprintf(stderr, "\n\t-v\t sets verbose mode.");
-  fprintf(stderr, "\n\t-f\t a simple prefix filter.");
-  fprintf(stderr, "\n\t-t\t restrict results to a specific type.");
-  fprintf(stderr, "\n\t-s\t prints security descriptors.");
+  fprintf(stderr, "Options:\n");
+  fprintf(stderr, "\t-v\t sets verbose mode.\n");
+  fprintf(stderr, "\t-s\t prints security descriptors.\n");
+  fprintf(stderr, "\t-f\t restricts output to elements below this path.\n");
+  fprintf(stderr, "\t-t\t restrict results to a specific data type.\n");
   fprintf(stderr, "\n");
 }
 
