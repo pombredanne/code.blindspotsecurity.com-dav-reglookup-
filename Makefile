@@ -42,4 +42,6 @@ $(BUILD_TREE):
 	mkdir -p $@
 
 clean:
+	$(MAKE) -C src clean
+	$(MAKE) -C lib clean
 	rm -rf $(BUILD)/*
