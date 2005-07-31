@@ -17,7 +17,7 @@ BUILD_BIN=$(BUILD)/bin
 BUILD_DOC=$(BUILD)/doc
 
 BUILD_TREE=$(BUILD_BIN) $(BUILD_DOC)
-SUB_DIRS=src doc
+SUB_DIRS=lib src doc
 
 FILES=$(REGLOOKUP)
 .PHONY: $(SUB_DIRS) clean
