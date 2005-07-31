@@ -28,6 +28,16 @@
 #include "../include/void_stack.h"
 
 
+/* Globals, influenced by command line parameters */
+bool print_verbose = false;
+bool print_security = false;
+bool path_filter_enabled = false;
+bool type_filter_enabled = false;
+char* path_filter = NULL;
+int type_filter;
+char* registry_file = NULL;
+
+
 void bailOut(int code, char* message)
 {
   fprintf(stderr, message);
@@ -130,10 +140,8 @@ char* stack2Path(void_stack* nk_stack)
 
 void printValue(REGF_VK_REC* vk, char* prefix)
 {
-  const char* str_type;
-  
-  str_type = type_val2str(vk->type);
-  printf("%s/%s:%s=\n", prefix, vk->valuename, str_type);
+  if(!type_filter_enabled || (vk->type == type_filter))
+    printf("%s/%s:%s=\n", prefix, vk->valuename, type_val2str(vk->type));
 }
 
 
@@ -153,6 +161,7 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
   REGF_NK_REC* sub;
   char* path;
   char* val_path;
+  int key_type = type_str2val("KEY");
 
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
   {
@@ -160,8 +169,10 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
     path = stack2Path(nk_stack);
     
     if(strlen(path) > 0)
-      printf("%s%s:KEY\n", prefix, path);
-    printValueList(cur, path);
+      if(!type_filter_enabled || (key_type == type_filter))
+	printf("%s%s:KEY\n", prefix, path);
+    if(!type_filter_enabled || (key_type != type_filter))
+      printValueList(cur, path);
     while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
     {
       if((sub = regfio_fetch_subkey(f, cur)) != NULL)
@@ -173,8 +184,10 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 	{
 	  val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
 	  sprintf(val_path, "%s%s", prefix, path);
-	  printf("%s:KEY\n", val_path);
-	  printValueList(sub, val_path);
+	  if(!type_filter_enabled || (key_type == type_filter))
+	    printf("%s:KEY\n", val_path);
+	  if(!type_filter_enabled || (key_type != type_filter))
+	    printValueList(sub, val_path);
 	  free(val_path);
 	  free(path);
 	}
@@ -274,26 +287,17 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 static void usage(void)
 {
   fprintf(stderr, "Usage: readreg [-v] [-s]"
-	  " [-f <PREFIX_FILTER>] [-t <TYPE_FILTER>]"
+	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
   /* XXX: replace version string with Subversion property? */
   fprintf(stderr, "Version: 0.2\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-s\t prints security descriptors.\n");
-  fprintf(stderr, "\t-f\t restricts output to elements below this path.\n");
-  fprintf(stderr, "\t-t\t restrict results to a specific data type.\n");
+  fprintf(stderr, "\t-p\t restrict output to elements below this path.\n");
+  fprintf(stderr, "\t-t\t restrict results to this specific data type.\n");
   fprintf(stderr, "\n");
 }
-
-/* Globals, influenced by command line parameters */
-bool print_verbose = false;
-bool print_security = false;
-bool prefix_filter_enabled = false;
-bool type_filter_enabled = false;
-char* prefix_filter = NULL;
-char* type_filter = NULL;
-char* registry_file = NULL;
 
 
 int main(int argc, char** argv)
@@ -314,17 +318,17 @@ int main(int argc, char** argv)
   
   for(argi = 1; argi < argc; argi++)
   {
-    if (strcmp("-f", argv[argi]) == 0)
+    if (strcmp("-p", argv[argi]) == 0)
     {
       if(++argi > argc)
       {
 	usage();
-	bailOut(1, "ERROR: '-f' option requires parameter.\n");
+	bailOut(1, "ERROR: '-p' option requires parameter.\n");
       }
-      if((prefix_filter = strdup(argv[argi])) == NULL)
+      if((path_filter = strdup(argv[argi])) == NULL)
 	bailOut(2, "ERROR: Memory allocation problem.\n");
 
-      prefix_filter_enabled = true;
+      path_filter_enabled = true;
     }
     else if (strcmp("-t", argv[argi]) == 0)
     {
@@ -333,8 +337,11 @@ int main(int argc, char** argv)
 	usage();
 	bailOut(1, "ERROR: '-t' option requires parameter.\n");
       }
-      if((prefix_filter = strdup(argv[argi])) == NULL)
-	bailOut(2, "ERROR: Memory allocation problem.\n");
+      if((type_filter = type_str2val(argv[argi])) == 0)
+      {
+	fprintf(stderr, "ERROR: Invalid type specified: %s.\n", argv[argi]);
+	bailOut(1, "");
+      }
 
       type_filter_enabled = true;
     }
@@ -367,7 +374,7 @@ int main(int argc, char** argv)
 
   if(void_stack_push(nk_stack, root))
   {
-    path_stack = path2Stack(prefix_filter);
+    path_stack = path2Stack(path_filter);
     if(void_stack_size(path_stack) < 1)
       printKeyTree(f, nk_stack, "");
     else
