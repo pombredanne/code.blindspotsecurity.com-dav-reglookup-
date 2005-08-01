@@ -39,7 +39,7 @@ const VAL_STR reg_type_names[] =
 {
   { REG_SZ,                        "SZ"           },
   { REG_EXPAND_SZ,                 "EXPAND_SZ"    },
-  { REG_BINARY,                    "BIN"          },
+  { REG_BINARY,                    "BINARY"       },
   { REG_DWORD,                     "DWORD"        },
   { REG_DWORD_BE,                  "DWORD_BE"     },
   { REG_LINK,                      "LINK"         },
@@ -53,7 +53,7 @@ const VAL_STR reg_type_names[] =
 
 
 /* Returns NULL on error */
-const char* type_val2str(unsigned int val)
+const char* regfio_type_val2str(unsigned int val)
 {
   int i;
 
@@ -66,7 +66,7 @@ const char* type_val2str(unsigned int val)
 
 
 /* Returns 0 on error */
-int type_str2val(const char* str)
+int regfio_type_str2val(const char* str)
 {
   int i;
 
