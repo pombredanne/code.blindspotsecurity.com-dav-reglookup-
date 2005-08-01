@@ -45,6 +45,206 @@ void bailOut(int code, char* message)
 }
 
 
+/* Returns a newly malloc()ed string which contains original buffer,
+ * except for non-printable or special characters are quoted in hex
+ * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
+ * character.  A null terminator is added, as only ascii, not binary, 
+ * is returned.
+ */
+static char* quote_buffer(const unsigned char* str, 
+			  unsigned int len, char* special)
+{
+  unsigned int i;
+  unsigned int num_written=0;
+  unsigned int out_len = sizeof(char)*len+1;
+  char* ret_val = malloc(out_len);
+
+  if(ret_val == NULL)
+    return NULL;
+
+  for(i=0; i<len; i++)
+  {
+    if(str[i] < 32 || str[i] > 126 || strchr(special, str[i]) != NULL)
+    {
+      out_len += 3;
+      /* XXX: may not be the most efficient way of getting enough memory. */
+      ret_val = realloc(ret_val, out_len);
+      if(ret_val == NULL)
+	break;
+      num_written += snprintf(ret_val+num_written, (out_len)-num_written,
+			      "\\x%.2X", str[i]);
+    }
+    else
+      ret_val[num_written++] = str[i];
+  }
+  ret_val[num_written] = '\0';
+
+  return ret_val;
+}
+
+
+/* Returns a newly malloc()ed string which contains original string, 
+ * except for non-printable or special characters are quoted in hex
+ * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
+ * character.
+ */
+static char* quote_string(const char* str, char* special)
+{
+  unsigned int len = strlen(str);
+  char* ret_val = quote_buffer((const unsigned char*)str, len, special);
+
+  return ret_val;
+}
+
+
+/*
+ * Convert from UniCode to Ascii ... Does not take into account other lang
+ * Restrict by ascii_max if > 0
+ */
+static int uni_to_ascii(unsigned char *uni, unsigned char *ascii, 
+			int ascii_max, int uni_max)
+{
+  int i = 0; 
+
+  while (i < ascii_max && (uni[i*2] || uni[i*2+1]))
+  {
+    if (uni_max > 0 && (i*2) >= uni_max) break;
+    ascii[i] = uni[i*2];
+    i++;
+  }
+  ascii[i] = '\0';
+
+  return i;
+}
+
+
+/*
+ * Convert a data value to a string for display
+ */
+static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
+{
+  unsigned char *asciip;
+  unsigned int i;
+  unsigned short num_nulls;
+  unsigned char* ascii;
+  unsigned char* cur_str;
+  unsigned char* cur_ascii;
+  char* cur_quoted;
+  unsigned int cur_str_len;
+  unsigned int ascii_max, cur_str_max;
+  unsigned int str_rem, cur_str_rem, alen;
+
+  switch (type) 
+  {
+  case REG_SZ:
+    if (print_verbose)
+      fprintf(stderr, "Len: %d\n", len);
+    
+    ascii_max = sizeof(char)*len;
+    ascii = malloc(ascii_max+4);
+    if(ascii == NULL)
+      return NULL;
+    
+    /* XXX: This has to be fixed. It has to be UNICODE */
+    uni_to_ascii(datap, ascii, len, ascii_max);
+    return ascii;
+    break;
+
+  case REG_EXPAND_SZ:
+    ascii_max = sizeof(char)*len;
+    ascii = malloc(ascii_max+2);
+    if(ascii == NULL)
+      return NULL;
+
+    uni_to_ascii(datap, ascii, len, ascii_max);
+    return ascii;
+    break;
+
+  case REG_BINARY:
+    ascii = (unsigned char*)quote_buffer(datap, len, "\\");
+    return ascii;
+    break;
+
+  case REG_DWORD:
+    ascii_max = sizeof(char)*10;
+    ascii = malloc(ascii_max+1);
+    if(ascii == NULL)
+      return NULL;
+
+    if (*(int *)datap == 0)
+      snprintf((char*)ascii, ascii_max, "0");
+    else
+      snprintf((char*)ascii, ascii_max, "0x%x", *(int *)datap);
+    return ascii;
+    break;
+
+  case REG_MULTI_SZ:
+    ascii_max = sizeof(char)*len*4;
+    cur_str_max = sizeof(char)*len+1;
+    cur_str = malloc(cur_str_max);
+    cur_ascii = malloc(cur_str_max);
+    ascii = malloc(ascii_max+4);
+    if(ascii == NULL)
+      return NULL;
+
+    /* Reads until it reaches 4 consecutive NULLs, 
+     * which is two nulls in unicode, or until it reaches len, or until we
+     * run out of buffer.  The latter should never happen, but we shouldn't
+     * trust our file to have the right lengths/delimiters.
+     */
+    asciip = ascii;
+    num_nulls = 0;
+    str_rem = ascii_max;
+    cur_str_rem = cur_str_max;
+    cur_str_len = 0;
+
+    for(i=0; (i < len) && str_rem > 0; i++)
+    {
+      *(cur_str+cur_str_len) = *(datap+i);
+      if(*(cur_str+cur_str_len) == 0)
+	num_nulls++;
+      else
+	num_nulls = 0;
+      cur_str_len++;
+
+      if(num_nulls == 2)
+      {
+	uni_to_ascii(cur_str, cur_ascii, cur_str_max, 0);
+	/* XXX: Should backslashes be quoted as well? */
+	cur_quoted = quote_string((char*)cur_ascii, "|");
+	alen = snprintf((char*)asciip, str_rem, "%s", cur_quoted);
+	asciip += alen;
+	str_rem -= alen;
+	free(cur_quoted);
+
+	if(*(datap+i+1) == 0 && *(datap+i+2) == 0)
+	  break;
+	else
+	{
+	  alen = snprintf((char*)asciip, str_rem, "%c", '|');
+	  asciip += alen;
+	  str_rem -= alen;
+	  memset(cur_str, 0, cur_str_max);
+	  cur_str_len = 0;
+	  num_nulls = 0;
+	  /* To eliminate leading nulls in subsequent strings. */
+	  i++;
+	}
+      }
+    }
+    *asciip = 0;
+    return ascii;
+    break;
+
+  default:
+    return NULL;
+    break;
+  } 
+
+  return NULL;
+}
+
+
 void_stack* path2Stack(const char* s)
 {
   void_stack* ret_val;
@@ -140,8 +340,41 @@ char* stack2Path(void_stack* nk_stack)
 
 void printValue(REGF_VK_REC* vk, char* prefix)
 {
+  uint32 size;
+  uint8 tmp_buf[4];
+  char* quoted_value;
+
   if(!type_filter_enabled || (vk->type == type_filter))
-    printf("%s/%s:%s=\n", prefix, vk->valuename, type_val2str(vk->type));
+  {
+    /* Thanks Microsoft for making this process so straight-forward!!! */
+    size = (vk->data_size & ~VK_DATA_IN_OFFSET);
+    if(vk->data_size & VK_DATA_IN_OFFSET)
+    {
+      tmp_buf[0] = (uint8)((vk->data_off >> 3) & 0xFF);
+      tmp_buf[1] = (uint8)((vk->data_off >> 2) & 0xFF);
+      tmp_buf[2] = (uint8)((vk->data_off >> 1) & 0xFF);
+      tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
+      if(size > 4)
+	size = 4;
+      quoted_value = data_to_ascii(tmp_buf, 4, vk->type);
+    }
+    else
+    {
+      /* XXX: This is a safety hack.  No data fields have yet been found
+       * larger, but length limits are probably better got from fields
+       * in the registry itself, within reason.
+       */
+      if(size > 16384)
+      {
+	printf("WARNING: key size %d larger than 16384, truncating...\n", size);
+	size = 16384;
+      }
+      quoted_value = data_to_ascii(vk->data, vk->data_size, vk->type);
+    }
+
+    printf("%s/%s:%s=%s\n", prefix, vk->valuename,
+	   regfio_type_val2str(vk->type), quoted_value);
+  }
 }
 
 
@@ -161,7 +394,7 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
   REGF_NK_REC* sub;
   char* path;
   char* val_path;
-  int key_type = type_str2val("KEY");
+  int key_type = regfio_type_str2val("KEY");
 
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
   {
@@ -337,7 +570,7 @@ int main(int argc, char** argv)
 	usage();
 	bailOut(1, "ERROR: '-t' option requires parameter.\n");
       }
-      if((type_filter = type_str2val(argv[argi])) == 0)
+      if((type_filter = regfio_type_str2val(argv[argi])) == 0)
       {
 	fprintf(stderr, "ERROR: Invalid type specified: %s.\n", argv[argi]);
 	bailOut(1, "");

@@ -249,8 +249,8 @@ typedef struct {
 
 /* Function Declarations */
  
-const char* type_val2str(unsigned int val);
-int type_str2val(const char* str);
+const char*   regfio_type_val2str(unsigned int val);
+int           regfio_type_str2val(const char* str);
 
 REGF_FILE*    regfio_open( const char *filename );
 int           regfio_close( REGF_FILE *r );
