@@ -86,9 +86,7 @@ typedef struct sid_info
    * @note The values in these uint32's are in *native* byteorder, not
    * neccessarily little-endian...... JRA.
    */
-  /* '15' was previously the #define MAXSUBAUTHS */
-  uint32 sub_auths[15];
-
+  uint32 sub_auths[MAXSUBAUTHS];
 } DOM_SID;
 
 typedef struct nttime_info
@@ -160,6 +158,7 @@ typedef uint32 WERROR;
 #define TIME_FIXUP_CONSTANT (369.0*365.25*24*60*60-(3.0*24*60*60+6.0*60*60))
 
 void unix_to_nt_time(NTTIME *nt, time_t t);
+time_t nt_time_to_unix(NTTIME *nt);
 
 /* End of stuff from lib/time.c */
 

@@ -1,7 +1,9 @@
 /*
- * A utility to test functionality of Gerald Carter''s regfio interface.
+ * A utility to read a Windows NT/2K/XP/2K3 registry file, using 
+ * Gerald Carter''s regfio interface.
  *
  * Copyright (C) 2005 Timothy D. Morgan
+ * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,19 +26,22 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 #include "../include/regfio.h"
 #include "../include/void_stack.h"
-
 
 /* Globals, influenced by command line parameters */
 bool print_verbose = false;
 bool print_security = false;
+bool print_header = true;
 bool path_filter_enabled = false;
 bool type_filter_enabled = false;
 char* path_filter = NULL;
 int type_filter;
 char* registry_file = NULL;
 
+/* Other globals */
+const char* special_chars = ",\"\\";
 
 void bailOut(int code, char* message)
 {
@@ -90,10 +95,13 @@ static char* quote_buffer(const unsigned char* str,
  */
 static char* quote_string(const char* str, char* special)
 {
-  unsigned int len = strlen(str);
-  char* ret_val = quote_buffer((const unsigned char*)str, len, special);
+  unsigned int len;
 
-  return ret_val;
+  if(str == NULL)
+    return NULL;
+
+  len = strlen(str);
+  return quote_buffer((const unsigned char*)str, len, special);
 }
 
 
@@ -147,7 +155,9 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     
     /* XXX: This has to be fixed. It has to be UNICODE */
     uni_to_ascii(datap, ascii, len, ascii_max);
-    return ascii;
+    cur_quoted = quote_string((char*)ascii, special_chars);
+    free(ascii);
+    return (unsigned char*)cur_quoted;
     break;
 
   case REG_EXPAND_SZ:
@@ -157,12 +167,9 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
       return NULL;
 
     uni_to_ascii(datap, ascii, len, ascii_max);
-    return ascii;
-    break;
-
-  case REG_BINARY:
-    ascii = (unsigned char*)quote_buffer(datap, len, "\\");
-    return ascii;
+    cur_quoted = quote_string((char*)ascii, special_chars);
+    free(ascii);
+    return (unsigned char*)cur_quoted;
     break;
 
   case REG_DWORD:
@@ -178,13 +185,16 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     return ascii;
     break;
 
+  /* XXX: this MULTI_SZ parser is pretty inefficient.  Should be
+   *      redone with fewer malloc and better string concatenation. 
+   */
   case REG_MULTI_SZ:
     ascii_max = sizeof(char)*len*4;
     cur_str_max = sizeof(char)*len+1;
     cur_str = malloc(cur_str_max);
     cur_ascii = malloc(cur_str_max);
     ascii = malloc(ascii_max+4);
-    if(ascii == NULL)
+    if(ascii == NULL || cur_str == NULL || cur_ascii == NULL)
       return NULL;
 
     /* Reads until it reaches 4 consecutive NULLs, 
@@ -210,8 +220,7 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
       if(num_nulls == 2)
       {
 	uni_to_ascii(cur_str, cur_ascii, cur_str_max, 0);
-	/* XXX: Should backslashes be quoted as well? */
-	cur_quoted = quote_string((char*)cur_ascii, "|");
+	cur_quoted = quote_string((char*)cur_ascii, ",|\"\\");
 	alen = snprintf((char*)asciip, str_rem, "%s", cur_quoted);
 	asciip += alen;
 	str_rem -= alen;
@@ -233,7 +242,18 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
       }
     }
     *asciip = 0;
+    free(cur_str);
+    free(cur_ascii);
     return ascii;
+    break;
+
+  /* XXX: Dont know what to do with these yet, just print as binary... */
+  case REG_RESOURCE_LIST:
+  case REG_FULL_RESOURCE_DESCRIPTOR:
+  case REG_RESOURCE_REQUIREMENTS_LIST:
+
+  case REG_BINARY:
+    return (unsigned char*)quote_buffer(datap, len, special_chars);
     break;
 
   default:
@@ -242,6 +262,169 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
   } 
 
   return NULL;
+}
+
+
+/* Security descriptor print functions  */
+
+const char* ace_type2str(uint8 type)
+{
+  static const char* map[7] 
+    = {"ALLOW", "DENY", "AUDIT", "ALARM", 
+       "ALLOW CPD", "OBJ ALLOW", "OBJ DENY"};
+  if(type < 7)
+    return map[type];
+  else
+    return "UNKNOWN";
+}
+
+
+char* ace_flags2str(uint8 flags)
+{
+  char* flg_output = malloc(21*sizeof(char));
+  int some = 0;
+
+  if(flg_output == NULL)
+    return NULL;
+
+  flg_output[0] = '\0';
+  if (!flags)
+    return flg_output;
+
+  if (flags & 0x01) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "OI");
+  }
+  if (flags & 0x02) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "CI");
+  }
+  if (flags & 0x04) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "NP");
+  }
+  if (flags & 0x08) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "IO");
+  }
+  if (flags & 0x10) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "IA");
+  }
+  if (flags == 0xF) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "VI");
+  }
+
+  return flg_output;
+}
+
+
+char* ace_perms2str(uint32 perms)
+{
+  char* ret_val = malloc(9*sizeof(char));
+  sprintf(ret_val, "%8X", perms);
+
+  return ret_val;
+}
+
+
+char* sid2str(DOM_SID* sid)
+{
+  uint32 i, size = MAXSUBAUTHS*11 + 24;
+  uint32 left = size;
+  uint8 comps = sid->num_auths;
+  char* ret_val = malloc(size);
+  
+  if(ret_val == NULL)
+    return NULL;
+
+  if(comps > MAXSUBAUTHS)
+    comps = MAXSUBAUTHS;
+
+  left -= sprintf(ret_val, "S-%u-%u", sid->sid_rev_num, sid->id_auth[5]);
+
+  for (i = 0; i < comps; i++) 
+    left -= snprintf(ret_val+(size-left), left, "-%u", sid->sub_auths[i]);
+
+  return ret_val;
+}
+
+
+char* get_acl(SEC_ACL* acl)
+{
+  uint32 i, extra, size = 0;
+  const char* type_str;
+  char* flags_str;
+  char* perms_str;
+  char* sid_str;
+  char* ret_val = NULL;
+  char* ace_delim = "";
+  char field_delim = ':';
+
+  for (i = 0; i < acl->num_aces; i++)
+  {
+    /* XXX: check for NULL */
+    sid_str = sid2str(&acl->ace[i].trustee);
+    type_str = ace_type2str(acl->ace[i].type);
+    perms_str = ace_perms2str(acl->ace[i].info.mask);
+    flags_str = ace_flags2str(acl->ace[i].flags);
+
+    /* XXX: this is slow */
+    extra = strlen(sid_str) + strlen(type_str) 
+          + strlen(perms_str) + strlen(flags_str);
+    ret_val = realloc(ret_val, size+extra+5);
+    if(ret_val == NULL)
+      return NULL;
+    snprintf(ret_val+size, extra+4, "%s%s%c%s%c%s%c%s",
+	     ace_delim,sid_str,
+	     field_delim,type_str,
+	     field_delim,perms_str,
+	     field_delim,flags_str);
+    size += extra;
+    ace_delim = "|";
+    free(sid_str);
+    free(perms_str);
+    free(flags_str);
+  }
+
+  return ret_val;
+}
+
+
+char* get_sacl(SEC_DESC *sec_desc)
+{
+  if (sec_desc->sacl)
+    return get_acl(sec_desc->sacl);
+  else
+    return "";
+}
+
+
+char* get_dacl(SEC_DESC *sec_desc)
+{
+  if (sec_desc->dacl)
+    return get_acl(sec_desc->dacl);
+  else
+    return "";
+}
+
+
+char* get_owner(SEC_DESC *sec_desc)
+{
+  return sid2str(sec_desc->owner_sid);
+}
+
+
+char* get_group(SEC_DESC *sec_desc)
+{
+  return sid2str(sec_desc->grp_sid);
 }
 
 
@@ -342,7 +525,9 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 {
   uint32 size;
   uint8 tmp_buf[4];
-  char* quoted_value;
+  unsigned char* quoted_value;
+  char* quoted_prefix;
+  char* quoted_name;
 
   if(!type_filter_enabled || (vk->type == type_filter))
   {
@@ -366,14 +551,29 @@ void printValue(REGF_VK_REC* vk, char* prefix)
        */
       if(size > 16384)
       {
-	printf("WARNING: key size %d larger than 16384, truncating...\n", size);
+	fprintf(stderr, "WARNING: key size %d larger than "
+		        "16384, truncating...\n", size);
 	size = 16384;
       }
       quoted_value = data_to_ascii(vk->data, vk->data_size, vk->type);
     }
 
-    printf("%s/%s:%s=%s\n", prefix, vk->valuename,
+    /* XXX: Sometimes value names can be NULL in registry.  Need to
+     *      figure out why and when, and generate the appropriate output
+     *      for that condition.
+     */
+    quoted_prefix = quote_string(prefix, special_chars);
+    quoted_name = quote_string(vk->valuename, special_chars);
+
+    printf("%s/%s,%s,%s,,,,,\n", quoted_prefix, quoted_name,
 	   regfio_type_val2str(vk->type), quoted_value);
+
+    if(quoted_value != NULL)
+      free(quoted_value);
+    if(quoted_prefix != NULL)
+      free(quoted_prefix);
+    if(quoted_name != NULL)
+      free(quoted_name);
   }
 }
 
@@ -392,8 +592,16 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 {
   REGF_NK_REC* cur;
   REGF_NK_REC* sub;
-  char* path;
-  char* val_path;
+  char* path = NULL;
+  char* val_path = NULL;
+  char* owner = NULL;
+  char* group = NULL;
+  char* sacl = NULL;
+  char* dacl = NULL;
+  char mtime[20];
+  time_t tmp_time[1];
+  struct tm* tmp_time_s = NULL;
+
   int key_type = regfio_type_str2val("KEY");
 
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
@@ -403,7 +611,29 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
     
     if(strlen(path) > 0)
       if(!type_filter_enabled || (key_type == type_filter))
-	printf("%s%s:KEY\n", prefix, path);
+      {
+	owner = get_owner(cur->sec_desc->sec_desc);
+	group = get_group(cur->sec_desc->sec_desc);
+	sacl = get_sacl(cur->sec_desc->sec_desc);
+	dacl = get_dacl(cur->sec_desc->sec_desc);
+	*tmp_time = nt_time_to_unix(&cur->mtime);
+	tmp_time_s = gmtime(tmp_time);
+	strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
+	printf("%s%s,KEY,,%s,%s,%s,%s,%s\n", prefix, path, mtime, 
+	       owner, group, sacl, dacl);
+	if(owner != NULL)
+	  free(owner);
+	owner = NULL;
+	if(group != NULL)
+	  free(group);
+	group = NULL;
+	if(sacl != NULL)
+	  free(sacl);
+	sacl = NULL;
+	if(dacl != NULL)
+	  free(dacl);
+	dacl = NULL;
+      }
     if(!type_filter_enabled || (key_type != type_filter))
       printValueList(cur, path);
     while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
@@ -418,11 +648,39 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 	  val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
 	  sprintf(val_path, "%s%s", prefix, path);
 	  if(!type_filter_enabled || (key_type == type_filter))
-	    printf("%s:KEY\n", val_path);
+	  {
+	    owner = get_owner(sub->sec_desc->sec_desc);
+	    group = get_group(sub->sec_desc->sec_desc);
+	    sacl = get_sacl(sub->sec_desc->sec_desc);
+	    dacl = get_dacl(sub->sec_desc->sec_desc);
+	    *tmp_time = nt_time_to_unix(&cur->mtime);
+	    tmp_time_s = gmtime(tmp_time);
+	    strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
+	    printf("%s,KEY,,%s,%s,%s,%s,%s\n", val_path, mtime,
+		   owner, group, sacl, dacl);
+	  }
 	  if(!type_filter_enabled || (key_type != type_filter))
 	    printValueList(sub, val_path);
-	  free(val_path);
-	  free(path);
+	  if(val_path != NULL)
+	    free(val_path);
+	  val_path = NULL;
+	  if(path != NULL)
+	    free(path);
+	  path = NULL;
+	  if(owner != NULL)
+	    free(owner);
+	  owner = NULL;
+	  if(group != NULL)
+	    free(group);
+	  group = NULL;
+	  /* XXX: causes segfaults.  fix mem allocation bug */
+	  /*	  if(sacl != NULL)
+	    free(sacl);*/
+	  sacl = NULL;
+	  if(dacl != NULL)
+	    free(dacl);
+	  dacl = NULL;
+	  tmp_time_s = NULL;
 	}
       }
       else
@@ -607,6 +865,9 @@ int main(int argc, char** argv)
 
   if(void_stack_push(nk_stack, root))
   {
+    if(print_header)
+      printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL\n");
+
     path_stack = path2Stack(path_filter);
     if(void_stack_size(path_stack) < 1)
       printKeyTree(f, nk_stack, "");
