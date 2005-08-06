@@ -368,8 +368,6 @@ char* get_acl(SEC_ACL* acl)
   char* ace_delim = "";
   char field_delim = ':';
 
-printf("acl: %.8X\n", (uint32)acl);
-
   for (i = 0; i < acl->num_aces; i++)
   {
     /* XXX: check for NULL */
