@@ -2,7 +2,7 @@ reglookup
 
 
 =NAME=
-	reglookup - Windoze NT/2K/XP registry reader/lookup tool
+	reglookup - windows NT+ registry reader/lookup tool
 
 
 =SYNOPSIS=
@@ -10,71 +10,82 @@ reglookup
 
 
 =DESCRIPTION=
-	reglookup is designed to read Windoze registry elements and
-	print them out to stdout.  It has several filtering options to
-	narrow the focus of the output.
+	reglookup is designed to read windows registry elements and
+	print them out to stdout in a CSV-like format.  It has filtering
+	options to narrow the focus of the output.  This tool is
+	designed to work with on windows NT/2K/XP/2K3 registries, though
+	your mileage may vary.
 
 
 =OPTIONS=
-	-f<PREFIX_FILTER>	
-		Specify a path filter.  Only keys/values under this
-		registry path will be output.
+	-p  <PREFIX_FILTER>	
+		Specify a path prefix filter.  Only keys/values under
+		this registry path will be output.
 
-	-t<TYPE_FILTER>
+	-t  <TYPE_FILTER>
 		Specify a type filter.  Only elements which match this
 		registry data type will be printed.  Acceptable values
-		are: SZ,EXPAND_SZ,BIN,DWORD,MULTI_SZ,KEY
+		are: SZ,EXPAND_SZ,BINARY,DWORD,DWORD_BE,LINK,MULTI_SZ,
+		     RSRC_LIST,RSRC_DESC,RSRC_REQ_LIST,KEY
 
-	-s	Print security descriptors as well as keys/values/data.
-		(This feature's output is not standardized, and probably
-		contains bugs.) 
-	
+	-s	Adds four additional columns to output containing 
+		information from key security descriptors.  The columns 
+		are: owner, group, sacl, dacl.
+		(This feature's output probably contains bugs right now.)
+
+	-S	Disables the printing of security descriptor
+		information.
+
 	-v	Verbose output.
+		(Currently does little to nothing.)
 
 
 	REGISTRY_FILE
 		Required argument.  Specifies the location of the
 		registry file to read.  Typically, these files will be
-		found on a Windoze partition under
+		found on a NTFS partition under
 		%SystemRoot%/system32/config. 
 
 
 =EXAMPLES=
-	To read and print an entire registry:
+	To read and print the contents of an entire system registry
+	file: 
 
 	  **reglookup /mnt/win/c/WINNT/system32/config/system**
 
 	To limit the output to just those entries under the Services
 	key: 
 
-	  **reglookup -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup -p /ControlSet002/Services /mnt/win/c/WINNT/system32/config/system**
 
-	To limit the output to all registry values of type BIN:
+	To limit the output to all registry values of type BINARY:
 
-	  **reglookup -tBIN /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup -t BINARY /mnt/win/c/WINNT/system32/config/system**
 	
-	And to limit the output to BIN values under the Services key:
+	And to limit the output to BINARY values under the Services key:
 
-	  **reglookup -tBIN -f'$$$PROTO.HIV/ControlSet002/Services' /mnt/win/c/WINNT/system32/config/system**
+	  **reglookup -t BINARY -p /ControlSet002/Services /mnt/win/c/WINNT/system32/config/system**
 
 
 =BUGS=
-	Path filtering is currently a slow hack.
-
 	The current incarnation of this program has only been tested on
-	Windoze 2000.
+	windows 2K/XP.
+
+	Verbose output is not working.
 
 	You'll notice that registry paths aren't all the same as the
-	ones the equivalents you see in Windoze.  Don't ask me why that
-	is.  I just work here.
+	ones the equivalents you see in the windows registry editor.
+	Don't ask me why that is.  I just work here.
 
 	This software should be considered unstable at this time.
 
 
 =CREDITS=
-	This program is based on editreg.c by Richard Sharpe.
-
-	It has since been modified by Timothy D. Morgan.
+	This program was initially based on editreg.c by 
+	Richard Sharpe.  It has since been rewritten to use a modified
+	version the regfio library written by Gerald Carter.  Heavy
+	modifications to the library and the original command line
+	interface have been done by Timothy D. Morgan.
 
 	Please see source code for a full list of copyrights.
 
