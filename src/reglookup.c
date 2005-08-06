@@ -782,6 +782,8 @@ static void usage(void)
   fprintf(stderr, "Version: 0.2\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
+  fprintf(stderr, "\t-h\t enables header row. (default)\n");
+  fprintf(stderr, "\t-H\t disables header row.\n");
   fprintf(stderr, "\t-s\t enables security descriptor output.\n");
   fprintf(stderr, "\t-S\t disables security descriptor output. (default)\n");
   fprintf(stderr, "\t-p\t restrict output to elements below this path.\n");
@@ -836,6 +838,10 @@ int main(int argc, char** argv)
 
       type_filter_enabled = true;
     }
+    else if (strcmp("-h", argv[argi]) == 0)
+      print_header = true;
+    else if (strcmp("-H", argv[argi]) == 0)
+      print_header = false;
     else if (strcmp("-s", argv[argi]) == 0)
       print_security = true;
     else if (strcmp("-S", argv[argi]) == 0)
