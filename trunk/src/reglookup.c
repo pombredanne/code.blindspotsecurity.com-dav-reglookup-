@@ -748,7 +748,9 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 
   for(i=0; (i < cur->num_values); i++)
   {
-    if(strcasecmp(sub->values[i].valuename, cur_str) == 0)
+    /* XXX: Not sure when/why this can be NULL, but it's happened. */
+    if(sub->values[i].valuename != NULL 
+       && strcasecmp(sub->values[i].valuename, cur_str) == 0)
     {
       /* XXX: fix mem leak with stack2Path return value */
       printValue(&sub->values[i], stack2Path(nk_stack));
