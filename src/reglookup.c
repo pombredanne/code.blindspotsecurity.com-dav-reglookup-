@@ -266,7 +266,7 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 
 
 /* Security descriptor print functions  */
-
+/* XXX: these functions should be moved out into regfio library */
 const char* ace_type2str(uint8 type)
 {
   static const char* map[7] 
@@ -329,7 +329,7 @@ char* ace_flags2str(uint8 flags)
 char* ace_perms2str(uint32 perms)
 {
   char* ret_val = malloc(9*sizeof(char));
-  sprintf(ret_val, "%8X", perms);
+  sprintf(ret_val, "%.8X", perms);
 
   return ret_val;
 }
@@ -368,6 +368,8 @@ char* get_acl(SEC_ACL* acl)
   char* ace_delim = "";
   char field_delim = ':';
 
+printf("acl: %.8X\n", (uint32)acl);
+
   for (i = 0; i < acl->num_aces; i++)
   {
     /* XXX: check for NULL */
@@ -378,16 +380,15 @@ char* get_acl(SEC_ACL* acl)
 
     /* XXX: this is slow */
     extra = strlen(sid_str) + strlen(type_str) 
-          + strlen(perms_str) + strlen(flags_str);
-    ret_val = realloc(ret_val, size+extra+5);
+          + strlen(perms_str) + strlen(flags_str)+5;
+    ret_val = realloc(ret_val, size+extra);
     if(ret_val == NULL)
       return NULL;
-    snprintf(ret_val+size, extra+4, "%s%s%c%s%c%s%c%s",
-	     ace_delim,sid_str,
-	     field_delim,type_str,
-	     field_delim,perms_str,
-	     field_delim,flags_str);
-    size += extra;
+    size += snprintf(ret_val+size, extra, "%s%s%c%s%c%s%c%s",
+		     ace_delim,sid_str,
+		     field_delim,type_str,
+		     field_delim,perms_str,
+		     field_delim,flags_str);
     ace_delim = "|";
     free(sid_str);
     free(perms_str);
@@ -403,7 +404,7 @@ char* get_sacl(SEC_DESC *sec_desc)
   if (sec_desc->sacl)
     return get_acl(sec_desc->sacl);
   else
-    return "";
+    return NULL;
 }
 
 
@@ -412,7 +413,7 @@ char* get_dacl(SEC_DESC *sec_desc)
   if (sec_desc->dacl)
     return get_acl(sec_desc->dacl);
   else
-    return "";
+    return NULL;
 }
 
 
@@ -482,7 +483,8 @@ char* stack2Path(void_stack* nk_stack)
   buf = (char*)malloc((buf_len)*sizeof(char));
   if (buf == NULL)
     return NULL;
-  buf[0] = '\0';
+  buf[0] = '/';
+  buf[1] = '\0';
 
   iter = void_stack_iterator_new(nk_stack);
   if (iter == NULL)
@@ -529,52 +531,53 @@ void printValue(REGF_VK_REC* vk, char* prefix)
   char* quoted_prefix;
   char* quoted_name;
 
-  if(!type_filter_enabled || (vk->type == type_filter))
+  /* Thanks Microsoft for making this process so straight-forward!!! */
+  size = (vk->data_size & ~VK_DATA_IN_OFFSET);
+  if(vk->data_size & VK_DATA_IN_OFFSET)
   {
-    /* Thanks Microsoft for making this process so straight-forward!!! */
-    size = (vk->data_size & ~VK_DATA_IN_OFFSET);
-    if(vk->data_size & VK_DATA_IN_OFFSET)
-    {
-      tmp_buf[0] = (uint8)((vk->data_off >> 3) & 0xFF);
-      tmp_buf[1] = (uint8)((vk->data_off >> 2) & 0xFF);
-      tmp_buf[2] = (uint8)((vk->data_off >> 1) & 0xFF);
-      tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
-      if(size > 4)
-	size = 4;
-      quoted_value = data_to_ascii(tmp_buf, 4, vk->type);
-    }
-    else
-    {
-      /* XXX: This is a safety hack.  No data fields have yet been found
-       * larger, but length limits are probably better got from fields
-       * in the registry itself, within reason.
-       */
-      if(size > 16384)
-      {
-	fprintf(stderr, "WARNING: key size %d larger than "
-		        "16384, truncating...\n", size);
-	size = 16384;
-      }
-      quoted_value = data_to_ascii(vk->data, vk->data_size, vk->type);
-    }
-
-    /* XXX: Sometimes value names can be NULL in registry.  Need to
-     *      figure out why and when, and generate the appropriate output
-     *      for that condition.
+    tmp_buf[0] = (uint8)((vk->data_off >> 3) & 0xFF);
+    tmp_buf[1] = (uint8)((vk->data_off >> 2) & 0xFF);
+    tmp_buf[2] = (uint8)((vk->data_off >> 1) & 0xFF);
+    tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
+    if(size > 4)
+      size = 4;
+    quoted_value = data_to_ascii(tmp_buf, 4, vk->type);
+  }
+  else
+  {
+    /* XXX: This is a safety hack.  No data fields have yet been found
+     * larger, but length limits are probably better got from fields
+     * in the registry itself, within reason.
      */
-    quoted_prefix = quote_string(prefix, special_chars);
-    quoted_name = quote_string(vk->valuename, special_chars);
-
+    if(size > 16384)
+    {
+      fprintf(stderr, "WARNING: key size %d larger than "
+	      "16384, truncating...\n", size);
+      size = 16384;
+    }
+    quoted_value = data_to_ascii(vk->data, vk->data_size, vk->type);
+  }
+  
+  /* XXX: Sometimes value names can be NULL in registry.  Need to
+   *      figure out why and when, and generate the appropriate output
+   *      for that condition.
+   */
+  quoted_prefix = quote_string(prefix, special_chars);
+  quoted_name = quote_string(vk->valuename, special_chars);
+  
+  if(print_security)
     printf("%s/%s,%s,%s,,,,,\n", quoted_prefix, quoted_name,
 	   regfio_type_val2str(vk->type), quoted_value);
-
-    if(quoted_value != NULL)
-      free(quoted_value);
-    if(quoted_prefix != NULL)
-      free(quoted_prefix);
-    if(quoted_name != NULL)
-      free(quoted_name);
-  }
+  else
+    printf("%s/%s,%s,%s,\n", quoted_prefix, quoted_name,
+	   regfio_type_val2str(vk->type), quoted_value);
+  
+  if(quoted_value != NULL)
+    free(quoted_value);
+  if(quoted_prefix != NULL)
+    free(quoted_prefix);
+  if(quoted_name != NULL)
+    free(quoted_name);
 }
 
 
@@ -583,7 +586,55 @@ void printValueList(REGF_NK_REC* nk, char* prefix)
   uint32 i;
   
   for(i=0; i < nk->num_values; i++)
-    printValue(&nk->values[i], prefix);
+    if(!type_filter_enabled || (nk->values[i].type == type_filter))
+      printValue(&nk->values[i], prefix);
+}
+
+
+void printKey(REGF_NK_REC* k, char* full_path)
+{
+  static char empty_str[1] = "";
+  char* owner = NULL;
+  char* group = NULL;
+  char* sacl = NULL;
+  char* dacl = NULL;
+  char mtime[20];
+  time_t tmp_time[1];
+  struct tm* tmp_time_s = NULL;
+
+  *tmp_time = nt_time_to_unix(&k->mtime);
+  tmp_time_s = gmtime(tmp_time);
+  strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
+
+  if(print_security)
+  {
+    owner = get_owner(k->sec_desc->sec_desc);
+    group = get_group(k->sec_desc->sec_desc);
+    sacl = get_sacl(k->sec_desc->sec_desc);
+    dacl = get_dacl(k->sec_desc->sec_desc);
+    if(owner == NULL)
+      owner = empty_str;
+    if(group == NULL)
+      group = empty_str;
+    if(sacl == NULL)
+      sacl = empty_str;
+    if(dacl == NULL)
+      dacl = empty_str;
+
+    printf("%s,KEY,,%s,%s,%s,%s,%s\n", full_path, mtime, 
+	   owner, group, sacl, dacl);
+
+    if(owner != empty_str)
+      free(owner);
+    if(group != empty_str)
+      free(group);
+    if(sacl != empty_str)
+      free(sacl);
+    if(dacl != empty_str)
+      free(dacl);
+  }
+  else
+    printf("%s,KEY,,%s\n", full_path, mtime);
 }
 
 
@@ -594,48 +645,24 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
   REGF_NK_REC* sub;
   char* path = NULL;
   char* val_path = NULL;
-  char* owner = NULL;
-  char* group = NULL;
-  char* sacl = NULL;
-  char* dacl = NULL;
-  char mtime[20];
-  time_t tmp_time[1];
-  struct tm* tmp_time_s = NULL;
 
   int key_type = regfio_type_str2val("KEY");
-
+  
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
   {
     cur->subkey_index = 0;
     path = stack2Path(nk_stack);
     
-    if(strlen(path) > 0)
-      if(!type_filter_enabled || (key_type == type_filter))
-      {
-	owner = get_owner(cur->sec_desc->sec_desc);
-	group = get_group(cur->sec_desc->sec_desc);
-	sacl = get_sacl(cur->sec_desc->sec_desc);
-	dacl = get_dacl(cur->sec_desc->sec_desc);
-	*tmp_time = nt_time_to_unix(&cur->mtime);
-	tmp_time_s = gmtime(tmp_time);
-	strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
-	printf("%s%s,KEY,,%s,%s,%s,%s,%s\n", prefix, path, mtime, 
-	       owner, group, sacl, dacl);
-	if(owner != NULL)
-	  free(owner);
-	owner = NULL;
-	if(group != NULL)
-	  free(group);
-	group = NULL;
-	if(sacl != NULL)
-	  free(sacl);
-	sacl = NULL;
-	if(dacl != NULL)
-	  free(dacl);
-	dacl = NULL;
-      }
+
+    val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
+    sprintf(val_path, "%s%s", prefix, path);
+    if(!type_filter_enabled || (key_type == type_filter))
+      printKey(cur, val_path);
+
     if(!type_filter_enabled || (key_type != type_filter))
-      printValueList(cur, path);
+      printValueList(cur, val_path);
+    if(val_path != NULL)
+      free(val_path);
     while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
     {
       if((sub = regfio_fetch_subkey(f, cur)) != NULL)
@@ -648,39 +675,11 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 	  val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
 	  sprintf(val_path, "%s%s", prefix, path);
 	  if(!type_filter_enabled || (key_type == type_filter))
-	  {
-	    owner = get_owner(sub->sec_desc->sec_desc);
-	    group = get_group(sub->sec_desc->sec_desc);
-	    sacl = get_sacl(sub->sec_desc->sec_desc);
-	    dacl = get_dacl(sub->sec_desc->sec_desc);
-	    *tmp_time = nt_time_to_unix(&cur->mtime);
-	    tmp_time_s = gmtime(tmp_time);
-	    strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
-	    printf("%s,KEY,,%s,%s,%s,%s,%s\n", val_path, mtime,
-		   owner, group, sacl, dacl);
-	  }
+	    printKey(sub, val_path);
 	  if(!type_filter_enabled || (key_type != type_filter))
 	    printValueList(sub, val_path);
 	  if(val_path != NULL)
 	    free(val_path);
-	  val_path = NULL;
-	  if(path != NULL)
-	    free(path);
-	  path = NULL;
-	  if(owner != NULL)
-	    free(owner);
-	  owner = NULL;
-	  if(group != NULL)
-	    free(group);
-	  group = NULL;
-	  /* XXX: causes segfaults.  fix mem allocation bug */
-	  /*	  if(sacl != NULL)
-	    free(sacl);*/
-	  sacl = NULL;
-	  if(dacl != NULL)
-	    free(dacl);
-	  dacl = NULL;
-	  tmp_time_s = NULL;
 	}
       }
       else
@@ -753,6 +752,7 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
   {
     if(strcasecmp(sub->values[i].valuename, cur_str) == 0)
     {
+      /* XXX: fix mem leak with stack2Path return value */
       printValue(&sub->values[i], stack2Path(nk_stack));
       return 0;
     }
@@ -866,7 +866,12 @@ int main(int argc, char** argv)
   if(void_stack_push(nk_stack, root))
   {
     if(print_header)
-      printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL\n");
+    {
+      if(print_security)
+	printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL\n");
+      else
+	printf("PATH,TYPE,VALUE,MTIME\n");
+    }
 
     path_stack = path2Stack(path_filter);
     if(void_stack_size(path_stack) < 1)
