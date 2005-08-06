@@ -57,7 +57,7 @@ void bailOut(int code, char* message)
  * is returned.
  */
 static char* quote_buffer(const unsigned char* str, 
-			  unsigned int len, char* special)
+			  unsigned int len, const char* special)
 {
   unsigned int i;
   unsigned int num_written=0;
@@ -93,7 +93,7 @@ static char* quote_buffer(const unsigned char* str,
  * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
  * character.
  */
-static char* quote_string(const char* str, char* special)
+static char* quote_string(const char* str, const char* special)
 {
   unsigned int len;
 
@@ -784,7 +784,8 @@ static void usage(void)
   fprintf(stderr, "Version: 0.2\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
-  fprintf(stderr, "\t-s\t prints security descriptors.\n");
+  fprintf(stderr, "\t-s\t enables security descriptor output.\n");
+  fprintf(stderr, "\t-S\t disables security descriptor output. (default)\n");
   fprintf(stderr, "\t-p\t restrict output to elements below this path.\n");
   fprintf(stderr, "\t-t\t restrict results to this specific data type.\n");
   fprintf(stderr, "\n");
@@ -798,20 +799,21 @@ int main(int argc, char** argv)
   REGF_FILE* f;
   REGF_NK_REC* root;
   int retr_path_ret;
-  uint32 argi;
+  uint32 argi, arge;
 
   /* Process command line arguments */
   if(argc < 2)
   {
     usage();
-    bailOut(1, "ERROR: Requires 1 argument.\n");
+    bailOut(1, "ERROR: Requires at least one argument.\n");
   }
   
-  for(argi = 1; argi < argc; argi++)
+  arge = argc-1;
+  for(argi = 1; argi < arge; argi++)
   {
     if (strcmp("-p", argv[argi]) == 0)
     {
-      if(++argi > argc)
+      if(++argi >= arge)
       {
 	usage();
 	bailOut(1, "ERROR: '-p' option requires parameter.\n");
@@ -823,7 +825,7 @@ int main(int argc, char** argv)
     }
     else if (strcmp("-t", argv[argi]) == 0)
     {
-      if(++argi > argc)
+      if(++argi >= arge)
       {
 	usage();
 	bailOut(1, "ERROR: '-t' option requires parameter.\n");
@@ -838,20 +840,19 @@ int main(int argc, char** argv)
     }
     else if (strcmp("-s", argv[argi]) == 0)
       print_security = true;
+    else if (strcmp("-S", argv[argi]) == 0)
+      print_security = false;
     else if (strcmp("-v", argv[argi]) == 0)
       print_verbose = true;
-    else if (argv[argi][0] == '-')
+    else
     {
       usage();
       fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
       bailOut(1, "");
     }
-    else
-    {
-      if((registry_file = strdup(argv[argi])) == NULL)
-	bailOut(2, "ERROR: Memory allocation problem.\n");
-    }
   }
+  if((registry_file = strdup(argv[argi])) == NULL)
+    bailOut(2, "ERROR: Memory allocation problem.\n");
 
   f = regfio_open(registry_file);
   if(f == NULL)
