@@ -75,7 +75,8 @@ reglookup
 	The current incarnation of this program has only been tested on
 	windows 2K/XP.
 
-	Verbose output is not working.
+	Verbose output is not working.  MTIME and SID conversions
+	haven't been checked for accuracy.
 
 	You'll notice that registry paths aren't all the same as the
 	ones the equivalents you see in the windows registry editor.
