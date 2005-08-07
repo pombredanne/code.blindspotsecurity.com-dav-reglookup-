@@ -4,7 +4,7 @@
 ################################################################################
 
 SVN_URL=svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup
-SUB_DIRS=$(wildcard releases/release-*) trunk
+SUB_DIRS=$(wildcard releases/*) trunk
 
 FILES=$(REGLOOKUP)
 .PHONY: all $(SUB_DIRS) clean
