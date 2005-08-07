@@ -4,14 +4,27 @@ If you are interested in contributing to this project, here's a few
 things you could look into:
 
  - Testing, testing, and more testing.  reglookup needs to be tested on 
-   NT/XP/2k3.  A regression test suite would be nice too.
+   NT/XP/2k3/Vista.  A regression test suite would be nice too.
 
  - Build system.  I do not wish to use automake/autoconf in this
-   project.  However, more intelligent use of make would be nice.
-   I don't know it that well.
+   project.  I have also now decided that make is painful to use for
+   everything.  I'd like to switch to a suite of shell scripts driven by
+   minimal make rules.  If you got any ideas on this, shoot them my way.
 
- - Unicode support.  I have never internationalized any software
-   before.  This would be a big help for the SZ, EXPAND_SZ, and MULTI_SZ
-   data types.
+ - Unicode support.  I have never internationalized or localized any
+   software before.  This would be a big help for the SZ, EXPAND_SZ, and
+   MULTI_SZ data types.
+
+ - The interface between reglookup.c and regfio.c needs to be improved.
+   Many functions from reglookup should be moved to the library, and I
+   want to move to using iterator structs in the library.  This will the
+   library more threadsafe and may better support lazy parsing of many
+   structures which are currently parsed up front.
+
+ - The stuff in smb_deps.h and smb_deps.c needs to be cleaned up.  The
+   eventual goal is to have it all either integrated into regfio, or to
+   be eliminated, or broken out into small supporting libraries, as
+   necessary.  It is currently just a jumble of old Samba code that I
+   haven't decided where to put yet.
 
  - Grep through the source for 'XXX', and you'll find more.
