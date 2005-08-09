@@ -89,6 +89,7 @@ void_stack* void_stack_copy_reverse(const void_stack* v)
 
 void void_stack_destroy(void_stack* stack)
 {
+  free(stack->elements);
   free(stack);
 }
 
@@ -98,6 +99,7 @@ void void_stack_destroy_deep(void_stack* stack)
   unsigned short i;
   for(i=0; i < stack->top; i++)
     free(stack->elements[i]);
+  free(stack->elements);
   free(stack);
 }
 
@@ -126,7 +128,7 @@ void* void_stack_pop(void_stack* stack)
 
   if(stack->top > 0)
   {
-    ret_val = stack->elements[--stack->top];
+    ret_val = stack->elements[--(stack->top)];
     stack->elements[stack->top] = NULL;
   }
   else

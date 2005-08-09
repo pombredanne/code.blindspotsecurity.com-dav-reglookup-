@@ -639,8 +639,8 @@ void printKey(REGF_NK_REC* k, char* full_path)
 /* XXX: this function is god-awful.  Needs to be re-designed. */
 void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 {
-  REGF_NK_REC* cur;
-  REGF_NK_REC* sub;
+  REGF_NK_REC* cur = NULL;
+  REGF_NK_REC* sub = NULL;
   char* path = NULL;
   char* val_path = NULL;
 
@@ -702,10 +702,11 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 		 void_stack* path_stack)
 {
-  REGF_NK_REC* sub; 
-  REGF_NK_REC* cur;
+  REGF_NK_REC* sub = NULL; 
+  REGF_NK_REC* cur = NULL;
   void_stack* sub_nk_stack;
   char* prefix;
+  uint32 prefix_len;
   char* cur_str = NULL;
   bool found_cur = true;
   uint32 i;
@@ -764,8 +765,13 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
     {
       sub_nk_stack = void_stack_new(1024);
       void_stack_push(sub_nk_stack, sub);
-      void_stack_push(nk_stack, sub);
       prefix = stack2Path(nk_stack);
+      prefix_len = strlen(prefix);
+      prefix = realloc(prefix, prefix_len+strlen(sub->keyname)+2);
+      if(prefix == NULL)
+	return -1;
+      strcat(prefix, "/");
+      strcat(prefix, sub->keyname);
       printKeyTree(f, sub_nk_stack, prefix);
       return 0;
     }
