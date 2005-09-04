@@ -426,7 +426,8 @@ bool prs_uint8(const char *name, prs_struct *ps, int depth, uint8 *data8)
 /******************************************************************
  Stream an array of uint8s. Length is number of uint8s.
  ********************************************************************/
-bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth, uint8 *data8s, int len)
+bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth, 
+		uint8* data8s, int len)
 {
 	int i;
 	char *q = prs_mem_get(ps, len);

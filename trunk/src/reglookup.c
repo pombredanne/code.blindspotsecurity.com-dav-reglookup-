@@ -145,9 +145,6 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
   switch (type) 
   {
   case REG_SZ:
-    if (print_verbose)
-      fprintf(stderr, "Len: %d\n", len);
-    
     ascii_max = sizeof(char)*len;
     ascii = malloc(ascii_max+4);
     if(ascii == NULL)
@@ -262,168 +259,6 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
   } 
 
   return NULL;
-}
-
-
-/* Security descriptor print functions  */
-/* XXX: these functions should be moved out into regfio library */
-const char* ace_type2str(uint8 type)
-{
-  static const char* map[7] 
-    = {"ALLOW", "DENY", "AUDIT", "ALARM", 
-       "ALLOW CPD", "OBJ ALLOW", "OBJ DENY"};
-  if(type < 7)
-    return map[type];
-  else
-    return "UNKNOWN";
-}
-
-
-char* ace_flags2str(uint8 flags)
-{
-  char* flg_output = malloc(21*sizeof(char));
-  int some = 0;
-
-  if(flg_output == NULL)
-    return NULL;
-
-  flg_output[0] = '\0';
-  if (!flags)
-    return flg_output;
-
-  if (flags & 0x01) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "OI");
-  }
-  if (flags & 0x02) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "CI");
-  }
-  if (flags & 0x04) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "NP");
-  }
-  if (flags & 0x08) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "IO");
-  }
-  if (flags & 0x10) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "IA");
-  }
-  if (flags == 0xF) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "VI");
-  }
-
-  return flg_output;
-}
-
-
-char* ace_perms2str(uint32 perms)
-{
-  char* ret_val = malloc(9*sizeof(char));
-  sprintf(ret_val, "%.8X", perms);
-
-  return ret_val;
-}
-
-
-char* sid2str(DOM_SID* sid)
-{
-  uint32 i, size = MAXSUBAUTHS*11 + 24;
-  uint32 left = size;
-  uint8 comps = sid->num_auths;
-  char* ret_val = malloc(size);
-  
-  if(ret_val == NULL)
-    return NULL;
-
-  if(comps > MAXSUBAUTHS)
-    comps = MAXSUBAUTHS;
-
-  left -= sprintf(ret_val, "S-%u-%u", sid->sid_rev_num, sid->id_auth[5]);
-
-  for (i = 0; i < comps; i++) 
-    left -= snprintf(ret_val+(size-left), left, "-%u", sid->sub_auths[i]);
-
-  return ret_val;
-}
-
-
-char* get_acl(SEC_ACL* acl)
-{
-  uint32 i, extra, size = 0;
-  const char* type_str;
-  char* flags_str;
-  char* perms_str;
-  char* sid_str;
-  char* ret_val = NULL;
-  char* ace_delim = "";
-  char field_delim = ':';
-
-  for (i = 0; i < acl->num_aces; i++)
-  {
-    /* XXX: check for NULL */
-    sid_str = sid2str(&acl->ace[i].trustee);
-    type_str = ace_type2str(acl->ace[i].type);
-    perms_str = ace_perms2str(acl->ace[i].info.mask);
-    flags_str = ace_flags2str(acl->ace[i].flags);
-
-    /* XXX: this is slow */
-    extra = strlen(sid_str) + strlen(type_str) 
-          + strlen(perms_str) + strlen(flags_str)+5;
-    ret_val = realloc(ret_val, size+extra);
-    if(ret_val == NULL)
-      return NULL;
-    size += snprintf(ret_val+size, extra, "%s%s%c%s%c%s%c%s",
-		     ace_delim,sid_str,
-		     field_delim,type_str,
-		     field_delim,perms_str,
-		     field_delim,flags_str);
-    ace_delim = "|";
-    free(sid_str);
-    free(perms_str);
-    free(flags_str);
-  }
-
-  return ret_val;
-}
-
-
-char* get_sacl(SEC_DESC *sec_desc)
-{
-  if (sec_desc->sacl)
-    return get_acl(sec_desc->sacl);
-  else
-    return NULL;
-}
-
-
-char* get_dacl(SEC_DESC *sec_desc)
-{
-  if (sec_desc->dacl)
-    return get_acl(sec_desc->dacl);
-  else
-    return NULL;
-}
-
-
-char* get_owner(SEC_DESC *sec_desc)
-{
-  return sid2str(sec_desc->owner_sid);
-}
-
-
-char* get_group(SEC_DESC *sec_desc)
-{
-  return sid2str(sec_desc->grp_sid);
 }
 
 
@@ -606,10 +441,10 @@ void printKey(REGF_NK_REC* k, char* full_path)
 
   if(print_security)
   {
-    owner = get_owner(k->sec_desc->sec_desc);
-    group = get_group(k->sec_desc->sec_desc);
-    sacl = get_sacl(k->sec_desc->sec_desc);
-    dacl = get_dacl(k->sec_desc->sec_desc);
+    owner = regfio_get_owner(k->sec_desc->sec_desc);
+    group = regfio_get_group(k->sec_desc->sec_desc);
+    sacl = regfio_get_sacl(k->sec_desc->sec_desc);
+    dacl = regfio_get_dacl(k->sec_desc->sec_desc);
     if(owner == NULL)
       owner = empty_str;
     if(group == NULL)
@@ -708,6 +543,7 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
   char* prefix;
   uint32 prefix_len;
   char* cur_str = NULL;
+  char* path = NULL;
   bool found_cur = true;
   uint32 i;
   uint16 path_depth;
@@ -753,8 +589,10 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
     if(sub->values[i].valuename != NULL 
        && strcasecmp(sub->values[i].valuename, cur_str) == 0)
     {
-      /* XXX: fix mem leak with stack2Path return value */
-      printValue(&sub->values[i], stack2Path(nk_stack));
+      path = stack2Path(nk_stack);
+      printValue(&sub->values[i], path);
+      if(path != NULL)
+	free(path);
       return 0;
     }
   }
@@ -787,7 +625,7 @@ static void usage(void)
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
   /* XXX: replace version string with Subversion property? */
-  fprintf(stderr, "Version: 0.2\n");
+  fprintf(stderr, "Version: 0.2.1\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");

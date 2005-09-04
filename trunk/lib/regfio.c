@@ -28,12 +28,6 @@
 
 
 
-/*******************************************************************
- *
- * TODO : Right now this code basically ignores classnames.
- *
- ******************************************************************/
-
 /* Registry types mapping */
 const VAL_STR reg_type_names[] = 
 {
@@ -78,6 +72,181 @@ int regfio_type_str2val(const char* str)
 }
 
 
+/* Security descriptor parsing functions  */
+
+const char* regfio_ace_type2str(uint8 type)
+{
+  static const char* map[7] 
+    = {"ALLOW", "DENY", "AUDIT", "ALARM", 
+       "ALLOW CPD", "OBJ ALLOW", "OBJ DENY"};
+  if(type < 7)
+    return map[type];
+  else
+    /* XXX: would be nice to return the unknown integer value.  
+     *      However, as it is a const string, it can't be free()ed later on, 
+     *      so that would need to change. 
+     */
+    return "UNKNOWN";
+}
+
+
+/* XXX: this could probably be more efficient */
+char* regfio_ace_flags2str(uint8 flags)
+{
+  char* flg_output = malloc(21*sizeof(char));
+  int some = 0;
+
+  if(flg_output == NULL)
+    return NULL;
+
+  flg_output[0] = '\0';
+  if (!flags)
+    return flg_output;
+
+  if (flags & 0x01) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "OI");
+  }
+  if (flags & 0x02) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "CI");
+  }
+  if (flags & 0x04) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "NP");
+  }
+  if (flags & 0x08) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "IO");
+  }
+  if (flags & 0x10) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "IA");
+  }
+  if (flags == 0xF) {
+    if (some) strcat(flg_output, " ");
+    some = 1;
+    strcat(flg_output, "VI");
+  }
+
+  return flg_output;
+}
+
+
+char* regfio_ace_perms2str(uint32 perms)
+{
+  char* ret_val = malloc(9*sizeof(char));
+  if(ret_val == NULL)
+    return NULL;
+
+  /* XXX: this should probably be parsed better */
+  sprintf(ret_val, "%.8X", perms);
+
+  return ret_val;
+}
+
+
+char* regfio_sid2str(DOM_SID* sid)
+{
+  uint32 i, size = MAXSUBAUTHS*11 + 24;
+  uint32 left = size;
+  uint8 comps = sid->num_auths;
+  char* ret_val = malloc(size);
+  
+  if(ret_val == NULL)
+    return NULL;
+
+  if(comps > MAXSUBAUTHS)
+    comps = MAXSUBAUTHS;
+
+  left -= sprintf(ret_val, "S-%u-%u", sid->sid_rev_num, sid->id_auth[5]);
+
+  for (i = 0; i < comps; i++) 
+    left -= snprintf(ret_val+(size-left), left, "-%u", sid->sub_auths[i]);
+
+  return ret_val;
+}
+
+
+char* regfio_get_acl(SEC_ACL* acl)
+{
+  uint32 i, extra, size = 0;
+  const char* type_str;
+  char* flags_str;
+  char* perms_str;
+  char* sid_str;
+  char* ret_val = NULL;
+  char* ace_delim = "";
+  char field_delim = ':';
+
+  for (i = 0; i < acl->num_aces; i++)
+  {
+    sid_str = regfio_sid2str(&acl->ace[i].trustee);
+    type_str = regfio_ace_type2str(acl->ace[i].type);
+    perms_str = regfio_ace_perms2str(acl->ace[i].info.mask);
+    flags_str = regfio_ace_flags2str(acl->ace[i].flags);
+    
+    if(flags_str == NULL || perms_str == NULL 
+       || type_str == NULL || sid_str == NULL)
+      return NULL;
+
+    /* XXX: this is slow */
+    extra = strlen(sid_str) + strlen(type_str) 
+          + strlen(perms_str) + strlen(flags_str)+5;
+    ret_val = realloc(ret_val, size+extra);
+    if(ret_val == NULL)
+      return NULL;
+    size += snprintf(ret_val+size, extra, "%s%s%c%s%c%s%c%s",
+		     ace_delim,sid_str,
+		     field_delim,type_str,
+		     field_delim,perms_str,
+		     field_delim,flags_str);
+    ace_delim = "|";
+    free(sid_str);
+    free(perms_str);
+    free(flags_str);
+  }
+
+  return ret_val;
+}
+
+
+char* regfio_get_sacl(SEC_DESC *sec_desc)
+{
+  if (sec_desc->sacl)
+    return regfio_get_acl(sec_desc->sacl);
+  else
+    return NULL;
+}
+
+
+char* regfio_get_dacl(SEC_DESC *sec_desc)
+{
+  if (sec_desc->dacl)
+    return regfio_get_acl(sec_desc->dacl);
+  else
+    return NULL;
+}
+
+
+char* regfio_get_owner(SEC_DESC *sec_desc)
+{
+  return regfio_sid2str(sec_desc->owner_sid);
+}
+
+
+char* regfio_get_group(SEC_DESC *sec_desc)
+{
+  return regfio_sid2str(sec_desc->grp_sid);
+}
+
+
+
 /*******************************************************************
  *******************************************************************/
 static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset, 
@@ -116,7 +285,7 @@ static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset,
 
     /* make sure this is an hbin header */
 
-    if ( strncmp( hdr, "hbin", HBIN_HDR_SIZE ) != 0 ) {
+    if ( strncmp( (char*)hdr, "hbin", HBIN_HDR_SIZE ) != 0 ) {
       /*DEBUG(0,("read_block: invalid block header!\n"));*/
       return -1;
     }
@@ -160,11 +329,12 @@ static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset,
 
 /*******************************************************************
  *******************************************************************/
-static bool prs_regf_block( const char *desc, prs_struct *ps, int depth, REGF_FILE *file )
+static bool prs_regf_block(const char *desc, prs_struct *ps, 
+			   int depth, REGF_FILE *file)
 {
   depth++;
 	
-  if ( !prs_uint8s( true, "header", ps, depth, file->header, sizeof( file->header )) )
+  if(!prs_uint8s(true, "header", ps, depth, file->header, sizeof(file->header)))
     return false;
 	
   /* yes, these values are always identical so store them only once */
@@ -219,13 +389,14 @@ static bool prs_regf_block( const char *desc, prs_struct *ps, int depth, REGF_FI
 
 /*******************************************************************
  *******************************************************************/
-static bool prs_hbin_block( const char *desc, prs_struct *ps, int depth, REGF_HBIN *hbin )
+static bool prs_hbin_block(const char *desc, prs_struct *ps, 
+			   int depth, REGF_HBIN *hbin)
 {
   uint32 block_size2;
 
   depth++;
 	
-  if ( !prs_uint8s( true, "header", ps, depth, hbin->header, sizeof( hbin->header )) )
+  if(!prs_uint8s(true, "header", ps, depth, hbin->header, sizeof(hbin->header)))
     return false;
 
   if ( !prs_uint32( "first_hbin_off", ps, depth, &hbin->first_hbin_off ))
@@ -335,10 +506,10 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps,
     if(ps->io && !(nk->keyname = (char*)zcalloc(sizeof(char), name_length+1)))
 	return false;
 
-    if ( !prs_uint8s( true, "name", ps, depth, nk->keyname, name_length) )
+    if(!prs_uint8s(true, "name", ps, depth, (uint8*)nk->keyname, name_length))
       return false;
 
-    if ( ps->io ) 
+    if(ps->io)
       nk->keyname[name_length] = '\0';
   }
 
@@ -582,7 +753,8 @@ static bool prs_hash_rec( const char *desc, prs_struct *ps, int depth, REGF_HASH
 
 /*******************************************************************
  *******************************************************************/
-static bool hbin_prs_lf_records( const char *desc, REGF_HBIN *hbin, int depth, REGF_NK_REC *nk )
+static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin, 
+				int depth, REGF_NK_REC *nk)
 {
   int i;
   REGF_LF_REC *lf = &nk->subkeys;
@@ -608,7 +780,8 @@ static bool hbin_prs_lf_records( const char *desc, REGF_HBIN *hbin, int depth, R
   if ( !prs_uint32( "rec_size", &hbin->ps, depth, &lf->rec_size ))
     return false;
 
-  if ( !prs_uint8s( true, "header", &hbin->ps, depth, lf->header, sizeof( lf->header )) )
+  if(!prs_uint8s(true, "header", &hbin->ps, depth, 
+		 lf->header, sizeof(lf->header)))
     return false;
 		
   if ( !prs_uint16( "num_keys", &hbin->ps, depth, &lf->num_keys))
@@ -661,7 +834,7 @@ static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_
   if ( !prs_uint32( "rec_size", &hbin->ps, depth, &sk->rec_size ))
     return false;
 
-  if ( !prs_uint8s( true, "header", ps, depth, sk->header, sizeof( sk->header )) )
+  if (!prs_uint8s(true, "header", ps, depth, sk->header, sizeof(sk->header)))
     return false;
   if ( !prs_uint16( "tag", ps, depth, &tag))
     return false;
@@ -742,7 +915,8 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
       if ( !(vk->valuename = (char*)zcalloc(sizeof(char), name_length+1 )))
 	return false;
     }
-    if ( !prs_uint8s( true, "name", ps, depth, vk->valuename, name_length ) )
+    if ( !prs_uint8s(true, "name", ps, depth, 
+		     (uint8*)vk->valuename, name_length) )
       return false;
   }
 
@@ -1016,7 +1190,7 @@ static bool hbin_prs_key( REGF_FILE *file, REGF_HBIN *hbin, REGF_NK_REC *nk )
  *******************************************************************/
 static bool next_record( REGF_HBIN *hbin, const char *hdr, bool *eob )
 {
-  char header[REC_HDR_SIZE] = "";
+  uint8 header[REC_HDR_SIZE] = "";
   uint32 record_size;
   uint32 curr_off, block_size;
   bool found = false;
