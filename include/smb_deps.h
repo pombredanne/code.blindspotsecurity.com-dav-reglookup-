@@ -183,7 +183,8 @@ bool prs_uint16_pre(const char *name, prs_struct *ps, int depth,
 bool prs_uint16_post(const char *name, prs_struct *ps, int depth, 
 		     uint16 *data16, uint32 ptr_uint16, uint32 start_offset);
 bool prs_uint8(const char *name, prs_struct *ps, int depth, uint8 *data8);
-bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth, uint8 *data8s, int len);
+bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth, 
+		uint8* data8s, int len);
 bool prs_set_offset(prs_struct *ps, uint32 offset);
 
 /* End of stuff from parse_prs.h */
