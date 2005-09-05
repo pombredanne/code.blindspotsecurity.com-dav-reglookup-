@@ -618,7 +618,7 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
       if(print_verbose)
 	fprintf(stderr, "VERBOSE: Found final path element as value.\n");
 
-      if(!type_filter_enabled || (&sub->values[i].type == type_filter))
+      if(!type_filter_enabled || (sub->values[i].type == type_filter))
         printValue(&sub->values[i], path);
       if(path != NULL)
 	free(path);
