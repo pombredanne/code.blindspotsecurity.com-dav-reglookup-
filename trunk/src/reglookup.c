@@ -183,7 +183,7 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     break;
 
   /* XXX: this MULTI_SZ parser is pretty inefficient.  Should be
-   *      redone with fewer malloc and better string concatenation. 
+   *      redone with fewer malloc calls and better string concatenation. 
    */
   case REG_MULTI_SZ:
     ascii_max = sizeof(char)*len*4;
@@ -316,8 +316,7 @@ char* stack2Path(void_stack* nk_stack)
   buf = (char*)malloc((buf_len)*sizeof(char));
   if (buf == NULL)
     return NULL;
-  buf[0] = '/';
-  buf[1] = '\0';
+  buf[0] = '\0';
 
   iter = void_stack_iterator_new(nk_stack);
   if (iter == NULL)
@@ -471,27 +470,39 @@ void printKey(REGF_NK_REC* k, char* full_path)
 }
 
 
-/* XXX: this function is god-awful.  Needs to be re-designed. */
+/* XXX: this function is awful.  Needs to be re-designed. */
 void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 {
   REGF_NK_REC* cur = NULL;
   REGF_NK_REC* sub = NULL;
   char* path = NULL;
   char* val_path = NULL;
-
   int key_type = regfio_type_str2val("KEY");
   
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
   {
     cur->subkey_index = 0;
     path = stack2Path(nk_stack);
-    
+
+    if(print_verbose)
+    {
+      if(prefix[0] == '\0')
+	fprintf(stderr, "VERBOSE: Printing key tree under path: /\n");
+      else
+	fprintf(stderr, "VERBOSE: Printing key tree under path: %s\n",
+		prefix);
+    }
 
     val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
     sprintf(val_path, "%s%s", prefix, path);
+    if(val_path[0] == '\0')
+    {
+      val_path[0] = '/';
+      val_path[1] = '\0';
+    }
+
     if(!type_filter_enabled || (key_type == type_filter))
       printKey(cur, val_path);
-
     if(!type_filter_enabled || (key_type != type_filter))
       printValueList(cur, val_path);
     if(val_path != NULL)
@@ -526,6 +537,8 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
       }
     }
   }
+  if(print_verbose)
+    fprintf(stderr, "VERBOSE: Finished printing key tree.\n");
 }
 
 
@@ -558,6 +571,10 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
     return -3;
   cur = (REGF_NK_REC*)void_stack_cur(nk_stack);
 
+  if(print_verbose)
+    fprintf(stderr, "VERBOSE: Beginning retrieval of specified path: %s\n", 
+	    path_filter);
+
   while(void_stack_size(path_stack) > 1)
   {
     /* Search key records only */
@@ -574,14 +591,21 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 	found_cur = true;
       }
     }
-    free(cur_str);
+    if(print_verbose && !found_cur)
+      fprintf(stderr, "VERBOSE: Could not find KEY '%s' in specified path.\n", 
+	      cur_str);
 
+    free(cur_str);
     if(!found_cur)
       return 1;
   }
 
   /* Last round, search value and key records */
   cur_str = (char*)void_stack_pop(path_stack);
+
+  if(print_verbose)
+    fprintf(stderr, "VERBOSE: Searching values for last component"
+	            " of specified path.\n");
 
   for(i=0; (i < cur->num_values); i++)
   {
@@ -593,9 +617,17 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
       printValue(&sub->values[i], path);
       if(path != NULL)
 	free(path);
+
+      if(print_verbose)
+	fprintf(stderr, "VERBOSE: Found final path element as value.\n");
+
       return 0;
     }
   }
+
+  if(print_verbose)
+    fprintf(stderr, "VERBOSE: Searching keys for last component"
+	            " of specified path.\n");
 
   while((sub = regfio_fetch_subkey(f, cur)) != NULL)
   {
@@ -610,10 +642,18 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 	return -1;
       strcat(prefix, "/");
       strcat(prefix, sub->keyname);
+
+      if(print_verbose)
+	fprintf(stderr, "VERBOSE: Found final path element as key.\n");
+
       printKeyTree(f, sub_nk_stack, prefix);
+
       return 0;
     }
   }
+
+  if(print_verbose)
+    fprintf(stderr, "VERBOSE: Could not find last element of path.\n");
 
   return 1;
 }
