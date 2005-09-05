@@ -614,12 +614,14 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
        && strcasecmp(sub->values[i].valuename, cur_str) == 0)
     {
       path = stack2Path(nk_stack);
-      printValue(&sub->values[i], path);
-      if(path != NULL)
-	free(path);
 
       if(print_verbose)
 	fprintf(stderr, "VERBOSE: Found final path element as value.\n");
+
+      if(!type_filter_enabled || (&sub->values[i].type == type_filter))
+        printValue(&sub->values[i], path);
+      if(path != NULL)
+	free(path);
 
       return 0;
     }
