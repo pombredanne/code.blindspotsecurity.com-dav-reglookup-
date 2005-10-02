@@ -170,15 +170,24 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     break;
 
   case REG_DWORD:
-    ascii_max = sizeof(char)*10;
-    ascii = malloc(ascii_max+1);
+    ascii_max = sizeof(char)*11;
+    ascii = malloc(ascii_max);
     if(ascii == NULL)
       return NULL;
 
-    if (*(int *)datap == 0)
-      snprintf((char*)ascii, ascii_max, "0");
-    else
-      snprintf((char*)ascii, ascii_max, "0x%x", *(int *)datap);
+    snprintf((char*)ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
+	     datap[0], datap[1], datap[2], datap[3]);
+    return ascii;
+    break;
+
+  case REG_DWORD_BE:
+    ascii_max = sizeof(char)*11;
+    ascii = malloc(ascii_max);
+    if(ascii == NULL)
+      return NULL;
+
+    snprintf((char*)ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
+	     datap[3], datap[2], datap[1], datap[0]);
     return ascii;
     break;
 
