@@ -128,6 +128,7 @@ char* regfio_ace_flags2str(uint8 flags)
     some = 1;
     strcat(flg_output, "IA");
   }
+  /* XXX: Is this check right?  0xF == 1|2|4|8, which makes it redundant... */
   if (flags == 0xF) {
     if (some) strcat(flg_output, " ");
     some = 1;

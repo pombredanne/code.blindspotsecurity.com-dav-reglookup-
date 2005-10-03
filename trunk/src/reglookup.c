@@ -676,7 +676,7 @@ static void usage(void)
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
   /* XXX: replace version string with Subversion property? */
-  fprintf(stderr, "Version: 0.2.1\n");
+  fprintf(stderr, "Version: 0.2.2\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");
