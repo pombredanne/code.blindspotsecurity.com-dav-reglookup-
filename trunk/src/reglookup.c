@@ -2,7 +2,7 @@
  * A utility to read a Windows NT/2K/XP/2K3 registry file, using 
  * Gerald Carter''s regfio interface.
  *
- * Copyright (C) 2005 Timothy D. Morgan
+ * Copyright (C) 2005-2006 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <iconv.h>
 #include "../include/regfio.h"
 #include "../include/void_stack.h"
 
@@ -42,6 +43,8 @@ char* registry_file = NULL;
 
 /* Other globals */
 const char* special_chars = ",\"\\";
+iconv_t conv_desc;
+
 
 void bailOut(int code, char* message)
 {
@@ -53,30 +56,54 @@ void bailOut(int code, char* message)
 /* Returns a newly malloc()ed string which contains original buffer,
  * except for non-printable or special characters are quoted in hex
  * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
- * character.  A null terminator is added, as only ascii, not binary, 
+ * character.  A null terminator is added, since only ascii, not binary,
  * is returned.
  */
 static char* quote_buffer(const unsigned char* str, 
 			  unsigned int len, const char* special)
 {
-  unsigned int i;
-  unsigned int num_written=0;
-  unsigned int out_len = sizeof(char)*len+1;
-  char* ret_val = malloc(out_len);
+  unsigned int i, added_len;
+  unsigned int num_written = 0;
+
+  unsigned int buf_len = sizeof(char)*(len+1);
+  char* ret_val = malloc(buf_len);
+  char* tmp_buf;
 
   if(ret_val == NULL)
     return NULL;
 
   for(i=0; i<len; i++)
   {
+    if(buf_len <= (num_written+5))
+    {
+      /* Expand the buffer by the memory consumption rate seen so far 
+       * times the amount of input left to process.  The expansion is bounded 
+       * below by a minimum safety increase, and above by the maximum possible 
+       * output string length.
+       */
+      added_len = (len-i)*num_written/(i+1);
+      if((buf_len+added_len) > (len*4+1))
+	buf_len = len*4+1;
+      else
+      {
+	if (added_len < 5)
+	  buf_len += 5;
+	else
+	  buf_len += added_len;
+      }
+
+      tmp_buf = realloc(ret_val, buf_len);
+      if(tmp_buf == NULL)
+      {
+	free(ret_val);
+	return NULL;
+      }
+      ret_val = tmp_buf;
+    }
+    
     if(str[i] < 32 || str[i] > 126 || strchr(special, str[i]) != NULL)
     {
-      out_len += 3;
-      /* XXX: may not be the most efficient way of getting enough memory. */
-      ret_val = realloc(ret_val, out_len);
-      if(ret_val == NULL)
-	break;
-      num_written += snprintf(ret_val+num_written, (out_len)-num_written,
+      num_written += snprintf(ret_val + num_written, buf_len - num_written,
 			      "\\x%.2X", str[i]);
     }
     else
@@ -106,37 +133,41 @@ static char* quote_string(const char* str, const char* special)
 
 
 /*
- * Convert from UniCode to Ascii ... Does not take into account other lang
- * Restrict by ascii_max if > 0
+ * Convert from Unicode to ASCII.
  */
-static int uni_to_ascii(unsigned char *uni, unsigned char *ascii, 
-			int ascii_max, int uni_max)
+static int uni_to_ascii(unsigned char* uni, char* ascii, 
+			unsigned int uni_max, unsigned int ascii_max)
 {
-  int i = 0; 
+  char* inbuf = (char*)uni;
+  char* outbuf = ascii;
+  int ret;
 
-  while (i < ascii_max && (uni[i*2] || uni[i*2+1]))
+  /* Set up conversion descriptor. */
+  conv_desc = iconv_open("US-ASCII", "UTF-16LE");
+
+  ret = iconv(conv_desc, &inbuf, &uni_max, &outbuf, &ascii_max);
+  if(ret == -1)
   {
-    if (uni_max > 0 && (i*2) >= uni_max) break;
-    ascii[i] = uni[i*2];
-    i++;
+    iconv_close(conv_desc);
+    return -1;
   }
-  ascii[i] = '\0';
 
-  return i;
+  iconv_close(conv_desc);  
+  return strlen(ascii);
 }
 
 
 /*
  * Convert a data value to a string for display
  */
-static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
+static char* data_to_ascii(unsigned char *datap, int len, int type)
 {
-  unsigned char *asciip;
+  char* asciip;
   unsigned int i;
   unsigned short num_nulls;
-  unsigned char* ascii;
+  char* ascii;
   unsigned char* cur_str;
-  unsigned char* cur_ascii;
+  char* cur_ascii;
   char* cur_quoted;
   unsigned int cur_str_len;
   unsigned int ascii_max, cur_str_max;
@@ -144,29 +175,41 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 
   switch (type) 
   {
+    /* REG_LINK is a symbolic link, stored as a unicode string. */
+  case REG_LINK:
   case REG_SZ:
     ascii_max = sizeof(char)*len;
     ascii = malloc(ascii_max+4);
     if(ascii == NULL)
       return NULL;
     
-    /* XXX: This has to be fixed. It has to be UNICODE */
-    uni_to_ascii(datap, ascii, len, ascii_max);
-    cur_quoted = quote_string((char*)ascii, special_chars);
+    if(uni_to_ascii(datap, ascii, len, ascii_max) < 0)
+    {
+      free(ascii);
+      return NULL;
+    }
+    cur_quoted = quote_string(ascii, special_chars);
     free(ascii);
-    return (unsigned char*)cur_quoted;
+    return cur_quoted;
     break;
 
+    /* XXX: This could be Unicode or ASCII.  Are we processing it 
+     *      correctly in both cases? 
+     */
   case REG_EXPAND_SZ:
     ascii_max = sizeof(char)*len;
     ascii = malloc(ascii_max+2);
     if(ascii == NULL)
       return NULL;
 
-    uni_to_ascii(datap, ascii, len, ascii_max);
-    cur_quoted = quote_string((char*)ascii, special_chars);
+    if(uni_to_ascii(datap, ascii, len, ascii_max) < 0)
+    {
+      free(ascii);
+      return NULL;
+    }
+    cur_quoted = quote_string(ascii, special_chars);
     free(ascii);
-    return (unsigned char*)cur_quoted;
+    return cur_quoted;
     break;
 
   case REG_DWORD:
@@ -175,7 +218,7 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     if(ascii == NULL)
       return NULL;
 
-    snprintf((char*)ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
+    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
 	     datap[0], datap[1], datap[2], datap[3]);
     return ascii;
     break;
@@ -186,7 +229,7 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     if(ascii == NULL)
       return NULL;
 
-    snprintf((char*)ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
+    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
 	     datap[3], datap[2], datap[1], datap[0]);
     return ascii;
     break;
@@ -225,9 +268,16 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 
       if(num_nulls == 2)
       {
-	uni_to_ascii(cur_str, cur_ascii, cur_str_max, 0);
-	cur_quoted = quote_string((char*)cur_ascii, ",|\"\\");
-	alen = snprintf((char*)asciip, str_rem, "%s", cur_quoted);
+	if(uni_to_ascii(cur_str, cur_ascii, cur_str_max, cur_str_max) < 0)
+	{
+	  free(ascii);
+	  free(cur_ascii);
+	  free(cur_str);
+	  return NULL;
+	}
+
+	cur_quoted = quote_string(cur_ascii, ",|\"\\");
+	alen = snprintf(asciip, str_rem, "%s", cur_quoted);
 	asciip += alen;
 	str_rem -= alen;
 	free(cur_quoted);
@@ -236,9 +286,13 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
 	  break;
 	else
 	{
-	  alen = snprintf((char*)asciip, str_rem, "%c", '|');
-	  asciip += alen;
-	  str_rem -= alen;
+	  if(str_rem > 0)
+	  {
+	    asciip[0] = '|';
+	    asciip[1] = '\0';
+	    asciip++;
+	    str_rem--;
+	  }
 	  memset(cur_str, 0, cur_str_max);
 	  cur_str_len = 0;
 	  num_nulls = 0;
@@ -254,12 +308,13 @@ static unsigned char* data_to_ascii(unsigned char *datap, int len, int type)
     break;
 
   /* XXX: Dont know what to do with these yet, just print as binary... */
+  case REG_NONE:
   case REG_RESOURCE_LIST:
   case REG_FULL_RESOURCE_DESCRIPTOR:
   case REG_RESOURCE_REQUIREMENTS_LIST:
 
   case REG_BINARY:
-    return (unsigned char*)quote_buffer(datap, len, special_chars);
+    return quote_buffer(datap, len, special_chars);
     break;
 
   default:
@@ -368,7 +423,7 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 {
   uint32 size;
   uint8 tmp_buf[4];
-  unsigned char* quoted_value;
+  char* quoted_value;
   char* quoted_prefix;
   char* quoted_name;
 
@@ -396,6 +451,7 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 	      "16384, truncating...\n", size);
       size = 16384;
     }
+
     quoted_value = data_to_ascii(vk->data, vk->data_size, vk->type);
   }
   
@@ -442,7 +498,12 @@ void printKey(REGF_NK_REC* k, char* full_path)
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
+  char* quoted_path = NULL;
 
+  /* XXX: it would be faster to always pass a quoted string to this
+   *      function, instead of re-quoting it every call. */
+  /* XXX: check return of quote_string */
+  quoted_path = quote_string(full_path, special_chars);
   *tmp_time = nt_time_to_unix(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
@@ -462,7 +523,7 @@ void printKey(REGF_NK_REC* k, char* full_path)
     if(dacl == NULL)
       dacl = empty_str;
 
-    printf("%s,KEY,,%s,%s,%s,%s,%s\n", full_path, mtime, 
+    printf("%s,KEY,,%s,%s,%s,%s,%s\n", quoted_path, mtime, 
 	   owner, group, sacl, dacl);
 
     if(owner != empty_str)
@@ -475,7 +536,9 @@ void printKey(REGF_NK_REC* k, char* full_path)
       free(dacl);
   }
   else
-    printf("%s,KEY,,%s\n", full_path, mtime);
+    printf("%s,KEY,,%s\n", quoted_path, mtime);
+
+  free(quoted_path);
 }
 
 
@@ -672,11 +735,11 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 
 static void usage(void)
 {
-  fprintf(stderr, "Usage: readreg [-v] [-s]"
+  fprintf(stderr, "Usage: reglookup [-v] [-s]"
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
   /* XXX: replace version string with Subversion property? */
-  fprintf(stderr, "Version: 0.2.2\n");
+  fprintf(stderr, "Version: 0.3.0\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");
@@ -727,12 +790,11 @@ int main(int argc, char** argv)
 	usage();
 	bailOut(1, "ERROR: '-t' option requires parameter.\n");
       }
-      if((type_filter = regfio_type_str2val(argv[argi])) == 0)
+      if((type_filter = regfio_type_str2val(argv[argi])) < 0)
       {
 	fprintf(stderr, "ERROR: Invalid type specified: %s.\n", argv[argi]);
 	bailOut(1, "");
       }
-
       type_filter_enabled = true;
     }
     else if (strcmp("-h", argv[argi]) == 0)

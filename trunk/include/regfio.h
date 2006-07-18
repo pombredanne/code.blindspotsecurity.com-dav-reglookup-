@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005 Timothy D. Morgan
+ * Copyright (C) 2005-2006 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -66,10 +66,6 @@
 /* Not a real type in the registry */
 #define REG_KEY                        255
 
-typedef struct _val_str { 
-  unsigned int val;
-  const char * str;
-} VAL_STR;
 
 #define REGF_BLOCKSIZE		0x1000
 #define REGF_ALLOC_BLOCK	0x1000
