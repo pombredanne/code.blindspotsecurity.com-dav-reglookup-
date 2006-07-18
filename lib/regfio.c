@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005 Timothy D. Morgan
+ * Copyright (C) 2005-2006 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,48 +27,42 @@
 #include "../include/regfio.h"
 
 
-
 /* Registry types mapping */
-const VAL_STR reg_type_names[] = 
-{
-  { REG_SZ,                        "SZ"           },
-  { REG_EXPAND_SZ,                 "EXPAND_SZ"    },
-  { REG_BINARY,                    "BINARY"       },
-  { REG_DWORD,                     "DWORD"        },
-  { REG_DWORD_BE,                  "DWORD_BE"     },
-  { REG_LINK,                      "LINK"         },
-  { REG_MULTI_SZ,                  "MULTI_SZ"     },
-  { REG_RESOURCE_LIST,             "RSRC_LIST"    },
-  { REG_FULL_RESOURCE_DESCRIPTOR,  "RSRC_DESC"    },
-  { REG_RESOURCE_REQUIREMENTS_LIST,"RSRC_REQ_LIST"},
-  { REG_KEY,                       "KEY"          },
-  { 0,                             NULL           },
-};
+const unsigned int regfio_num_reg_types = 11;
+static const char* regfio_type_names[] =
+  {"NONE", "SZ", "EXPAND_SZ", "BINARY", "DWORD", "DWORD_BE", "LINK"
+   "MULTI_SZ", "RSRC_LIST", "RSRC_DESC", "RSRC_REQ_LIST"};
 
 
 /* Returns NULL on error */
 const char* regfio_type_val2str(unsigned int val)
 {
-  int i;
-
-  for(i=0; reg_type_names[i].val && reg_type_names[i].str; i++)
-    if (reg_type_names[i].val == val) 
-      return reg_type_names[i].str;
-
-  return NULL;
+  if(val == REG_KEY)
+    return "KEY";
+  
+  if(val >= regfio_num_reg_types)
+    return NULL;
+  
+  return regfio_type_names[val];
 }
 
 
-/* Returns 0 on error */
+/* Returns -1 on error */
 int regfio_type_str2val(const char* str)
 {
   int i;
 
-  for(i=0; reg_type_names[i].val && reg_type_names[i].str; i++) 
-    if (strcmp(reg_type_names[i].str, str) == 0) 
-      return reg_type_names[i].val;
+  if(strcmp("KEY", str) == 0)
+    return REG_KEY;
 
-  return 0;
+  for(i=0; i < regfio_num_reg_types; i++)
+    if (strcmp(regfio_type_names[i], str) == 0) 
+      return i;
+
+  if(strcmp("DWORD_LE", str) == 0)
+    return REG_DWORD_LE;
+
+  return -1;
 }
 
 
@@ -181,36 +175,52 @@ char* regfio_get_acl(SEC_ACL* acl)
   char* flags_str;
   char* perms_str;
   char* sid_str;
-  char* ret_val = NULL;
   char* ace_delim = "";
+  char* ret_val = NULL;
+  char* tmp_val = NULL;
+  bool failed = false;
   char field_delim = ':';
 
-  for (i = 0; i < acl->num_aces; i++)
+  for (i = 0; i < acl->num_aces && !failed; i++)
   {
     sid_str = regfio_sid2str(&acl->ace[i].trustee);
     type_str = regfio_ace_type2str(acl->ace[i].type);
     perms_str = regfio_ace_perms2str(acl->ace[i].info.mask);
     flags_str = regfio_ace_flags2str(acl->ace[i].flags);
     
-    if(flags_str == NULL || perms_str == NULL 
-       || type_str == NULL || sid_str == NULL)
-      return NULL;
+    if(flags_str != NULL && perms_str != NULL 
+       && type_str != NULL && sid_str != NULL)
+    {
+      /* XXX: this is slow */
+      extra = strlen(sid_str) + strlen(type_str) 
+	+ strlen(perms_str) + strlen(flags_str)+5;
+      tmp_val = realloc(ret_val, size+extra);
 
-    /* XXX: this is slow */
-    extra = strlen(sid_str) + strlen(type_str) 
-          + strlen(perms_str) + strlen(flags_str)+5;
-    ret_val = realloc(ret_val, size+extra);
-    if(ret_val == NULL)
-      return NULL;
-    size += snprintf(ret_val+size, extra, "%s%s%c%s%c%s%c%s",
-		     ace_delim,sid_str,
-		     field_delim,type_str,
-		     field_delim,perms_str,
-		     field_delim,flags_str);
-    ace_delim = "|";
-    free(sid_str);
-    free(perms_str);
-    free(flags_str);
+      if(tmp_val == NULL)
+      {
+	free(ret_val);
+	failed = true;
+      }
+      else
+      {
+	ret_val = tmp_val;
+	size += snprintf(ret_val+size, extra, "%s%s%c%s%c%s%c%s",
+			 ace_delim,sid_str,
+			 field_delim,type_str,
+			 field_delim,perms_str,
+			 field_delim,flags_str);
+	ace_delim = "|";
+      }
+    }
+    else
+      failed = true;
+
+    if(sid_str != NULL)
+      free(sid_str);
+    if(sid_str != NULL)
+      free(perms_str);
+    if(sid_str != NULL)
+      free(flags_str);
   }
 
   return ret_val;
@@ -253,6 +263,7 @@ char* regfio_get_group(SEC_DESC *sec_desc)
 static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset, 
 		       uint32 block_size )
 {
+  const int hdr_size = 0x20;
   int bytes_read, returned;
   char *buffer;
   SMB_STRUCT_STAT sbuf;
@@ -278,10 +289,20 @@ static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset,
       return -1;
     }
 
-    returned = read( file->fd, hdr, 0x20 );
-    if ( (returned == -1) || (returned < 0x20) ) {
-      /*DEBUG(0,("read_block: failed to read in HBIN header. Is the file corrupt?\n"));*/
-      return -1;
+    bytes_read = returned = 0;
+    while (bytes_read < hdr_size)
+    {
+      returned = read(file->fd, hdr + bytes_read, hdr_size - bytes_read);
+      if(returned == -1 && errno != EINTR && errno != EAGAIN)
+      {
+	/*DEBUG(0,("read_block: read of hdr failed (%s)\n",strerror(errno)));*/
+	return -1;
+      }
+
+      if(returned == 0)
+	return -1;
+
+      bytes_read += returned;
     }
 
     /* make sure this is an hbin header */
@@ -309,16 +330,17 @@ static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset,
 
   while ( bytes_read < block_size ) 
   {
-    if((returned = 
-	read(file->fd, buffer+bytes_read, block_size-bytes_read)) == -1)
+    returned = read(file->fd, buffer+bytes_read, block_size-bytes_read);
+    if(returned == -1 && errno != EINTR && errno != EAGAIN)
     {
       /*DEBUG(0,("read_block: read() failed (%s)\n", strerror(errno) ));*/
-      return false;
+      return -1;
     }
+
     if ((returned == 0) && (bytes_read < block_size)) 
     {
       /*DEBUG(0,("read_block: not a vald registry file ?\n" ));*/
-      return false;
+      return -1;
     }	
 
     bytes_read += returned;
