@@ -14,6 +14,10 @@ install:
 
 
 #XXX: Used during release only
+#release:
+#	txt2tags --mask-email -t man -o man/man1/reglookup.1 reglookup.1.t2t
+#	cd man/man1 && gzip -9 reglookup.1
+
 release:
-	txt2tags --mask-email -t man -o man/man1/reglookup.1 reglookup.1.t2t
-	cd man/man1 && gzip -9 reglookup.1
+	docbook2x-man --to-stdout reglookup.1.docbook > man/man1/reglookup.1
+	cd man/man1 && gzip -9 -f reglookup.1
