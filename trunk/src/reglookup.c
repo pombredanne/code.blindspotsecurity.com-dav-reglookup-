@@ -42,7 +42,10 @@ int type_filter;
 char* registry_file = NULL;
 
 /* Other globals */
-const char* special_chars = ",\"\\";
+const char* key_special_chars = ",\"\\/";
+const char* subfield_special_chars = ",\"\\|";
+const char* common_special_chars = ",\"\\";
+
 iconv_t conv_desc;
 
 
@@ -149,8 +152,9 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
   if(ret == -1)
   {
     iconv_close(conv_desc);
-    return -1;
+    return -errno;
   }
+  *outbuf = '\0';
 
   iconv_close(conv_desc);  
   return strlen(ascii);
@@ -172,42 +176,37 @@ static char* data_to_ascii(unsigned char *datap, int len, int type)
   unsigned int cur_str_len;
   unsigned int ascii_max, cur_str_max;
   unsigned int str_rem, cur_str_rem, alen;
+  int ret_err;
 
   switch (type) 
   {
+  case REG_SZ:
+  case REG_EXPAND_SZ:
     /* REG_LINK is a symbolic link, stored as a unicode string. */
   case REG_LINK:
-  case REG_SZ:
     ascii_max = sizeof(char)*len;
     ascii = malloc(ascii_max+4);
     if(ascii == NULL)
       return NULL;
     
-    if(uni_to_ascii(datap, ascii, len, ascii_max) < 0)
-    {
-      free(ascii);
-      return NULL;
-    }
-    cur_quoted = quote_string(ascii, special_chars);
-    free(ascii);
-    return cur_quoted;
-    break;
-
-    /* XXX: This could be Unicode or ASCII.  Are we processing it 
-     *      correctly in both cases? 
+    /* Sometimes values have binary stored in them.  If the unicode
+     * conversion fails, just quote it raw.
      */
-  case REG_EXPAND_SZ:
-    ascii_max = sizeof(char)*len;
-    ascii = malloc(ascii_max+2);
-    if(ascii == NULL)
-      return NULL;
-
-    if(uni_to_ascii(datap, ascii, len, ascii_max) < 0)
+    
+    ret_err = uni_to_ascii(datap, ascii, len, ascii_max);
+    if(ret_err < 0)
     {
-      free(ascii);
-      return NULL;
+      /* XXX: It would be nice if somehow we could include the name of this
+       *      value in the error message.
+       */
+      if(print_verbose)
+	fprintf(stderr, "VERBOSE: Unicode conversion failed; "
+		"printing as binary.  Error: %s\n", strerror(-ret_err));
+
+      cur_quoted = quote_buffer(datap, len, common_special_chars);
     }
-    cur_quoted = quote_string(ascii, special_chars);
+    else
+      cur_quoted = quote_string(ascii, common_special_chars);
     free(ascii);
     return cur_quoted;
     break;
@@ -268,15 +267,22 @@ static char* data_to_ascii(unsigned char *datap, int len, int type)
 
       if(num_nulls == 2)
       {
-	if(uni_to_ascii(cur_str, cur_ascii, cur_str_max, cur_str_max) < 0)
+	ret_err = uni_to_ascii(cur_str, cur_ascii, cur_str_len-1, cur_str_max);
+	if(ret_err < 0)
 	{
-	  free(ascii);
-	  free(cur_ascii);
-	  free(cur_str);
-	  return NULL;
+	  /* XXX: It would be nice if somehow we could include the name of this
+	   *      value in the error message.
+	   */
+	  if(print_verbose)
+	    fprintf(stderr, "VERBOSE: Unicode conversion failed on sub-field; "
+		    "printing as binary.  Error: %s\n", strerror(-ret_err));
+	  
+	  cur_quoted = quote_buffer(cur_str, cur_str_len-1, 
+				    subfield_special_chars);
 	}
+	else
+	  cur_quoted = quote_string(cur_ascii, subfield_special_chars);
 
-	cur_quoted = quote_string(cur_ascii, ",|\"\\");
 	alen = snprintf(asciip, str_rem, "%s", cur_quoted);
 	asciip += alen;
 	str_rem -= alen;
@@ -314,7 +320,7 @@ static char* data_to_ascii(unsigned char *datap, int len, int type)
   case REG_RESOURCE_REQUIREMENTS_LIST:
 
   case REG_BINARY:
-    return quote_buffer(datap, len, special_chars);
+    return quote_buffer(datap, len, common_special_chars);
     break;
 
   default:
@@ -365,7 +371,7 @@ void_stack* path2Stack(const char* s)
   return ret_val;
 }
 
-
+/* Returns a quoted path from an nk_stack */
 char* stack2Path(void_stack* nk_stack)
 {
   const REGF_NK_REC* cur;
@@ -375,6 +381,7 @@ char* stack2Path(void_stack* nk_stack)
   uint32 grow_amt;
   char* buf; 
   char* new_buf;
+  char* name;
   void_stack_iterator* iter;
   
   buf = (char*)malloc((buf_len)*sizeof(char));
@@ -396,7 +403,8 @@ char* stack2Path(void_stack* nk_stack)
   {
     buf[buf_len-buf_left-1] = '/';
     buf_left -= 1;
-    name_len = strlen(cur->keyname);
+    name = quote_string(cur->keyname, key_special_chars);
+    name_len = strlen(name);
     if(name_len+1 > buf_left)
     {
       grow_amt = (uint32)(buf_len/2);
@@ -410,9 +418,10 @@ char* stack2Path(void_stack* nk_stack)
       buf = new_buf;
       buf_left = grow_amt + name_len + 1;
     }
-    strncpy(buf+(buf_len-buf_left-1), cur->keyname, name_len);
+    strncpy(buf+(buf_len-buf_left-1), name, name_len);
     buf_left -= name_len;
     buf[buf_len-buf_left-1] = '\0';
+    free(name);
   }
 
   return buf;
@@ -423,9 +432,8 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 {
   uint32 size;
   uint8 tmp_buf[4];
-  char* quoted_value;
-  char* quoted_prefix;
-  char* quoted_name;
+  char* quoted_value = NULL;
+  char* quoted_name = NULL;
 
   /* Thanks Microsoft for making this process so straight-forward!!! */
   size = (vk->data_size & ~VK_DATA_IN_OFFSET);
@@ -459,20 +467,16 @@ void printValue(REGF_VK_REC* vk, char* prefix)
    *      figure out why and when, and generate the appropriate output
    *      for that condition.
    */
-  quoted_prefix = quote_string(prefix, special_chars);
-  quoted_name = quote_string(vk->valuename, special_chars);
-  
+  quoted_name = quote_string(vk->valuename, common_special_chars);
   if(print_security)
-    printf("%s/%s,%s,%s,,,,,\n", quoted_prefix, quoted_name,
+    printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
 	   regfio_type_val2str(vk->type), quoted_value);
   else
-    printf("%s/%s,%s,%s,\n", quoted_prefix, quoted_name,
+    printf("%s/%s,%s,%s,\n", prefix, quoted_name,
 	   regfio_type_val2str(vk->type), quoted_value);
   
   if(quoted_value != NULL)
     free(quoted_value);
-  if(quoted_prefix != NULL)
-    free(quoted_prefix);
   if(quoted_name != NULL)
     free(quoted_name);
 }
@@ -484,7 +488,7 @@ void printValueList(REGF_NK_REC* nk, char* prefix)
   
   for(i=0; i < nk->num_values; i++)
     if(!type_filter_enabled || (nk->values[i].type == type_filter))
-      printValue(&nk->values[i], prefix);
+      printValue(nk->values+i, prefix);
 }
 
 
@@ -498,12 +502,7 @@ void printKey(REGF_NK_REC* k, char* full_path)
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
-  char* quoted_path = NULL;
 
-  /* XXX: it would be faster to always pass a quoted string to this
-   *      function, instead of re-quoting it every call. */
-  /* XXX: check return of quote_string */
-  quoted_path = quote_string(full_path, special_chars);
   *tmp_time = nt_time_to_unix(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
@@ -523,7 +522,7 @@ void printKey(REGF_NK_REC* k, char* full_path)
     if(dacl == NULL)
       dacl = empty_str;
 
-    printf("%s,KEY,,%s,%s,%s,%s,%s\n", quoted_path, mtime, 
+    printf("%s,KEY,,%s,%s,%s,%s,%s\n", full_path, mtime, 
 	   owner, group, sacl, dacl);
 
     if(owner != empty_str)
@@ -536,19 +535,19 @@ void printKey(REGF_NK_REC* k, char* full_path)
       free(dacl);
   }
   else
-    printf("%s,KEY,,%s\n", quoted_path, mtime);
-
-  free(quoted_path);
+    printf("%s,KEY,,%s\n", full_path, mtime);
 }
 
 
-/* XXX: this function is awful.  Needs to be re-designed. */
-void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
+void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
 {
   REGF_NK_REC* cur = NULL;
   REGF_NK_REC* sub = NULL;
   char* path = NULL;
   char* val_path = NULL;
+  uint32 val_path_len = 0;
+  uint32 path_len = 0;
+  uint32 prefix_len = strlen(prefix);
   int key_type = regfio_type_str2val("KEY");
   
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
@@ -565,50 +564,62 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, char* prefix)
 		prefix);
     }
 
-    val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
-    sprintf(val_path, "%s%s", prefix, path);
+    path_len = strlen(path);
+    val_path_len = prefix_len+path_len;
+    val_path = (char*)malloc(val_path_len+1+1);
+    if(val_path == NULL)
+      bailOut(2, "ERROR: Could not allocate val_path.\n");
+
+    strcpy(val_path, prefix);
+    strcpy(val_path+prefix_len, path);
     if(val_path[0] == '\0')
     {
       val_path[0] = '/';
       val_path[1] = '\0';
     }
-
     if(!type_filter_enabled || (key_type == type_filter))
       printKey(cur, val_path);
     if(!type_filter_enabled || (key_type != type_filter))
       printValueList(cur, val_path);
-    if(val_path != NULL)
-      free(val_path);
+    
     while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
     {
-      if((sub = regfio_fetch_subkey(f, cur)) != NULL)
+      if((sub = regfio_fetch_subkey(f, cur)) == NULL)
+      {
+	sub = void_stack_pop(nk_stack);
+	/* XXX: This is just a shallow free.  Need to write deep free
+	 * routines to replace the Samba code for this. 
+	 */ 
+	if(sub != NULL)
+	  free(sub);
+      }
+      else
       {
 	sub->subkey_index = 0;
 	void_stack_push(nk_stack, sub);
 	path = stack2Path(nk_stack);
 	if(path != NULL)
 	{
-	  val_path = (char*)malloc(strlen(prefix)+strlen(path)+1);
-	  sprintf(val_path, "%s%s", prefix, path);
+	  path_len = strlen(path);
+	  if(val_path_len < prefix_len+path_len)
+	  {
+	    val_path_len = prefix_len+path_len;
+	    val_path = (char*)realloc(val_path, val_path_len+1);
+	    if(val_path == NULL)
+	      bailOut(2, "ERROR: Could not reallocate val_path.\n");
+	  }
+	  strcpy(val_path, prefix);
+	  strcpy(val_path+prefix_len, path);
 	  if(!type_filter_enabled || (key_type == type_filter))
 	    printKey(sub, val_path);
 	  if(!type_filter_enabled || (key_type != type_filter))
 	    printValueList(sub, val_path);
-	  if(val_path != NULL)
-	    free(val_path);
 	}
-      }
-      else
-      {
-	cur = void_stack_pop(nk_stack);
-	/* XXX: This is just a shallow free.  Need to write deep free
-	 * routines to replace the Samba code for this. 
-	 */ 
-	if(cur != NULL)
-	  free(cur);
       }
     }
   }
+  if(val_path != NULL)
+    free(val_path);
   if(print_verbose)
     fprintf(stderr, "VERBOSE: Finished printing key tree.\n");
 }
@@ -626,12 +637,12 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
   REGF_NK_REC* cur = NULL;
   void_stack* sub_nk_stack;
   char* prefix;
-  uint32 prefix_len;
   char* cur_str = NULL;
   char* path = NULL;
-  bool found_cur = true;
-  uint32 i;
+  char* name;
   uint16 path_depth;
+  uint32 i, prefix_len;
+  bool found_cur = true;
   if(path_stack == NULL)
     return -1;
 
@@ -714,8 +725,10 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
       prefix = realloc(prefix, prefix_len+strlen(sub->keyname)+2);
       if(prefix == NULL)
 	return -1;
+      name = quote_string(sub->keyname, key_special_chars);
       strcat(prefix, "/");
-      strcat(prefix, sub->keyname);
+      strcat(prefix, name);
+      free(name);
 
       if(print_verbose)
 	fprintf(stderr, "VERBOSE: Found final path element as key.\n");
