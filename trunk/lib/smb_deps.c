@@ -3,7 +3,7 @@
  * depends upon, from the Samba Subversion tree.  See:
  *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/
  *
- * Copyright (C) 2005 Timothy D. Morgan
+ * Copyright (C) 2005-2006 Timothy D. Morgan
  * Copyright (C) 1992-2005 Samba development team 
  *               (see individual files under Subversion for details.)
  *
@@ -180,8 +180,6 @@ bool prs_grow(prs_struct *ps, uint32 extra_space)
     
     if((new_data = zalloc(new_size)) == NULL)
       return false;
-
-    memset(new_data, '\0', (size_t)new_size );
   } 
   else 
   {
@@ -236,7 +234,10 @@ bool prs_align(prs_struct *ps)
 
 bool prs_init(prs_struct *ps, uint32 size, void *ctx, bool io)
 {
+  if(ps == NULL)
+    return false;
   memset(ps, 0, sizeof(prs_struct));
+
   ps->io = io;
   ps->bigendian_data = RPC_LITTLE_ENDIAN;
   ps->align = RPC_PARSE_ALIGN;
@@ -252,7 +253,6 @@ bool prs_init(prs_struct *ps, uint32 size, void *ctx, bool io)
     if((ps->data_p = (char *)zalloc((size_t)size)) == NULL)
       return false;
 
-    memset(ps->data_p, '\0', (size_t)size);
     ps->is_dynamic = true; /* We own this memory. */
   }
   
@@ -278,6 +278,7 @@ char *prs_mem_get(prs_struct *ps, uint32 extra_size)
     if(!prs_grow(ps, extra_size))
       return NULL;
   }
+
   return &ps->data_p[ps->data_offset];
 }
 
@@ -794,7 +795,7 @@ bool sec_io_acl(const char *desc, SEC_ACL **ppsa, prs_struct *ps, int depth)
   unsigned int i;
   uint32 old_offset;
   uint32 offset_acl_size;
-  SEC_ACL *psa;
+  SEC_ACL* psa;
 
   /*
    * Note that the size is always a multiple of 4 bytes due to the
@@ -803,7 +804,7 @@ bool sec_io_acl(const char *desc, SEC_ACL **ppsa, prs_struct *ps, int depth)
    * marshalling such as in the printing code (RPC_BUFFER).  --jerry
    */
 
-  if (ppsa == NULL)
+  if (ppsa == NULL || ps == NULL)
     return false;
 
   psa = *ppsa;
@@ -818,18 +819,17 @@ bool sec_io_acl(const char *desc, SEC_ACL **ppsa, prs_struct *ps, int depth)
     *ppsa = psa;
   }
 
-  depth++;
-	
+  depth++;	
   old_offset = ps->data_offset;
 
-  if(!prs_uint16("revision", ps, depth, &psa->revision))
+  if(!prs_uint16("revision", ps, depth, &psa->revision)
+     || !prs_uint16_pre("size     ", ps, depth, &psa->size, &offset_acl_size)
+     || !prs_uint32("num_aces ", ps, depth, &psa->num_aces))
+  {
+    free(psa);
+    *ppsa = NULL;
     return false;
-
-  if(!prs_uint16_pre("size     ", ps, depth, &psa->size, &offset_acl_size))
-    return false;
-
-  if(!prs_uint32("num_aces ", ps, depth, &psa->num_aces))
-    return false;
+  }
 
   if (ps->io) 
   {
@@ -839,7 +839,11 @@ bool sec_io_acl(const char *desc, SEC_ACL **ppsa, prs_struct *ps, int depth)
      * (allow no access).
      */
     if((psa->ace = (SEC_ACE*)zcalloc(sizeof(SEC_ACE), psa->num_aces+1)) == NULL)
+    {
+      free(psa);
+      *ppsa = NULL;
       return false;
+    }
   }
 
   for (i = 0; i < psa->num_aces; i++) 
@@ -847,7 +851,11 @@ bool sec_io_acl(const char *desc, SEC_ACL **ppsa, prs_struct *ps, int depth)
     fstring tmp;
     snprintf(tmp, sizeof(tmp)-1, "ace_list[%02d]: ", i);
     if(!sec_io_ace(tmp, &psa->ace[i], ps, depth))
+    {
+      free(psa);
+      *ppsa = NULL;
       return false;
+    }
   }
 
   /* Theoretically an ACL can have a size greater than the
@@ -863,13 +871,21 @@ bool sec_io_acl(const char *desc, SEC_ACL **ppsa, prs_struct *ps, int depth)
     for (i = 0; i < extra_len; i++) 
     {
       if (!prs_uint8("acl extra space", ps, depth, &c))
+      {
+	free(psa);
+	*ppsa = NULL;
 	return false;
+      }
     }
   }
 
   if(!prs_uint16_post("size     ", ps, depth, &psa->size, 
 		      offset_acl_size, old_offset))
-  { return false; }
+  { 
+    free(psa);
+    *ppsa = NULL;
+    return false; 
+  }
 
   return true;
 }
@@ -887,11 +903,10 @@ bool sec_io_desc(const char *desc, SEC_DESC **ppsd, prs_struct *ps, int depth)
 
   SEC_DESC *psd;
 
-  if (ppsd == NULL)
+  if (ppsd == NULL || ps == NULL)
     return false;
 
   psd = *ppsd;
-
   if (psd == NULL) 
   {
     if(ps->io) 
@@ -912,13 +927,15 @@ bool sec_io_desc(const char *desc, SEC_DESC **ppsd, prs_struct *ps, int depth)
   /* start of security descriptor stored for back-calc offset purposes */
   old_offset = ps->data_offset;
 
-  if(!prs_uint16("revision ", ps, depth, &psd->revision))
+  if(!prs_uint16("revision ", ps, depth, &psd->revision)
+     || !prs_uint16("type     ", ps, depth, &psd->type))
+  {
+    free(psd);
+    *ppsd = NULL;
     return false;
+  }
 
-  if(!prs_uint16("type     ", ps, depth, &psd->type))
-    return false;
-
-  if (!ps->io) 
+  if (!ps->io)
   {
     uint32 offset = SEC_DESC_HEADER_SIZE;
 
@@ -959,90 +976,179 @@ bool sec_io_desc(const char *desc, SEC_DESC **ppsd, prs_struct *ps, int depth)
       psd->off_grp_sid = 0;
   }
 
-  if(!prs_uint32("off_owner_sid", ps, depth, &psd->off_owner_sid))
+  if(!prs_uint32("off_owner_sid", ps, depth, &psd->off_owner_sid)
+     || !prs_uint32("off_grp_sid  ", ps, depth, &psd->off_grp_sid)
+     || !prs_uint32("off_sacl     ", ps, depth, &psd->off_sacl)
+     || !prs_uint32("off_dacl     ", ps, depth, &psd->off_dacl))
+  {
+    free(psd);
+    *ppsd = NULL;    
     return false;
-
-  if(!prs_uint32("off_grp_sid  ", ps, depth, &psd->off_grp_sid))
-    return false;
-
-  if(!prs_uint32("off_sacl     ", ps, depth, &psd->off_sacl))
-    return false;
-
-  if(!prs_uint32("off_dacl     ", ps, depth, &psd->off_dacl))
-    return false;
-
+  }
   max_offset = MAX(max_offset, ps->data_offset);
 
   if (psd->off_owner_sid != 0) 
   {
     tmp_offset = ps->data_offset;
     if(!prs_set_offset(ps, old_offset + psd->off_owner_sid))
+    {
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
 
     if (ps->io) 
     {
       /* reading */
       if((psd->owner_sid = (DOM_SID*)zalloc(sizeof(DOM_SID))) == NULL)
+      {
+	free(psd);
+	*ppsd = NULL;
 	return false;
+      }
     }
 
     if(!smb_io_dom_sid("owner_sid ", psd->owner_sid , ps, depth))
+    {
+      if(ps->io)
+	free(psd->owner_sid);
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
 
     max_offset = MAX(max_offset, ps->data_offset);
 
     if (!prs_set_offset(ps,tmp_offset))
+    {
+      if(ps->io)
+	free(psd->owner_sid);
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
   }
 
   if (psd->off_grp_sid != 0) 
   {
     tmp_offset = ps->data_offset;
     if(!prs_set_offset(ps, old_offset + psd->off_grp_sid))
+    {
+      if(ps->io)
+	free(psd->owner_sid);
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
 
     if (ps->io) 
     {
       /* reading */
       if((psd->grp_sid = (DOM_SID*)zalloc(sizeof(DOM_SID))) == NULL)
+      {
+	free(psd->owner_sid);
+	free(psd);
+	*ppsd = NULL;
 	return false;
+      }
     }
 
     if(!smb_io_dom_sid("grp_sid", psd->grp_sid, ps, depth))
+    {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
 			
     max_offset = MAX(max_offset, ps->data_offset);
 
     if (!prs_set_offset(ps,tmp_offset))
+    {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
   }
 
   if ((psd->type & SEC_DESC_SACL_PRESENT) && psd->off_sacl) 
   {
     tmp_offset = ps->data_offset;
-    if(!prs_set_offset(ps, old_offset + psd->off_sacl))
+    if(!prs_set_offset(ps, old_offset + psd->off_sacl)
+       || !sec_io_acl("sacl", &psd->sacl, ps, depth))
+    {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
       return false;
-    if(!sec_io_acl("sacl", &psd->sacl, ps, depth))
-      return false;
+    }
     max_offset = MAX(max_offset, ps->data_offset);
     if (!prs_set_offset(ps,tmp_offset))
+    {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
   }
 
   if ((psd->type & SEC_DESC_DACL_PRESENT) && psd->off_dacl != 0) 
   {
     tmp_offset = ps->data_offset;
-    if(!prs_set_offset(ps, old_offset + psd->off_dacl))
+    if(!prs_set_offset(ps, old_offset + psd->off_dacl)
+       || !sec_io_acl("dacl", &psd->dacl, ps, depth))
+    {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
       return false;
-    if(!sec_io_acl("dacl", &psd->dacl, ps, depth))
-      return false;
+    }
     max_offset = MAX(max_offset, ps->data_offset);
     if (!prs_set_offset(ps,tmp_offset))
+    {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
       return false;
+    }
   }
 
   if(!prs_set_offset(ps, max_offset))
-    return false;
+  {
+      if(ps->io)
+      {
+	free(psd->grp_sid);
+	free(psd->owner_sid);
+      }
+      free(psd);
+      *ppsd = NULL;
+      return false;
+  }
 
   return true;
 }
@@ -1056,9 +1162,11 @@ bool sec_io_desc(const char *desc, SEC_DESC **ppsd, prs_struct *ps, int depth)
 ********************************************************************/
 bool sec_ace_equal(SEC_ACE *s1, SEC_ACE *s2)
 {
-  /* Trivial case */
+  /* Trivial cases */
   if (!s1 && !s2) 
     return true;
+  if (!s1 || !s2) 
+    return false;
 
   /* Check top level stuff */
   if (s1->type != s2->type || s1->flags != s2->flags ||
@@ -1129,10 +1237,11 @@ bool sec_acl_equal(SEC_ACL *s1, SEC_ACL *s2)
 ********************************************************************/
 bool sec_desc_equal(SEC_DESC *s1, SEC_DESC *s2)
 {
-  /* Trivial case */
-
+  /* Trivial cases */
   if (!s1 && !s2)
-    goto done;
+    return true;
+  if (!s1 || !s2)
+    return false;
 
   /* Check top level stuff */
   if (s1->revision != s2->revision)
@@ -1158,7 +1267,6 @@ bool sec_desc_equal(SEC_DESC *s1, SEC_DESC *s2)
   if(!sec_acl_equal(s1->dacl, s2->dacl) || !sec_acl_equal(s1->sacl, s2->sacl)) 
     return false;
 
- done:
   return true;
 }
 
