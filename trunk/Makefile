@@ -31,6 +31,7 @@ install: all
 	mkdir -p $(BIN_PREFIX)
 	mkdir -p $(DOC_PREFIX)
 	mkdir -p $(MAN_PREFIX)/man1
+	$(MAKE) -C bin install
 	$(MAKE) -C src install
 	$(MAKE) -C doc install
 
