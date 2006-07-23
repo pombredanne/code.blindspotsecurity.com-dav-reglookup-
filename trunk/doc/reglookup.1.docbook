@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <refentry id='reglookup.1'>
-  <!--  $Id: $ -->
+  <!--  $Id$ -->
   <refmeta>
     <refentrytitle>reglookup</refentrytitle>
     <manvolnum>1</manvolnum>
@@ -11,10 +11,12 @@
     <refpurpose>windows NT+ registry reader/lookup tool</refpurpose>
   </refnamediv>
 
-  <refsect1 id='syntax'>
+  <refsect1 id='synopsis'>
     <title>SYNOPSIS</title>
     <para>
-      <command>reglookup [options]</command> <replaceable>registry-file</replaceable>
+      <command>
+	reglookup [options] <replaceable>registry-file</replaceable>
+      </command> 
     </para>
   </refsect1>
 
@@ -29,7 +31,7 @@
     </para>
   </refsect1>
 
-  <refsect1 id='caveats'>
+  <refsect1 id='options'>
     <title>OPTIONS</title>
     <para>
       <command>reglookup</command> accepts the following parameters:
@@ -221,7 +223,14 @@
       Verbose output is not working.
     </para>
     <para>
-      MTIME and SID conversions haven't been checked for accuracy.
+      The SID conversions haven't been carefully checked for accuracy.
+    </para>
+    <para>
+      The MTIME conversions appear correctly produce the stored UTC timestamp.
+      However, due to the periodicity of registry writes, and the complexity
+      of the conversion, a small amount of error (on the order of seconds) may
+      be possible.  The documentation available online from Microsoft on 
+      this field is very poor.
     </para>
     <para>
       Backslashes are currently considered special characters, to make 
@@ -230,8 +239,8 @@
     </para>
     <para>
       You'll notice that registry paths aren't all the same as the
-      ones the equivalents you see in the windows registry editor.
-      Don't ask me why that is.  I just work here.
+      equivalents you see in the windows registry editor.  Don't ask me why 
+      that is.  I just work here.
     </para>
     <para>
       This software should be considered unstable at this time.
@@ -263,6 +272,13 @@
       but WITHOUT ANY WARRANTY; without even the implied warranty of
       MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
       GNU General Public License version 2 for more details.
+    </para>
+  </refsect1>
+
+  <refsect1 id='seealso'>
+    <title>SEE ALSO</title>
+    <para>
+      reglookup-timeline(1)
     </para>
   </refsect1>
 </refentry>

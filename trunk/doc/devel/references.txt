@@ -2,3 +2,9 @@
 - Petter Nordahl-Hagen.  Windows NT registry file format description.
   (The file 'winntreg.txt' included in this distribution is derived from this.)
   http://home.eunet.no/~pnordahl/ntpasswd/WinReg.txt
+
+- Some useful information on how Windows reads from and writes to registry
+  hives:
+  http://www.microsoft.com/technet/archive/winntas/tips/winntmag/inreg.mspx
+
+- 
