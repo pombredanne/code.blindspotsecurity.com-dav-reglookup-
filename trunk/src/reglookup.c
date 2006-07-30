@@ -148,13 +148,14 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
 {
   char* inbuf = (char*)uni;
   char* outbuf = ascii;
-  unsigned int out_len = ascii_max-1;
+  size_t in_len = (size_t)uni_max;
+  size_t out_len = (size_t)(ascii_max-1);
   int ret;
 
   /* Set up conversion descriptor. */
   conv_desc = iconv_open("US-ASCII", "UTF-16LE");
 
-  ret = iconv(conv_desc, &inbuf, &uni_max, &outbuf, &out_len);
+  ret = iconv(conv_desc, &inbuf, &in_len, &outbuf, &out_len);
   if(ret == -1)
   {
     iconv_close(conv_desc);
