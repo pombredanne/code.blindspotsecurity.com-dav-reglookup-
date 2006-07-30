@@ -240,7 +240,7 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
     break;
 
   case REG_DWORD:
-    ascii_max = sizeof(char)*11;
+    ascii_max = sizeof(char)*(8+2+1);
     ascii = malloc(ascii_max);
     if(ascii == NULL)
       return NULL;
@@ -251,7 +251,7 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
     break;
 
   case REG_DWORD_BE:
-    ascii_max = sizeof(char)*11;
+    ascii_max = sizeof(char)*(8+2+1);
     ascii = malloc(ascii_max);
     if(ascii == NULL)
       return NULL;
@@ -260,6 +260,19 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
 	     datap[3], datap[2], datap[1], datap[0]);
     return ascii;
     break;
+
+  case REG_QWORD:
+    ascii_max = sizeof(char)*(16+2+1);
+    ascii = malloc(ascii_max);
+    if(ascii == NULL)
+      return NULL;
+
+    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X%.2X%.2X%.2X%.2X",
+	     datap[7], datap[6], datap[5], datap[4],
+	     datap[3], datap[2], datap[1], datap[0]);
+    return ascii;
+    break;
+    
 
   /* XXX: this MULTI_SZ parser is pretty inefficient.  Should be
    *      redone with fewer malloc calls and better string concatenation. 

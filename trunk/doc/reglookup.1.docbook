@@ -63,7 +63,7 @@
 	    are: 
             <command>
 	      NONE, SZ, EXPAND_SZ, BINARY, DWORD, DWORD_BE,
-	      LINK, MULTI_SZ, RSRC_LIST, RSRC_DESC, RSRC_REQ_LIST,
+	      LINK, MULTI_SZ, RSRC_LIST, RSRC_DESC, RSRC_REQ_LIST, QWORD
 	    </command>
 	    and
 	    <command>

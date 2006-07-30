@@ -28,10 +28,10 @@
 
 
 /* Registry types mapping */
-const unsigned int regfio_num_reg_types = 11;
+const unsigned int regfio_num_reg_types = 12;
 static const char* regfio_type_names[] =
   {"NONE", "SZ", "EXPAND_SZ", "BINARY", "DWORD", "DWORD_BE", "LINK",
-   "MULTI_SZ", "RSRC_LIST", "RSRC_DESC", "RSRC_REQ_LIST"};
+   "MULTI_SZ", "RSRC_LIST", "RSRC_DESC", "RSRC_REQ_LIST", "QWORD"};
 
 
 /* Returns NULL on error */
