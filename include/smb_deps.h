@@ -139,15 +139,8 @@ typedef struct _prs_struct {
 #define RPC_LITTLE_ENDIAN  0
 #define RPC_PARSE_ALIGN    4
 
-
 /* End of stuff from ntdomain.h */
 
-/* From nt_status.h */
-
-typedef uint32 NTSTATUS;
-typedef uint32 WERROR;
-
-/* End of stuff from nt_status.h */
 
 /* From lib/time.c */
 
@@ -188,77 +181,6 @@ bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth,
 bool prs_set_offset(prs_struct *ps, uint32 offset);
 
 /* End of stuff from parse_prs.h */
-
-
-
-/* buffer used by \winreg\ calls to fill in arbitrary REG_XXX values.
-   It *may* look like a UNISTR2 but it is *not*.  This is not a goof
-   by the winreg developers.  It is a generic buffer.  buffer length
-   is stored in bytes (not # of uint16's) */
-
-typedef struct {
-	uint32 buf_max_len;
-	uint32 offset;
-	uint32 buf_len;
-	uint16 *buffer;
-} REGVAL_BUFFER;
-
-typedef struct {
-	uint32 buf_len;
-	uint16 *buffer; /* data */
-} BUFFER5;
-
-
-/********************************************************************** 
- * UNICODE string variations
- **********************************************************************/
-
-
-typedef struct {		/* UNISTR - unicode string size and buffer */
-	uint16 *buffer;		/* unicode characters. ***MUST*** be 
-				   little-endian. ***MUST*** be null-terminated */
-} UNISTR;
-
-typedef struct {		/* UNISTR2 - unicode string size (in 
-				   uint16 unicode chars) and buffer */
-	uint32 uni_max_len;
-	uint32 offset;
-	uint32 uni_str_len;
-	uint16 *buffer;		/* unicode characters. ***MUST*** be little-endian. 
-				  **must** be null-terminated and the uni_str_len 
-				  should include the NULL character */
-} UNISTR2;
-
-/* i think this is the same as a BUFFER5 used in the spoolss code --jerry */
-/* not sure about how the termination matches between the uint16 buffers thought */
-
-typedef struct {		/* UNISTR3 - XXXX not sure about this structure */
-	uint32 uni_str_len;
-	UNISTR str;
-} UNISTR3;
-
-typedef struct {		/* Buffer wrapped around a UNISTR2 */
-	uint16 length;		/* number of bytes not counting NULL terminatation */
-	uint16 size;		/* number of bytes including NULL terminatation */
-	UNISTR2 *string;
-} UNISTR4;
-
-typedef struct {
-	uint32 count;
-	UNISTR4 *strings;
-} UNISTR4_ARRAY;
-
-
-/********************************************************************** 
- * String variations
- **********************************************************************/
-
-typedef struct {		/* STRING2 - string size (in uint8 chars) and buffer */
-	uint32 str_max_len;
-	uint32 offset;
-	uint32 str_str_len;
-	uint8  *buffer; 	/* uint8 characters. **NOT** necessarily null-terminated */
-} STRING2;
 
 
 /* From rpc_secdesc.h */
@@ -319,51 +241,11 @@ typedef struct security_descriptor_info
 
 /* From pstring.h */
 
-#define PSTRING_LEN 1024
 #define FSTRING_LEN 256
-
-typedef char pstring[PSTRING_LEN];
 typedef char fstring[FSTRING_LEN];
 
 /* End of stuff from pstring.h */
 
-/* From reg_objects.h */
-
-typedef struct _REGISTRY_VALUE {
-	fstring		valuename;
-	uint16		type;
-	/* this should be encapsulated in an RPC_DATA_BLOB */
-	uint32		size;	/* in bytes */
-	uint8           *data_p;
-} REGISTRY_VALUE;
-
-/* container for registry values */
-typedef struct {
-	void      *ctx;
-	uint32          num_values;
-	REGISTRY_VALUE	**values;
-} REGVAL_CTR;
-
-/* container for registry subkey names */
-typedef struct {
-	void	*ctx;
-	uint32          num_subkeys;
-	char            **subkeys;
-} REGSUBKEY_CTR;
-
-/* represent a registry key with all its subkeys and values */
-struct _regobj_key;
-
-typedef struct _regobj_key {
-	void *ctx;
-
-	char *name;
-
-	REGVAL_CTR values;
-	REGSUBKEY_CTR subkeys;
-} REGOBJ_KEY;
-
-/* End of stuff from reg_objects.h */
 
 /* From rpc_secdes.h */
 
