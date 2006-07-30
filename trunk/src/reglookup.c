@@ -218,7 +218,10 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
       str_type = regfio_type_val2str(type);
       *error_msg = (char*)malloc(65+strlen(str_type)+strlen(tmp_err)+1);
       if(*error_msg == NULL)
+      {
+	free(ascii);
 	return NULL;
+      }
       sprintf(*error_msg, "Unicode conversion failed on %s field; "
 	       "printing as binary.  Error: %s", str_type, tmp_err);
       
@@ -227,6 +230,12 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
     else
       cur_quoted = quote_string(ascii, common_special_chars);
     free(ascii);
+    if(cur_quoted == NULL)
+    {
+      *error_msg = (char*)malloc(27+1);
+      if(*error_msg != NULL)
+	strcpy(*error_msg, "Buffer could not be quoted.");
+    }
     return cur_quoted;
     break;
 
@@ -295,7 +304,12 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
 	    tmp_err = strerror(-ret_err);
 	    *error_msg = (char*)malloc(90+strlen(tmp_err)+1);
 	    if(*error_msg == NULL)
+	    {
+	      free(cur_str);
+	      free(cur_ascii);
+	      free(ascii);
 	      return NULL;
+	    }
 	    sprintf(*error_msg, "Unicode conversion failed on at least one "
 		    "MULTI_SZ sub-field; printing as binary.  Error: %s",
 		    tmp_err);
@@ -345,11 +359,13 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
   case REG_BINARY:
     return quote_buffer(datap, len, common_special_chars);
     break;
+  }
 
-  default:
-    return NULL;
-    break;
-  } 
+
+  /* Invalid type */
+  *error_msg = (char*)malloc(33+11+1);
+  if(*error_msg != NULL)
+    sprintf(*error_msg, "Unrecognized registry data type: %d", type);
 
   return NULL;
 }
@@ -497,10 +513,10 @@ void printValue(REGF_VK_REC* vk, char* prefix)
   if(quoted_value == NULL)
   {
     if(conv_error == NULL)
-      fprintf(stderr, "ERROR: Could not quote value for '%s/%s'.  "
+      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
 	      "Memory allocation failure likely.\n", prefix, quoted_name);
     else
-      fprintf(stderr, "ERROR: Could not quote value for '%s/%s'.  "
+      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
 	      "Returned error: %s\n", prefix, quoted_name, conv_error);
   }
   /* XXX: should these always be printed? */
