@@ -24,11 +24,12 @@
 
 usage()
 {
-  echo "ERROR in usage"
+  echo "Usage: $0 <REGISTRY_FILE> [<REGISTRY_FILE> ...]" 1>&2
 }
 
 if [ $# -eq 0 ]; then
   usage
+  echo "ERROR: requires at least one parameter" 1>&2
   exit 1
 fi
 
