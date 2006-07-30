@@ -82,7 +82,8 @@ static char* quote_buffer(const unsigned char* str,
       /* Expand the buffer by the memory consumption rate seen so far 
        * times the amount of input left to process.  The expansion is bounded 
        * below by a minimum safety increase, and above by the maximum possible 
-       * output string length.
+       * output string length.  This should minimize both the number of 
+       * reallocs() and the amount of wasted memory.
        */
       added_len = (len-i)*num_written/(i+1);
       if((buf_len+added_len) > (len*4+1))
@@ -136,19 +137,24 @@ static char* quote_string(const char* str, const char* special)
 
 
 /*
- * Convert from Unicode to ASCII.
+ * Convert from UTF-16LE to ASCII.  Accepts a Unicode buffer, uni, and
+ * it's length, uni_max.  Writes ASCII to the buffer ascii, whose size
+ * is ascii_max.  Writes at most (ascii_max-1) bytes to ascii, and null
+ * terminates the string.  Returns the length of the string stored in
+ * ascii.  On error, returns a negative errno code.
  */
 static int uni_to_ascii(unsigned char* uni, char* ascii, 
 			unsigned int uni_max, unsigned int ascii_max)
 {
   char* inbuf = (char*)uni;
   char* outbuf = ascii;
+  unsigned int out_len = ascii_max-1;
   int ret;
 
   /* Set up conversion descriptor. */
   conv_desc = iconv_open("US-ASCII", "UTF-16LE");
 
-  ret = iconv(conv_desc, &inbuf, &uni_max, &outbuf, &ascii_max);
+  ret = iconv(conv_desc, &inbuf, &uni_max, &outbuf, &out_len);
   if(ret == -1)
   {
     iconv_close(conv_desc);
@@ -162,21 +168,33 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
 
 
 /*
- * Convert a data value to a string for display
+ * Convert a data value to a string for display.  Returns NULL on error,
+ * and the string to display if there is no error, or a non-fatal
+ * error.  On any error (fatal or non-fatal) occurs, (*error_msg) will
+ * be set to a newly allocated string, containing an error message.  If
+ * a memory allocation failure occurs while generating the error
+ * message, both the return value and (*error_msg) will be NULL.  It
+ * is the responsibility of the caller to free both a non-NULL return
+ * value, and a non-NULL (*error_msg).
  */
-static char* data_to_ascii(unsigned char *datap, int len, int type)
+static char* data_to_ascii(unsigned char *datap, int len, int type, 
+			   char** error_msg)
 {
   char* asciip;
-  unsigned int i;
-  unsigned short num_nulls;
   char* ascii;
   unsigned char* cur_str;
   char* cur_ascii;
   char* cur_quoted;
+  char* tmp_err;
+  const char* str_type;
+  unsigned int i;
   unsigned int cur_str_len;
   unsigned int ascii_max, cur_str_max;
   unsigned int str_rem, cur_str_rem, alen;
   int ret_err;
+  unsigned short num_nulls;
+
+  *error_msg = NULL;
 
   switch (type) 
   {
@@ -184,25 +202,25 @@ static char* data_to_ascii(unsigned char *datap, int len, int type)
   case REG_EXPAND_SZ:
     /* REG_LINK is a symbolic link, stored as a unicode string. */
   case REG_LINK:
-    ascii_max = sizeof(char)*len;
-    ascii = malloc(ascii_max+4);
+    ascii_max = sizeof(char)*(len+1);
+    ascii = malloc(ascii_max);
     if(ascii == NULL)
       return NULL;
     
     /* Sometimes values have binary stored in them.  If the unicode
      * conversion fails, just quote it raw.
      */
-    
     ret_err = uni_to_ascii(datap, ascii, len, ascii_max);
     if(ret_err < 0)
     {
-      /* XXX: It would be nice if somehow we could include the name of this
-       *      value in the error message.
-       */
-      if(print_verbose)
-	fprintf(stderr, "VERBOSE: Unicode conversion failed; "
-		"printing as binary.  Error: %s\n", strerror(-ret_err));
-
+      tmp_err = strerror(-ret_err);
+      str_type = regfio_type_val2str(type);
+      *error_msg = (char*)malloc(65+strlen(str_type)+strlen(tmp_err)+1);
+      if(*error_msg == NULL)
+	return NULL;
+      sprintf(*error_msg, "Unicode conversion failed on %s field; "
+	       "printing as binary.  Error: %s", str_type, tmp_err);
+      
       cur_quoted = quote_buffer(datap, len, common_special_chars);
     }
     else
@@ -237,11 +255,11 @@ static char* data_to_ascii(unsigned char *datap, int len, int type)
    *      redone with fewer malloc calls and better string concatenation. 
    */
   case REG_MULTI_SZ:
-    ascii_max = sizeof(char)*len*4;
-    cur_str_max = sizeof(char)*len+1;
+    ascii_max = sizeof(char)*(len*4+1);
+    cur_str_max = sizeof(char)*(len+1);
     cur_str = malloc(cur_str_max);
     cur_ascii = malloc(cur_str_max);
-    ascii = malloc(ascii_max+4);
+    ascii = malloc(ascii_max);
     if(ascii == NULL || cur_str == NULL || cur_ascii == NULL)
       return NULL;
 
@@ -270,13 +288,17 @@ static char* data_to_ascii(unsigned char *datap, int len, int type)
 	ret_err = uni_to_ascii(cur_str, cur_ascii, cur_str_len-1, cur_str_max);
 	if(ret_err < 0)
 	{
-	  /* XXX: It would be nice if somehow we could include the name of this
-	   *      value in the error message.
-	   */
-	  if(print_verbose)
-	    fprintf(stderr, "VERBOSE: Unicode conversion failed on sub-field; "
-		    "printing as binary.  Error: %s\n", strerror(-ret_err));
-	  
+	  /* XXX: should every sub-field error be enumerated? */
+	  if(*error_msg == NULL)
+	  {
+	    tmp_err = strerror(-ret_err);
+	    *error_msg = (char*)malloc(90+strlen(tmp_err)+1);
+	    if(*error_msg == NULL)
+	      return NULL;
+	    sprintf(*error_msg, "Unicode conversion failed on at least one "
+		    "MULTI_SZ sub-field; printing as binary.  Error: %s",
+		    tmp_err);
+	  }
 	  cur_quoted = quote_buffer(cur_str, cur_str_len-1, 
 				    subfield_special_chars);
 	}
@@ -434,6 +456,7 @@ void printValue(REGF_VK_REC* vk, char* prefix)
   uint8 tmp_buf[4];
   char* quoted_value = NULL;
   char* quoted_name = NULL;
+  char* conv_error = NULL;
 
   /* Thanks Microsoft for making this process so straight-forward!!! */
   size = (vk->data_size & ~VK_DATA_IN_OFFSET);
@@ -445,7 +468,7 @@ void printValue(REGF_VK_REC* vk, char* prefix)
     tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
     if(size > 4)
       size = 4;
-    quoted_value = data_to_ascii(tmp_buf, 4, vk->type);
+    quoted_value = data_to_ascii(tmp_buf, 4, vk->type, &conv_error);
   }
   else
   {
@@ -460,7 +483,8 @@ void printValue(REGF_VK_REC* vk, char* prefix)
       size = 16384;
     }
 
-    quoted_value = data_to_ascii(vk->data, vk->data_size, vk->type);
+    quoted_value = data_to_ascii(vk->data, vk->data_size, 
+				 vk->type, &conv_error);
   }
   
   /* XXX: Sometimes value names can be NULL in registry.  Need to
@@ -468,6 +492,21 @@ void printValue(REGF_VK_REC* vk, char* prefix)
    *      for that condition.
    */
   quoted_name = quote_string(vk->valuename, common_special_chars);
+
+  if(quoted_value == NULL)
+  {
+    if(conv_error == NULL)
+      fprintf(stderr, "ERROR: Could not quote value for '%s/%s'.  "
+	      "Memory allocation failure likely.\n", prefix, quoted_name);
+    else
+      fprintf(stderr, "ERROR: Could not quote value for '%s/%s'.  "
+	      "Returned error: %s\n", prefix, quoted_name, conv_error);
+  }
+  /* XXX: should these always be printed? */
+  else if(conv_error != NULL && print_verbose)
+      fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
+	      "warning returned: %s\n", prefix, quoted_name, conv_error);
+
   if(print_security)
     printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
 	   regfio_type_val2str(vk->type), quoted_value);
@@ -479,6 +518,8 @@ void printValue(REGF_VK_REC* vk, char* prefix)
     free(quoted_value);
   if(quoted_name != NULL)
     free(quoted_name);
+  if(conv_error != NULL)
+    free(conv_error);
 }
 
 
@@ -751,7 +792,6 @@ static void usage(void)
   fprintf(stderr, "Usage: reglookup [-v] [-s]"
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
-  /* XXX: replace version string with Subversion property? */
   fprintf(stderr, "Version: 0.3.0\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
