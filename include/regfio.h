@@ -63,6 +63,8 @@
 #define REG_RESOURCE_LIST              8
 #define REG_FULL_RESOURCE_DESCRIPTOR   9
 #define REG_RESOURCE_REQUIREMENTS_LIST 10
+#define REG_QWORD                      11 /* 64-bit little endian */
+/* XXX: Has MS defined a REG_QWORD_BE? */
 /* Not a real type in the registry */
 #define REG_KEY                        255
 
