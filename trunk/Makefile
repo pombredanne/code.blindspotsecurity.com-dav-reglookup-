@@ -11,6 +11,13 @@ MAN_PREFIX=$(PREFIX)/man
 
 CC=gcc
 OPTS=-std=gnu89 -pedantic -Wall
+INC=-I/usr/local/include
+LIB=-L/usr/local/lib
+
+UNAME := $(shell uname)
+ifeq ($(UNAME),FreeBSD) 	
+  LIB=$(LIB) -liconv
+endif
 
 BUILD=$(CURDIR)/build
 BUILD_BIN=$(BUILD)/bin

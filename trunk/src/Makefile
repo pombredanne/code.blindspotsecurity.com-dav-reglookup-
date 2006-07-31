@@ -3,16 +3,16 @@
 ################################################################################
 
 REGLOOKUP=$(BUILD_BIN)/reglookup
-LIBS=$(wildcard ../lib/*.o)
+OBJ=$(wildcard ../lib/*.o)
 FILES=$(REGLOOKUP)
 
 all: $(FILES)
 
-$(REGLOOKUP): reglookup.o $(LIBS)
-	$(CC) $(CFLAGS) $(OPTS) -o $@ reglookup.o $(LIBS)
+$(REGLOOKUP): reglookup.o $(OBJ)
+	$(CC) $(CFLAGS) $(OPTS) $(LIB) -o $@ reglookup.o $(OBJ)
 
 reglookup.o: reglookup.c
-	$(CC) $(CFLAGS) $(OPTS) -c -o $@ reglookup.c
+	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ reglookup.c
 
 install:
 	cp -r $(FILES) $(BIN_PREFIX)
