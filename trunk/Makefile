@@ -16,7 +16,7 @@ LIB=-L/usr/local/lib
 
 UNAME := $(shell uname)
 ifeq ($(UNAME),FreeBSD) 	
-  LIB=$(LIB) -liconv
+  LIB:=$(LIB) -liconv
 endif
 
 BUILD=$(CURDIR)/build
