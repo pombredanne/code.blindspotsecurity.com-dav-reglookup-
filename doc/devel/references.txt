@@ -7,4 +7,11 @@
   hives:
   http://www.microsoft.com/technet/archive/winntas/tips/winntmag/inreg.mspx
 
-- 
+- Misc references for windows registry permissions and ownership:
+  http://msdn2.microsoft.com/en-gb/library/ms724878.aspx
+  http://technet2.microsoft.com/WindowsServer/en/library/86cf2457-4f17-43f8-a2ab-7f4e2e5659091033.mspx?mfr=true
+  http://msdn2.microsoft.com/en-gb/library/aa374892.aspx
+
+- ACL/ACE flags information
+  http://support.microsoft.com/kb/220167
+  http://msdn2.microsoft.com/en-us/library/aa772242.aspx

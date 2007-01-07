@@ -84,63 +84,142 @@ const char* regfio_ace_type2str(uint8 type)
 }
 
 
-/* XXX: this could probably be more efficient */
+/* XXX: need a better reference on the meaning of each flag. */
+/* For more info, see:
+ *   http://msdn2.microsoft.com/en-us/library/aa772242.aspx
+ */
 char* regfio_ace_flags2str(uint8 flags)
 {
-  char* flg_output = malloc(21*sizeof(char));
-  int some = 0;
+  static const char* flag_map[32] = 
+    { "OI",
+      "CI",
+      "NP",
+      "IO",
+      "IA",
+      NULL,
+      NULL,
+      NULL,
+    };
 
-  if(flg_output == NULL)
+  char* ret_val = malloc(35*sizeof(char));
+  char* fo = ret_val;
+  uint32 i;
+  uint8 f;
+
+  if(ret_val == NULL)
     return NULL;
 
-  flg_output[0] = '\0';
+  fo[0] = '\0';
   if (!flags)
-    return flg_output;
+    return ret_val;
 
-  if (flags & 0x01) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "OI");
+  for(i=0; i < 8; i++)
+  {
+    f = (1<<i);
+    if((flags & f) && (flag_map[i] != NULL))
+    {
+      strcpy(fo, flag_map[i]);
+      fo += strlen(flag_map[i]);
+      *(fo++) = ' ';
+      flags ^= f;
+    }
   }
-  if (flags & 0x02) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "CI");
-  }
-  if (flags & 0x04) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "NP");
-  }
-  if (flags & 0x08) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "IO");
-  }
-  if (flags & 0x10) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "IA");
-  }
-  /* XXX: Is this check right?  0xF == 1|2|4|8, which makes it redundant... */
+  
+  /* Any remaining unknown flags are added at the end in hex. */
+  if(flags != 0)
+    sprintf(fo, "0x%.2X ", flags);
+
+  /* Chop off the last space if we've written anything to ret_val */
+  if(fo != ret_val)
+    fo[-1] = '\0';
+
+  /* XXX: what was this old VI flag for??
+     XXX: Is this check right?  0xF == 1|2|4|8, which makes it redundant...
   if (flags == 0xF) {
     if (some) strcat(flg_output, " ");
     some = 1;
     strcat(flg_output, "VI");
   }
+  */
 
-  return flg_output;
+  return ret_val;
 }
 
 
 char* regfio_ace_perms2str(uint32 perms)
 {
-  char* ret_val = malloc(9*sizeof(char));
+  uint32 i, p;
+  /* This is more than is needed by a fair margin. */
+  char* ret_val = malloc(350*sizeof(char));
+  char* r = ret_val;
+
+  /* Each represents one of 32 permissions bits.  NULL is for undefined/reserved bits.
+   * For more information, see:
+   *   http://msdn2.microsoft.com/en-gb/library/aa374892.aspx
+   *   http://msdn2.microsoft.com/en-gb/library/ms724878.aspx
+   */
+  static const char* perm_map[32] = 
+    {/* object-specific permissions (registry keys, in this case) */
+      "QRY_VAL",       /* KEY_QUERY_VALUE */
+      "SET_VAL",       /* KEY_SET_VALUE */
+      "CREATE_KEY",    /* KEY_CREATE_SUB_KEY */
+      "ENUM_KEYS",     /* KEY_ENUMERATE_SUB_KEYS */
+      "NOTIFY",        /* KEY_NOTIFY */
+      "CREATE_LNK",    /* KEY_CREATE_LINK - Reserved for system use. */
+      NULL,
+      NULL,
+      "WOW64_64",      /* KEY_WOW64_64KEY */
+      "WOW64_32",      /* KEY_WOW64_32KEY */
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      NULL,
+      /* standard access rights */
+      "DELETE",        /* DELETE */
+      "R_CONT",        /* READ_CONTROL */
+      "W_DAC",         /* WRITE_DAC */
+      "W_OWNER",       /* WRITE_OWNER */
+      "SYNC",          /* SYNCHRONIZE - Shouldn't be set in registries */
+      NULL,
+      NULL,
+      NULL,
+      /* other generic */
+      "SYS_SEC",       /* ACCESS_SYSTEM_SECURITY */
+      "MAX_ALLWD",     /* MAXIMUM_ALLOWED */
+      NULL,
+      NULL,
+      "GEN_A",         /* GENERIC_ALL */
+      "GEN_X",         /* GENERIC_EXECUTE */
+      "GEN_W",         /* GENERIC_WRITE */
+      "GEN_R",         /* GENERIC_READ */
+    };
+
+
   if(ret_val == NULL)
     return NULL;
 
-  /* XXX: this should probably be parsed better */
-  sprintf(ret_val, "%.8X", perms);
+  r[0] = '\0';
+  for(i=0; i < 32; i++)
+  {
+    p = (1<<i);
+    if((perms & p) && (perm_map[i] != NULL))
+    {
+      strcpy(r, perm_map[i]);
+      r += strlen(perm_map[i]);
+      *(r++) = ' ';
+      perms ^= p;
+    }
+  }
+  
+  /* Any remaining unknown permission bits are added at the end in hex. */
+  if(perms != 0)
+    sprintf(r, "0x%.8X ", perms);
+
+  /* Chop off the last space if we've written anything to ret_val */
+  if(r != ret_val)
+    r[-1] = '\0';
 
   return ret_val;
 }
