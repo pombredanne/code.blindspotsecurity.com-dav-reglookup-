@@ -1084,6 +1084,7 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
   /* data_size must be divisible by 8 and large enough to hold the original record */
 
   data_size = ((start_off - end_off ) & 0xfffffff8 );
+  /* XXX: should probably print a warning here */
   /*if ( data_size !=  vk->rec_size )
     DEBUG(10,("prs_vk_rec: data_size check failed (0x%x < 0x%x)\n", data_size, vk->rec_size));*/
 
