@@ -178,7 +178,7 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
  * is the responsibility of the caller to free both a non-NULL return
  * value, and a non-NULL (*error_msg).
  */
-static char* data_to_ascii(unsigned char *datap, int len, int type, 
+static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type, 
 			   char** error_msg)
 {
   char* asciip;
@@ -188,10 +188,10 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
   char* cur_quoted;
   char* tmp_err;
   const char* str_type;
-  unsigned int i;
-  unsigned int cur_str_len;
-  unsigned int ascii_max, cur_str_max;
-  unsigned int str_rem, cur_str_rem, alen;
+  uint32 i;
+  uint32 cur_str_len;
+  uint32 ascii_max, cur_str_max;
+  uint32 str_rem, cur_str_rem, alen;
   int ret_err;
   unsigned short num_nulls;
 
@@ -364,6 +364,9 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
     break;
 
   /* XXX: Dont know what to do with these yet, just print as binary... */
+  default:
+    fprintf(stderr, "WARNING: Unrecognized registry data type (0x%.8X); quoting as binary.\n", type);
+    
   case REG_NONE:
   case REG_RESOURCE_LIST:
   case REG_FULL_RESOURCE_DESCRIPTOR:
@@ -373,12 +376,6 @@ static char* data_to_ascii(unsigned char *datap, int len, int type,
     return quote_buffer(datap, len, common_special_chars);
     break;
   }
-
-
-  /* Invalid type */
-  *error_msg = (char*)malloc(33+11+1);
-  if(*error_msg != NULL)
-    sprintf(*error_msg, "Unrecognized registry data type: %d", type);
 
   return NULL;
 }
@@ -482,11 +479,12 @@ char* stack2Path(void_stack* nk_stack)
 
 void printValue(REGF_VK_REC* vk, char* prefix)
 {
-  uint32 size;
-  uint8 tmp_buf[4];
   char* quoted_value = NULL;
   char* quoted_name = NULL;
   char* conv_error = NULL;
+  const char* str_type = NULL;
+  uint32 size;
+  uint8 tmp_buf[4];
 
   /* Thanks Microsoft for making this process so straight-forward!!! */
   size = (vk->data_size & ~VK_DATA_IN_OFFSET);
@@ -497,20 +495,25 @@ void printValue(REGF_VK_REC* vk, char* prefix)
     tmp_buf[2] = (uint8)((vk->data_off >> 1) & 0xFF);
     tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
     if(size > 4)
+      /* XXX: should we kick out a warning here?  If it is in the 
+       *      offset and longer than four, file could be corrupt 
+       *      or malicious... */
       size = 4;
     quoted_value = data_to_ascii(tmp_buf, 4, vk->type, &conv_error);
   }
   else
   {
-    /* XXX: This is a safety hack.  No data fields have yet been found
-     * larger, but length limits are probably better got from fields
-     * in the registry itself, within reason.
+    /* Microsoft's documentation indicates that "available memory" is 
+     * the limit on value sizes.  Annoying.  We limit it to 1M which 
+     * should rarely be exceeded, unless the file is corrupt or 
+     * malicious. For more info, see:
+     *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
      */
-    if(size > 16384)
+    if(size > VK_MAX_DATA_LENGTH)
     {
-      fprintf(stderr, "WARNING: key size %d larger than "
-	      "16384, truncating...\n", size);
-      size = 16384;
+      fprintf(stderr, "WARNING: value data size %d larger than "
+	      "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
+      size = VK_MAX_DATA_LENGTH;
     }
 
     quoted_value = data_to_ascii(vk->data, vk->data_size, 
@@ -537,13 +540,26 @@ void printValue(REGF_VK_REC* vk, char* prefix)
       fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
 	      "warning returned: %s\n", prefix, quoted_name, conv_error);
 
+  str_type = regfio_type_val2str(vk->type);
   if(print_security)
-    printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
-	   regfio_type_val2str(vk->type), quoted_value);
+  {
+    if(str_type == NULL)
+      printf("%s/%s,0x%.8X,%s,,,,,\n", prefix, quoted_name,
+	     vk->type, quoted_value);
+    else
+      printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
+	     str_type, quoted_value);
+  }
   else
-    printf("%s/%s,%s,%s,\n", prefix, quoted_name,
-	   regfio_type_val2str(vk->type), quoted_value);
-  
+  {
+    if(str_type == NULL)
+      printf("%s/%s,0x%.8X,%s,\n", prefix, quoted_name,
+	     vk->type, quoted_value);
+    else
+      printf("%s/%s,%s,%s,\n", prefix, quoted_name,
+	     str_type, quoted_value);
+  }
+
   if(quoted_value != NULL)
     free(quoted_value);
   if(quoted_name != NULL)

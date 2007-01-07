@@ -85,6 +85,7 @@
 
 #define VK_FLAG_NAME_PRESENT	0x0001
 #define VK_DATA_IN_OFFSET	0x80000000
+#define VK_MAX_DATA_LENGTH      1024*1024
 
 /* NK record macros */
 
