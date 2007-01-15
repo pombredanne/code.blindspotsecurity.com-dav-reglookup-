@@ -28,35 +28,35 @@
 
 
 /* Registry types mapping */
-const unsigned int regfio_num_reg_types = 12;
-static const char* regfio_type_names[] =
+const unsigned int regfi_num_reg_types = 12;
+static const char* regfi_type_names[] =
   {"NONE", "SZ", "EXPAND_SZ", "BINARY", "DWORD", "DWORD_BE", "LINK",
    "MULTI_SZ", "RSRC_LIST", "RSRC_DESC", "RSRC_REQ_LIST", "QWORD"};
 
 
 /* Returns NULL on error */
-const char* regfio_type_val2str(unsigned int val)
+const char* regfi_type_val2str(unsigned int val)
 {
   if(val == REG_KEY)
     return "KEY";
   
-  if(val >= regfio_num_reg_types)
+  if(val >= regfi_num_reg_types)
     return NULL;
   
-  return regfio_type_names[val];
+  return regfi_type_names[val];
 }
 
 
 /* Returns -1 on error */
-int regfio_type_str2val(const char* str)
+int regfi_type_str2val(const char* str)
 {
   int i;
 
   if(strcmp("KEY", str) == 0)
     return REG_KEY;
 
-  for(i=0; i < regfio_num_reg_types; i++)
-    if (strcmp(regfio_type_names[i], str) == 0) 
+  for(i=0; i < regfi_num_reg_types; i++)
+    if (strcmp(regfi_type_names[i], str) == 0) 
       return i;
 
   if(strcmp("DWORD_LE", str) == 0)
@@ -68,7 +68,7 @@ int regfio_type_str2val(const char* str)
 
 /* Security descriptor parsing functions  */
 
-const char* regfio_ace_type2str(uint8 type)
+const char* regfi_ace_type2str(uint8 type)
 {
   static const char* map[7] 
     = {"ALLOW", "DENY", "AUDIT", "ALARM", 
@@ -88,7 +88,7 @@ const char* regfio_ace_type2str(uint8 type)
 /* For more info, see:
  *   http://msdn2.microsoft.com/en-us/library/aa772242.aspx
  */
-char* regfio_ace_flags2str(uint8 flags)
+char* regfi_ace_flags2str(uint8 flags)
 {
   static const char* flag_map[32] = 
     { "OI",
@@ -146,7 +146,7 @@ char* regfio_ace_flags2str(uint8 flags)
 }
 
 
-char* regfio_ace_perms2str(uint32 perms)
+char* regfi_ace_perms2str(uint32 perms)
 {
   uint32 i, p;
   /* This is more than is needed by a fair margin. */
@@ -225,7 +225,7 @@ char* regfio_ace_perms2str(uint32 perms)
 }
 
 
-char* regfio_sid2str(DOM_SID* sid)
+char* regfi_sid2str(DOM_SID* sid)
 {
   uint32 i, size = MAXSUBAUTHS*11 + 24;
   uint32 left = size;
@@ -247,7 +247,7 @@ char* regfio_sid2str(DOM_SID* sid)
 }
 
 
-char* regfio_get_acl(SEC_ACL* acl)
+char* regfi_get_acl(SEC_ACL* acl)
 {
   uint32 i, extra, size = 0;
   const char* type_str;
@@ -262,10 +262,10 @@ char* regfio_get_acl(SEC_ACL* acl)
 
   for (i = 0; i < acl->num_aces && !failed; i++)
   {
-    sid_str = regfio_sid2str(&acl->ace[i].trustee);
-    type_str = regfio_ace_type2str(acl->ace[i].type);
-    perms_str = regfio_ace_perms2str(acl->ace[i].info.mask);
-    flags_str = regfio_ace_flags2str(acl->ace[i].flags);
+    sid_str = regfi_sid2str(&acl->ace[i].trustee);
+    type_str = regfi_ace_type2str(acl->ace[i].type);
+    perms_str = regfi_ace_perms2str(acl->ace[i].info.mask);
+    flags_str = regfi_ace_flags2str(acl->ace[i].flags);
     
     if(flags_str != NULL && perms_str != NULL 
        && type_str != NULL && sid_str != NULL)
@@ -306,33 +306,33 @@ char* regfio_get_acl(SEC_ACL* acl)
 }
 
 
-char* regfio_get_sacl(SEC_DESC *sec_desc)
+char* regfi_get_sacl(SEC_DESC *sec_desc)
 {
   if (sec_desc->sacl)
-    return regfio_get_acl(sec_desc->sacl);
+    return regfi_get_acl(sec_desc->sacl);
   else
     return NULL;
 }
 
 
-char* regfio_get_dacl(SEC_DESC *sec_desc)
+char* regfi_get_dacl(SEC_DESC *sec_desc)
 {
   if (sec_desc->dacl)
-    return regfio_get_acl(sec_desc->dacl);
+    return regfi_get_acl(sec_desc->dacl);
   else
     return NULL;
 }
 
 
-char* regfio_get_owner(SEC_DESC *sec_desc)
+char* regfi_get_owner(SEC_DESC *sec_desc)
 {
-  return regfio_sid2str(sec_desc->owner_sid);
+  return regfi_sid2str(sec_desc->owner_sid);
 }
 
 
-char* regfio_get_group(SEC_DESC *sec_desc)
+char* regfi_get_group(SEC_DESC *sec_desc)
 {
-  return regfio_sid2str(sec_desc->grp_sid);
+  return regfi_sid2str(sec_desc->grp_sid);
 }
 
 
@@ -1367,7 +1367,7 @@ static bool next_nk_record(REGF_FILE *file, REGF_HBIN *hbin,
  Open the registry file and then read in the REGF block to get the 
  first hbin offset.
 *******************************************************************/
-REGF_FILE* regfio_open( const char *filename )
+REGF_FILE* regfi_open( const char *filename )
 {
   REGF_FILE *rb;
   int flags = O_RDONLY;
@@ -1381,7 +1381,7 @@ REGF_FILE* regfio_open( const char *filename )
 	
   /*	if ( !(rb->mem_ctx = talloc_init( "read_regf_block" )) ) 
     {
-    regfio_close( rb );
+    regfi_close( rb );
     return NULL;
     }
   */
@@ -1390,16 +1390,16 @@ REGF_FILE* regfio_open( const char *filename )
   /* open and existing file */
 
   if ( (rb->fd = open(filename, flags)) == -1 ) {
-    /* DEBUG(0,("regfio_open: failure to open %s (%s)\n", filename, strerror(errno)));*/
-    regfio_close( rb );
+    /* DEBUG(0,("regfi_open: failure to open %s (%s)\n", filename, strerror(errno)));*/
+    regfi_close( rb );
     return NULL;
   }
 	
   /* read in an existing file */
 	
   if ( !read_regf_block( rb ) ) {
-    /* DEBUG(0,("regfio_open: Failed to read initial REGF block\n"));*/
-    regfio_close( rb );
+    /* DEBUG(0,("regfi_open: Failed to read initial REGF block\n"));*/
+    regfi_close( rb );
     return NULL;
   }
 	
@@ -1411,7 +1411,7 @@ REGF_FILE* regfio_open( const char *filename )
 
 /*******************************************************************
  *******************************************************************/
-static void regfio_mem_free( REGF_FILE *file )
+static void regfi_mem_free( REGF_FILE *file )
 {
   /* free any zalloc()'d memory */
 	
@@ -1423,11 +1423,11 @@ static void regfio_mem_free( REGF_FILE *file )
 
 /*******************************************************************
  *******************************************************************/
-int regfio_close( REGF_FILE *file )
+int regfi_close( REGF_FILE *file )
 {
   int fd;
 
-  regfio_mem_free( file );
+  regfi_mem_free( file );
 
   /* nothing to do if there is no open file */
 
@@ -1446,7 +1446,7 @@ int regfio_close( REGF_FILE *file )
  There should be only *one* root key in the registry file based 
  on my experience.  --jerry
 *******************************************************************/
-REGF_NK_REC* regfio_rootkey( REGF_FILE *file )
+REGF_NK_REC* regfi_rootkey( REGF_FILE *file )
 {
   REGF_NK_REC *nk;
   REGF_HBIN   *hbin;
@@ -1458,7 +1458,7 @@ REGF_NK_REC* regfio_rootkey( REGF_FILE *file )
     return NULL;
 		
   if ( !(nk = (REGF_NK_REC*)zalloc(sizeof(REGF_NK_REC) )) ) {
-    /*DEBUG(0,("regfio_rootkey: zalloc() failed!\n"));*/
+    /*DEBUG(0,("regfi_rootkey: zalloc() failed!\n"));*/
     return NULL;
   }
 	
@@ -1491,7 +1491,7 @@ REGF_NK_REC* regfio_rootkey( REGF_FILE *file )
   }
 	
   if ( !found ) {
-    /*DEBUG(0,("regfio_rootkey: corrupt registry file ?  No root key record located\n"));*/
+    /*DEBUG(0,("regfi_rootkey: corrupt registry file ?  No root key record located\n"));*/
     return NULL;
   }
 
@@ -1509,7 +1509,7 @@ REGF_NK_REC* regfio_rootkey( REGF_FILE *file )
  This acts as an interator over the subkeys defined for a given 
  NK record.  Remember that offsets are from the *first* HBIN block.
 *******************************************************************/
-REGF_NK_REC* regfio_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk )
+REGF_NK_REC* regfi_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk )
 {
   REGF_NK_REC *subkey;
   REGF_HBIN   *hbin;
@@ -1528,7 +1528,7 @@ REGF_NK_REC* regfio_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk )
       nk->subkeys.hashes[nk->subkey_index].nk_off));*/
     return NULL;
   }
-	
+  
   nk_offset = nk->subkeys.hashes[nk->subkey_index].nk_off;
   if(!prs_set_offset(&hbin->ps, 
 		     (HBIN_HDR_SIZE + nk_offset - hbin->first_hbin_off)))

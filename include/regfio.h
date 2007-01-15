@@ -30,8 +30,8 @@
  * Thanks Nigel!
  ***********************************************************/
 
-#ifndef _REGFIO_H
-#define _REGFIO_H
+#ifndef _REGFI_H
+#define _REGFI_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -46,6 +46,7 @@
 #include <assert.h>
 
 #include "smb_deps.h"
+#include "void_stack.h"
 
 /******************************************************************************/
 /* Macros */
@@ -71,6 +72,7 @@
 
 #define REGF_BLOCKSIZE		0x1000
 #define REGF_ALLOC_BLOCK	0x1000
+#define REGF_MAX_DEPTH		512
 
 /* header sizes for various records */
 
@@ -187,7 +189,7 @@ typedef struct {
 			 * this nk record 
 			 */
   uint32 hbin_off;	/* offset from beginning of this hbin block */
-  uint32 subkey_index;	/* index to next subkey record to return */
+  /*uint32 subkey_index;*/	/* index to next subkey record to return */
   uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
   
   /* header information */
@@ -245,7 +247,7 @@ typedef struct {
 				 * by NK records 
 				 */
   
-  /* unknowns used to simply writing */
+  /* unknowns */
   uint32 unknown1;
   uint32 unknown2;
   uint32 unknown3;
@@ -255,21 +257,37 @@ typedef struct {
 } REGF_FILE;
 
 
+
+typedef struct {
+  REGF_FILE* f;
+  void_stack* keys;
+  uint32 cur_subkey;
+  uint32 cur_value;
+} REGFI_ITERATOR;
+
 /******************************************************************************/
 /* Function Declarations */
 
-const char*   regfio_type_val2str(unsigned int val);
-int           regfio_type_str2val(const char* str);
+const char*   regfi_type_val2str(unsigned int val);
+int           regfi_type_str2val(const char* str);
 
-char*         regfio_get_sacl(SEC_DESC *sec_desc);
-char*         regfio_get_dacl(SEC_DESC *sec_desc);
-char*         regfio_get_owner(SEC_DESC *sec_desc);
-char*         regfio_get_group(SEC_DESC *sec_desc);
+char*         regfi_get_sacl(SEC_DESC *sec_desc);
+char*         regfi_get_dacl(SEC_DESC *sec_desc);
+char*         regfi_get_owner(SEC_DESC *sec_desc);
+char*         regfi_get_group(SEC_DESC *sec_desc);
 
-REGF_FILE*    regfio_open( const char *filename );
-int           regfio_close( REGF_FILE *r );
+REGF_FILE*    regfi_open( const char *filename );
+int           regfi_close( REGF_FILE *r );
 
-REGF_NK_REC*  regfio_rootkey( REGF_FILE *file );
-REGF_NK_REC*  regfio_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk );
+REGF_NK_REC*  regfi_rootkey( REGF_FILE *file );
+/* REGF_NK_REC*  regfi_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk ); */
 
-#endif	/* _REGFIO_H */
+REGFI_ITERATOR* regfi_iterator_create(REGF_FILE* fh);
+bool            regfi_iterator_down(REGFI_ITERATOR* i, const char* subkey_name);
+bool            regfi_iterator_up(REGFI_ITERATOR* i);
+REGF_NK_REC*    regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
+REGF_VK_REC*    regfi_iterator_fetch_value(REGFI_ITERATOR* i, const char* value_name);
+char*           regfi_iterator_curpath(REGFI_ITERATOR* i);
+
+#endif	/* _REGFI_H */
