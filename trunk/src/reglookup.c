@@ -215,7 +215,7 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
     if(ret_err < 0)
     {
       tmp_err = strerror(-ret_err);
-      str_type = regfio_type_val2str(type);
+      str_type = regfi_type_val2str(type);
       *error_msg = (char*)malloc(65+strlen(str_type)+strlen(tmp_err)+1);
       if(*error_msg == NULL)
       {
@@ -384,7 +384,7 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
 void_stack* path2Stack(const char* s)
 {
   void_stack* ret_val;
-  void_stack* rev_ret = void_stack_new(1024);
+  void_stack* rev_ret = void_stack_new(REGF_MAX_DEPTH);
   const char* cur = s;
   char* next = NULL;
   char* copy;
@@ -404,14 +404,16 @@ void_stack* path2Stack(const char* s)
 	  
       memcpy(copy, cur, next-cur);
       copy[next-cur] = '\0';
-      void_stack_push(rev_ret, copy);
+      if(!void_stack_push(rev_ret, copy))
+	bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
     }
     cur = next+1;
   }
   if(strlen(cur) > 0)
   {
     copy = strdup(cur);
-    void_stack_push(rev_ret, copy);
+    if(!void_stack_push(rev_ret, copy))
+      bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
   }
 
   ret_val = void_stack_copy_reverse(rev_ret);
@@ -540,7 +542,7 @@ void printValue(REGF_VK_REC* vk, char* prefix)
       fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
 	      "warning returned: %s\n", prefix, quoted_name, conv_error);
 
-  str_type = regfio_type_val2str(vk->type);
+  str_type = regfi_type_val2str(vk->type);
   if(print_security)
   {
     if(str_type == NULL)
@@ -596,10 +598,10 @@ void printKey(REGF_NK_REC* k, char* full_path)
 
   if(print_security)
   {
-    owner = regfio_get_owner(k->sec_desc->sec_desc);
-    group = regfio_get_group(k->sec_desc->sec_desc);
-    sacl = regfio_get_sacl(k->sec_desc->sec_desc);
-    dacl = regfio_get_dacl(k->sec_desc->sec_desc);
+    owner = regfi_get_owner(k->sec_desc->sec_desc);
+    group = regfi_get_group(k->sec_desc->sec_desc);
+    sacl = regfi_get_sacl(k->sec_desc->sec_desc);
+    dacl = regfi_get_dacl(k->sec_desc->sec_desc);
     if(owner == NULL)
       owner = empty_str;
     if(group == NULL)
@@ -635,7 +637,7 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
   uint32 val_path_len = 0;
   uint32 path_len = 0;
   uint32 prefix_len = strlen(prefix);
-  int key_type = regfio_type_str2val("KEY");
+  int key_type = regfi_type_str2val("KEY");
   
   if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
   {
@@ -671,7 +673,7 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
     
     while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
     {
-      if((sub = regfio_fetch_subkey(f, cur)) == NULL)
+      if((sub = regfi_fetch_subkey(f, cur)) == NULL)
       {
 	sub = void_stack_pop(nk_stack);
 	/* XXX: This is just a shallow free.  Need to write deep free
@@ -683,7 +685,8 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
       else
       {
 	sub->subkey_index = 0;
-	void_stack_push(nk_stack, sub);
+	if(!void_stack_push(nk_stack, sub))
+	  bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
 	path = stack2Path(nk_stack);
 	if(path != NULL)
 	{
@@ -752,12 +755,14 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
 
     found_cur = false;
     while(!found_cur &&
-	  (sub = regfio_fetch_subkey(f, cur)) != NULL)
+	  (sub = regfi_fetch_subkey(f, cur)) != NULL)
     {
       if(strcasecmp(sub->keyname, cur_str) == 0)
       {
 	cur = sub;
-	void_stack_push(nk_stack, sub);
+	if(!void_stack_push(nk_stack, sub))
+	  bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
+
 	found_cur = true;
       }
     }
@@ -801,12 +806,13 @@ int retrievePath(REGF_FILE* f, void_stack* nk_stack,
     fprintf(stderr, "VERBOSE: Searching keys for last component"
 	            " of specified path.\n");
 
-  while((sub = regfio_fetch_subkey(f, cur)) != NULL)
+  while((sub = regfi_fetch_subkey(f, cur)) != NULL)
   {
     if(strcasecmp(sub->keyname, cur_str) == 0)
     {
-      sub_nk_stack = void_stack_new(1024);
-      void_stack_push(sub_nk_stack, sub);
+      sub_nk_stack = void_stack_new(REGF_MAX_DEPTH);
+      if(!void_stack_push(sub_nk_stack, sub))
+	bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
       prefix = stack2Path(nk_stack);
       prefix_len = strlen(prefix);
       prefix = realloc(prefix, prefix_len+strlen(sub->keyname)+2);
@@ -889,7 +895,7 @@ int main(int argc, char** argv)
 	usage();
 	bailOut(1, "ERROR: '-t' option requires parameter.\n");
       }
-      if((type_filter = regfio_type_str2val(argv[argi])) < 0)
+      if((type_filter = regfi_type_str2val(argv[argi])) < 0)
       {
 	fprintf(stderr, "ERROR: Invalid type specified: %s.\n", argv[argi]);
 	bailOut(1, "");
@@ -916,15 +922,15 @@ int main(int argc, char** argv)
   if((registry_file = strdup(argv[argi])) == NULL)
     bailOut(2, "ERROR: Memory allocation problem.\n");
 
-  f = regfio_open(registry_file);
+  f = regfi_open(registry_file);
   if(f == NULL)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
     bailOut(3, "");
   }
 
-  root = regfio_rootkey(f);
-  nk_stack = void_stack_new(1024);
+  root = regfi_rootkey(f);
+  nk_stack = void_stack_new(REGF_MAX_DEPTH);
 
   if(void_stack_push(nk_stack, root))
   {
@@ -949,10 +955,10 @@ int main(int argc, char** argv)
     }
   }
   else
-    bailOut(2, "ERROR: Memory allocation problem.\n");
+    bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
 
   void_stack_destroy_deep(nk_stack);
-  regfio_close(f);
+  regfi_close(f);
 
   return 0;
 }
