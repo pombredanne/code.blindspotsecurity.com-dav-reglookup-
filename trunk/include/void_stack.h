@@ -21,6 +21,9 @@
 #include <stdbool.h>
 #include <string.h>
 
+#define _VOID_STACK_H
+#ifndef _VOID_STACK_H
+
 typedef struct _void_stack
 {
   void** elements;
@@ -47,3 +50,5 @@ const void* void_stack_cur(void_stack* stack);
 void_stack_iterator* void_stack_iterator_new(void_stack* stack);
 void void_stack_iterator_destroy(void_stack_iterator* iter);
 const void* void_stack_iterator_next(void_stack_iterator* iter);
+
+#endif
