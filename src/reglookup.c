@@ -28,7 +28,7 @@
 #include <strings.h>
 #include <time.h>
 #include <iconv.h>
-#include "../include/regfio.h"
+#include "../include/regfi.h"
 #include "../include/void_stack.h"
 
 /* Globals, influenced by command line parameters */
