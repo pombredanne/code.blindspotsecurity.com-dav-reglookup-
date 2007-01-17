@@ -757,6 +757,14 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     fprintf(stderr, "VERBOSE: Attempting to retrieve specified path: %s\n",
 	    path_filter);
 
+  /* Special check for '/' path filter */
+  if(path[0] == NULL)
+  {
+    if(print_verbose)
+      fprintf(stderr, "VERBOSE: Found final path element as root key.\n");
+    return 2;
+  }
+
   if(!regfi_iterator_walk_path(iter, tmp_path))
   {
     free(tmp_path);
@@ -784,6 +792,10 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   {
     if(print_verbose)
       fprintf(stderr, "VERBOSE: Found final path element as key.\n");
+
+    if(!regfi_iterator_down(iter))
+      bailOut(2, "ERROR: Unexpected error on traversing path filter key.\n");
+
     return 2;
   }
 
