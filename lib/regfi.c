@@ -600,6 +600,7 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps,
 		
   if ( class_length ) 
   {
+    /* XXX: why isn't this parsed? */
     ;;
   }
 	
@@ -832,6 +833,7 @@ static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
   }
 
   if ( hbin )
+    /* XXX: this kind of caching needs to be re-evaluated */
     DLIST_ADD( file->block_list, hbin );
 
   return hbin;
@@ -1106,18 +1108,18 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
   uint32 record_size;
 
   depth++;
-	
+  
   /* check if we have anything to do first */
   if(nk->num_values == 0)
     return true;
-		
+  	
   if(hbin->ps.io)
   {
     if (!(nk->values = (REGF_VK_REC*)zcalloc(sizeof(REGF_VK_REC), 
 					      nk->num_values )))
       return false;
   }
-	
+  
   /* convert the offset to something relative to this HBIN block */
   if (!prs_set_offset(&hbin->ps, 
 		      nk->values_off
@@ -1134,7 +1136,7 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
 
   if ( !prs_uint32( "record_size", &hbin->ps, depth, &record_size ) )
     return false;
-		
+  	
   for ( i=0; i<nk->num_values; i++ ) 
   {
     if ( !prs_uint32( "vk_off", &hbin->ps, depth, &nk->values[i].rec_off ) )
@@ -1156,7 +1158,7 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
 	return false;
       }
     }
-		
+  	
     new_offset = nk->values[i].rec_off 
       + HBIN_HDR_SIZE 
       - sub_hbin->first_hbin_off;
@@ -1179,12 +1181,12 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
 static REGF_SK_REC* find_sk_record_by_offset( REGF_FILE *file, uint32 offset )
 {
   REGF_SK_REC *p_sk;
-	
+  
   for ( p_sk=file->sec_desc_list; p_sk; p_sk=p_sk->next ) {
     if ( p_sk->sk_off == offset ) 
       return p_sk;
   }
-	
+  
   return NULL;
 }
 
@@ -1212,7 +1214,7 @@ static bool hbin_prs_key( REGF_FILE *file, REGF_HBIN *hbin, REGF_NK_REC *nk )
 {
   int depth = 0;
   REGF_HBIN *sub_hbin;
-	
+  
   depth++;
 
   /* get the initial nk record */
@@ -1282,6 +1284,7 @@ static bool hbin_prs_key( REGF_FILE *file, REGF_HBIN *hbin, REGF_NK_REC *nk )
     /* add to the list of security descriptors (ref_count has been read from the files) */
 
     nk->sec_desc->sk_off = nk->sk_off;
+    /* XXX: this kind of caching needs to be re-evaluated */
     DLIST_ADD( file->sec_desc_list, nk->sec_desc );
   }
 		
@@ -1410,6 +1413,7 @@ REGF_FILE* regfi_open( const char *filename )
 
 
 /*******************************************************************
+XXX: should this be nuked?
  *******************************************************************/
 static void regfi_mem_free( REGF_FILE *file )
 {
@@ -1442,10 +1446,10 @@ int regfi_close( REGF_FILE *file )
 }
 
 
-/*******************************************************************
- There should be only *one* root key in the registry file based 
- on my experience.  --jerry
-*******************************************************************/
+/******************************************************************************
+ * There should be only *one* root key in the registry file based 
+ * on my experience.  --jerry
+ *****************************************************************************/
 REGF_NK_REC* regfi_rootkey( REGF_FILE *file )
 {
   REGF_NK_REC *nk;
@@ -1495,51 +1499,368 @@ REGF_NK_REC* regfi_rootkey( REGF_FILE *file )
     return NULL;
   }
 
+  /* XXX: this kind of caching needs to be re-evaluated */
   DLIST_ADD( file->block_list, hbin );
 
-  return nk;		
+  return nk;
 }
 
 
-/* XXX: An interator struct should be used instead, and this function
- *   should operate on it, so the state of iteration isn't stored in the
- * REGF_NK_REC struct itself.
- */
-/*******************************************************************
- This acts as an interator over the subkeys defined for a given 
- NK record.  Remember that offsets are from the *first* HBIN block.
-*******************************************************************/
-REGF_NK_REC* regfi_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk )
+/******************************************************************************
+ *****************************************************************************/
+void regfi_key_free(REGF_NK_REC* nk)
 {
-  REGF_NK_REC *subkey;
-  REGF_HBIN   *hbin;
-  uint32      nk_offset;
+  uint32 i;
+  
+  if((nk->values != NULL) && (nk->values_off!=REGF_OFFSET_NONE))
+  {
+    for(i=0; i < nk->num_values; i++)
+      regfi_value_free(nk->values[i]);
+    free(nk->values);
+  }
 
-  /* see if there is anything left to report */
-  if (!nk || (nk->subkeys_off==REGF_OFFSET_NONE) 
-      || (nk->subkey_index >= nk->num_subkeys))
+  if(nk->keyname != NULL)
+    free(nk->keyname);
+  if(nk->classname != NULL)
+    free(nk->classname);
+
+  /* XXX: not freeing hbin because these are cached.  This needs to be reviewed. */
+  /* XXX: not freeing sec_desc because these are cached.  This needs to be reviewed. */
+  free(nk);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+void regfi_value_free(REGF_VK_REC* vk)
+{
+  if(vk->valuename != NULL)
+    free(vk->valuename);
+  if(vk->data != NULL)
+    free(vk->data);  
+  
+  /* XXX: not freeing hbin because these are cached.  This needs to be reviewed. */
+  free(vk);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh)
+{
+  REGF_NK_REC* root;
+  REGFI_ITERATOR* ret_val = (REGFI_ITERATOR*)malloc(sizeof(REGFI_ITERATOR));
+  if(ret_val == NULL)
     return NULL;
 
-  /* find the HBIN block which should contain the nk record */
-  if(!(hbin 
-       = lookup_hbin_block(file, nk->subkeys.hashes[nk->subkey_index].nk_off )))
+  root = regfi_rootkey(f);
+  if(root == NULL)
   {
+    free(ret_val);
+    return NULL;
+  }
+
+  ret_val->key_positions = void_stack_new(REGF_MAX_DEPTH);
+  if(ret_val->key_positions == NULL)
+  {
+    free(ret_val);
+    free(root);
+    return NULL;
+  }
+
+  ret_val->f = fh;
+  ret_val->cur_key = root;
+  ret_val->cur_subkey = 0;
+  ret_val->cur_value = 0;
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+void regfi_iterator_free(REGFI_ITERATOR* i)
+{
+  REGFI_ITER_POSITION* cur;
+
+  if(i->cur_key != NULL)
+    regfi_key_free(i->cur_key);
+
+  while((cur = (REGFI_ITER_POSITION*)void_stack_pop(i->key_positions)) != NULL)
+  {
+    regfi_key_free(cur->nk);
+    free(cur);
+  }
+  
+  free(i);
+}
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+/* XXX: some way of indicating reason for failure should be added. */
+bool regfi_iterator_down(REGFI_ITERATOR* i)
+{
+  REGF_NK_REC* subkey;
+  REGFI_ITER_POSITION* pos;
+
+  pos = (REGFI_ITER_POSITION*)malloc(sizeof(REGFI_ITER_POSITION));
+  if(pos == NULL)
+    return false;
+
+  subkey = regfi_iterator_cur_subkey(i);
+  if(subkey == NULL)
+  {
+    free(pos);
+    return false;
+  }
+
+  pos->nk = i->cur_key;
+  pos->cur_subkey = i->cur_subkey;
+  if(!void_stack_push(i->key_positions, pos))
+  {
+    free(pos);
+    regfi_key_free(subkey);
+    return false;
+  }
+
+  i->cur_key = subkey;
+  i->cur_subkey = 0;
+  i->cur_value = 0;
+
+  return true;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_iterator_up(REGFI_ITERATOR* i)
+{
+  REGFI_ITER_POSITION* pos;
+
+  pos = (REGFI_ITER_POSITION*)void_stack_pop(i->key_positions);
+  if(pos == NULL)
+    return false;
+
+  regfi_key_free(i->cur_key);
+  i->cur_key = pos->nk;
+  i->cur_subkey = pos->cur_subkey;
+  i->cur_value = 0;
+  free(pos);
+
+  return true;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_iterator_to_root(REGFI_ITERATOR* i)
+{
+  while(regfi_iterator_up(i))
+    continue;
+
+  return true;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
+{
+  REGF_NK_REC* subkey;
+  bool found = false;
+  uint32 old_subkey = i->cur_subkey;
+  
+  if(subkey_name == NULL)
+    return false;
+
+  /* XXX: this alloc/free of each sub key might be a bit excessive */
+  subkey = regfi_iterator_first_subkey(i);
+  while((subkey != NULL) && (found == false))
+  {
+    if(subkey->keyname != NULL 
+       && strcasecmp(subkey->keyname, subkey_name) == 0)
+      found = true;
+
+    regfi_key_free(subkey);
+    subkey = regfi_iterator_next_subkey(i);
+  }
+
+  if(found == false)
+  {
+    i->cur_subkey = old_subkey;
+    return false;
+  }
+
+  return true;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
+{
+  uint32 x;
+  if(path == NULL)
+    return false;
+
+  for(x=0; 
+      ((path[x] != NULL) && regfi_iterator_find_subkey(i, path[x])
+       && regfi_iterator_down(i));
+      x++)
+  { continue; }
+
+  if(path[x] == NULL)
+    return true;
+  
+  /* XXX: is this the right number of times? */
+  for(; x > 0; x--)
+    regfi_iterator_up(i);
+  
+  return false;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i);
+{
+  return i->cur_key;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGF_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i)
+{
+  REGF_NK_REC* subkey;
+  REGF_HBIN* hbin;
+  
+  i->cur_subkey = 0;
+  return regfi_iterator_cur_subkey(i);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
+{
+  REGF_NK_REC* subkey;
+  REGF_HBIN* hbin;
+  uint32 nk_offset;
+
+  /* see if there is anything left to report */
+  if (!(i->cur_key) || (i->cur_key->subkeys_off==REGF_OFFSET_NONE)
+      || (i->cur_subkey >= i->cur_key->num_subkeys))
+    return NULL;
+
+  nk_offset = i->cur_key->subkeys.hashes[i->cur_subkey].nk_off;
+
+  /* find the HBIN block which should contain the nk record */
+  hbin = lookup_hbin_block(i->f, nk_offset);
+  if(!hbin)
+  {
+    /* XXX: should print out some kind of error message every time here */
     /*DEBUG(0,("hbin_prs_key: Failed to find HBIN block containing offset [0x%x]\n", 
-      nk->subkeys.hashes[nk->subkey_index].nk_off));*/
+      i->cur_key->subkeys.hashes[i->cur_subkey].nk_off));*/
     return NULL;
   }
   
-  nk_offset = nk->subkeys.hashes[nk->subkey_index].nk_off;
   if(!prs_set_offset(&hbin->ps, 
-		     (HBIN_HDR_SIZE + nk_offset - hbin->first_hbin_off)))
+		     HBIN_HDR_SIZE + nk_offset - hbin->first_hbin_off))
     return NULL;
 		
-  nk->subkey_index++;
   if(!(subkey = (REGF_NK_REC*)zalloc(sizeof(REGF_NK_REC))))
     return NULL;
 
-  if(!hbin_prs_key(file, hbin, subkey))
+  if(!hbin_prs_key(i->f, hbin, subkey))
+  {
+    regfi_key_free(subkey);
     return NULL;
+  }
 
   return subkey;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+/* XXX: some way of indicating reason for failure should be added. */
+REGF_NK_REC* regfi_iterator_next_subkey(REGFI_ITERATOR* i)
+{
+  REGF_NK_REC* subkey;
+
+  i->cur_subkey++;
+  subkey = regfi_iterator_cur_subkey(i);
+
+  if(subkey == NULL)
+    i->cur_subkey--;
+
+  return subkey;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
+{
+  REGF_VK_REC* cur;
+  bool found = false;
+
+  /* XXX: cur->valuename can be NULL in the registry.  
+   *      Should we allow for a way to search for that? 
+   */
+  if(value_name == NULL)
+    return false;
+
+  cur = regfi_iterator_first_value(i);
+  while((cur != NULL) && (found == false))
+  {
+    if((cur->valuename != NULL)
+       && (strcasecmp(cur->valuename, value_name) == 0))
+      found = true;
+    cur = retfi_iterator_next_value(i);
+  }
+
+  if(cur == NULL)
+    return false;
+  
+  return true;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGF_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i)
+{
+  i->cur_value = 0;
+  return regfi_iterator_cur_value(i);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGF_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
+{
+  REGF_VK_REC* ret_val = NULL;
+  if(i->cur_value < i->cur_key->num_values)
+    ret_val = i->cur_key->values[i];
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGF_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
+{
+  REGF_VK_REC* ret_val;
+
+  i->cur_value++;
+  ret_val = regfi_iterator_cur_value(i);
+  if(ret_val == NULL)
+    i->cur_value--;
+
+  return ret_val;
 }
