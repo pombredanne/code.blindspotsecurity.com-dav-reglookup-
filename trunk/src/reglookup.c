@@ -381,6 +381,10 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
 }
 
 
+/* XXX: Each chunk must be unquoted after it is split out. 
+ *      Quoting syntax may need to be standardized and pushed into the API 
+ *      to deal with this issue and others.
+ */
 char** splitPath(const char* s)
 {
   char** ret_val;
@@ -429,6 +433,20 @@ char** splitPath(const char* s)
   }
 
   return ret_val;
+}
+
+
+void freePath(char** path)
+{
+  uint32 i;
+
+  if(path == NULL)
+    return;
+
+  for(i=0; path[i] != NULL; i++)
+    free(path[i]);
+
+  free(path);
 }
 
 
@@ -913,6 +931,8 @@ int main(int argc, char** argv)
   if(path != NULL)
   {
     retr_path_ret = retrievePath(iter, path);
+    freePath(path);
+
     if(retr_path_ret == 0)
       fprintf(stderr, "WARNING: specified path not found.\n");
     else if (retr_path_ret == 2)
