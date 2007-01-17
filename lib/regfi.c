@@ -1672,9 +1672,11 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
     if(subkey->keyname != NULL 
        && strcasecmp(subkey->keyname, subkey_name) == 0)
       found = true;
-
-    regfi_key_free(subkey);
-    subkey = regfi_iterator_next_subkey(i);
+    else
+    {
+      regfi_key_free(subkey);
+      subkey = regfi_iterator_next_subkey(i);
+    }
   }
 
   if(found == false)
@@ -1683,6 +1685,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
     return false;
   }
 
+  regfi_key_free(subkey);
   return true;
 }
 
