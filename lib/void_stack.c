@@ -3,7 +3,7 @@
  * of memory of any type.  It still needs work to eliminate memory
  * leaks. 
  *
- * Copyright (C) 2005 Timothy D. Morgan
+ * Copyright (C) 2005,2007 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

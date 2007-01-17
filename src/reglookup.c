@@ -2,7 +2,7 @@
  * A utility to read a Windows NT/2K/XP/2K3 registry file, using 
  * Gerald Carter''s regfio interface.
  *
- * Copyright (C) 2005-2006 Timothy D. Morgan
+ * Copyright (C) 2005-2007 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -381,18 +381,22 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
 }
 
 
-void_stack* path2Stack(const char* s)
+char** splitPath(const char* s)
 {
-  void_stack* ret_val;
-  void_stack* rev_ret = void_stack_new(REGF_MAX_DEPTH);
+  char** ret_val;
   const char* cur = s;
   char* next = NULL;
   char* copy;
+  uint32 ret_cur = 0;
 
-  if (rev_ret == NULL)
+  ret_val = (char**)malloc((REGF_MAX_DEPTH+1+1)*sizeof(char**));
+  if (ret_val == NULL)
     return NULL;
+  ret_val[0] = NULL;
+
+  /* We return a well-formed, 0-length, path even when input is icky. */
   if (s == NULL)
-    return rev_ret;
+    return ret_val;
   
   while((next = strchr(cur, '/')) != NULL)
   {
@@ -404,35 +408,45 @@ void_stack* path2Stack(const char* s)
 	  
       memcpy(copy, cur, next-cur);
       copy[next-cur] = '\0';
-      if(!void_stack_push(rev_ret, copy))
+      ret_val[ret_cur++] = copy;
+      if(ret_cur < (REGF_MAX_DEPTH+1+1))
+	ret_val[ret_cur] = NULL;
+      else
 	bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
     }
     cur = next+1;
   }
+
+  /* Grab last element, if path doesn't end in '/'. */
   if(strlen(cur) > 0)
   {
     copy = strdup(cur);
-    if(!void_stack_push(rev_ret, copy))
+    ret_val[ret_cur++] = copy;
+    if(ret_cur < (REGF_MAX_DEPTH+1+1))
+      ret_val[ret_cur] = NULL;
+    else
       bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
   }
-
-  ret_val = void_stack_copy_reverse(rev_ret);
-  void_stack_free(rev_ret);
 
   return ret_val;
 }
 
-/* Returns a quoted path from an nk_stack */
-char* stack2Path(void_stack* nk_stack)
+
+/* Returns a quoted path from an iterator's stack */
+/* XXX: Some way should be found to integrate this into regfi's API 
+ *      The problem is that the escaping is sorta reglookup-specific.
+ */
+char* iter2Path(REGFI_ITERATOR* i)
 {
-  const REGF_NK_REC* cur;
+  const REGFI_ITER_POSITION* cur;
   uint32 buf_left = 127;
   uint32 buf_len = buf_left+1;
   uint32 name_len = 0;
   uint32 grow_amt;
-  char* buf; 
+  char* buf;
   char* new_buf;
   char* name;
+  const char* cur_name;
   void_stack_iterator* iter;
   
   buf = (char*)malloc((buf_len)*sizeof(char));
@@ -440,7 +454,7 @@ char* stack2Path(void_stack* nk_stack)
     return NULL;
   buf[0] = '\0';
 
-  iter = void_stack_iterator_new(nk_stack);
+  iter = void_stack_iterator_new(i->key_positions);
   if (iter == NULL)
   {
     free(buf);
@@ -448,13 +462,25 @@ char* stack2Path(void_stack* nk_stack)
   }
 
   /* skip root element */
+  if(void_stack_size(i->key_positions) < 1)
+  {
+    buf[0] = '/';
+    buf[1] = '\0';
+    return buf;
+  }
   cur = void_stack_iterator_next(iter);
 
-  while((cur = void_stack_iterator_next(iter)) != NULL)
+  do
   {
+    cur = void_stack_iterator_next(iter);
+    if (cur == NULL)
+      cur_name = i->cur_key->keyname;
+    else
+      cur_name = cur->nk->keyname;
+
     buf[buf_len-buf_left-1] = '/';
     buf_left -= 1;
-    name = quote_string(cur->keyname, key_special_chars);
+    name = quote_string(cur_name, key_special_chars);
     name_len = strlen(name);
     if(name_len+1 > buf_left)
     {
@@ -473,7 +499,7 @@ char* stack2Path(void_stack* nk_stack)
     buf_left -= name_len;
     buf[buf_len-buf_left-1] = '\0';
     free(name);
-  }
+  } while(cur != NULL);
 
   return buf;
 }
@@ -571,14 +597,17 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 }
 
 
-void printValueList(REGFI_ITERATOR i, char* prefix)
+void printValueList(REGFI_ITERATOR* i, char* prefix)
 {
   REGF_VK_REC* value;
 
   value = regfi_iterator_first_value(i);
   while(value != NULL)
-    if(!type_filter_enabled || (value.type == type_filter))
+  {
+    if(!type_filter_enabled || (value->type == type_filter))
       printValue(value, prefix);
+    value = regfi_iterator_next_value(i);
+  }
 }
 
 
@@ -629,91 +658,70 @@ void printKey(REGF_NK_REC* k, char* full_path)
 }
 
 
-void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
+void printKeyTree(REGFI_ITERATOR* iter)
 {
+  REGF_NK_REC* root = NULL;
   REGF_NK_REC* cur = NULL;
   REGF_NK_REC* sub = NULL;
   char* path = NULL;
-  char* val_path = NULL;
-  uint32 val_path_len = 0;
-  uint32 path_len = 0;
-  uint32 prefix_len = strlen(prefix);
   int key_type = regfi_type_str2val("KEY");
+  bool print_this = true;
+
+  root = cur = regfi_iterator_cur_key(iter);
+  sub = regfi_iterator_first_subkey(iter);
   
-  if((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
+  if(root == NULL)
+    bailOut(3, "ERROR: root cannot be NULL.\n");
+  
+  do
   {
-    cur->subkey_index = 0;
-    path = stack2Path(nk_stack);
-
-    if(print_verbose)
+    if(print_this)
     {
-      if(prefix[0] == '\0')
-	fprintf(stderr, "VERBOSE: Printing key tree under path: /\n");
-      else
-	fprintf(stderr, "VERBOSE: Printing key tree under path: %s\n",
-		prefix);
+      path = iter2Path(iter);
+      if(path == NULL)
+	bailOut(2, "ERROR: Could not construct iterator's path.\n");
+      
+      if(!type_filter_enabled || (key_type == type_filter))
+	printKey(cur, path);
+      if(!type_filter_enabled || (key_type != type_filter))
+	printValueList(iter, path);
+      
+      free(path);
     }
-
-    path_len = strlen(path);
-    val_path_len = prefix_len+path_len;
-    val_path = (char*)malloc(val_path_len+1+1);
-    if(val_path == NULL)
-      bailOut(2, "ERROR: Could not allocate val_path.\n");
-
-    strcpy(val_path, prefix);
-    strcpy(val_path+prefix_len, path);
-    if(val_path[0] == '\0')
-    {
-      val_path[0] = '/';
-      val_path[1] = '\0';
-    }
-    if(!type_filter_enabled || (key_type == type_filter))
-      printKey(cur, val_path);
-    if(!type_filter_enabled || (key_type != type_filter))
-      printValueList(cur, val_path);
     
-    while((cur = (REGF_NK_REC*)void_stack_cur(nk_stack)) != NULL)
+    if(sub == NULL)
     {
-      if((sub = regfi_fetch_subkey(f, cur)) == NULL)
+      if(cur != root)
       {
-	sub = void_stack_pop(nk_stack);
-	/* XXX: This is just a shallow free.  Need to write deep free
-	 * routines to replace the Samba code for this. 
-	 */ 
-	if(sub != NULL)
-	  free(sub);
+	/* We're done with this sub-tree, going up and hitting other branches. */
+	if(!regfi_iterator_up(iter))
+	  bailOut(3, "ERROR: could not traverse iterator upward.\n");
+	
+	cur = regfi_iterator_cur_key(iter);
+	if(cur == NULL)
+	  bailOut(3, "ERROR: unexpected NULL for key.\n");
+	
+	sub = regfi_iterator_next_subkey(iter);
       }
-      else
-      {
-	sub->subkey_index = 0;
-	if(!void_stack_push(nk_stack, sub))
-	  bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
-	path = stack2Path(nk_stack);
-	if(path != NULL)
-	{
-	  path_len = strlen(path);
-	  if(val_path_len < prefix_len+path_len)
-	  {
-	    val_path_len = prefix_len+path_len;
-	    val_path = (char*)realloc(val_path, val_path_len+1);
-	    if(val_path == NULL)
-	      bailOut(2, "ERROR: Could not reallocate val_path.\n");
-	  }
-	  strcpy(val_path, prefix);
-	  strcpy(val_path+prefix_len, path);
-	  if(!type_filter_enabled || (key_type == type_filter))
-	    printKey(sub, val_path);
-	  if(!type_filter_enabled || (key_type != type_filter))
-	    printValueList(sub, val_path);
-	}
-      }
+      print_this = false;
     }
-  }
-  if(val_path != NULL)
-    free(val_path);
+    else
+    { /* We have unexplored sub-keys.  
+       * Let's move down and print this first sub-tree out. 
+       */
+      if(!regfi_iterator_down(iter))
+	bailOut(3, "ERROR: could not traverse iterator downward.\n");
+
+      cur = sub;
+      sub = regfi_iterator_first_subkey(iter);
+      print_this = true;
+    }
+  } while(!((cur == root) && (sub == NULL)));
+
   if(print_verbose)
     fprintf(stderr, "VERBOSE: Finished printing key tree.\n");
 }
+
 
 /*
  * Returns 0 if path was not found.
@@ -723,17 +731,16 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
  */
 int retrievePath(REGFI_ITERATOR* iter, char** path)
 {
-  REG_VK_REC* value;
-  uint32 i;
-  char* p;
+  REGF_VK_REC* value;
   char* tmp_path_joined;
-  char** tmp_path;
+  const char** tmp_path;
+  uint32 i;
   
   if(path == NULL)
     return -1;
 
   /* One extra for any value at the end, and one more for NULL */
-  tmp_path = (char**)malloc(sizeof(char**)*(REGF_MAX_DEPTH+1+1));
+  tmp_path = (const char**)malloc(sizeof(const char**)*(REGF_MAX_DEPTH+1+1));
   if(tmp_path == NULL)
     return -2;
 
@@ -762,7 +769,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
       fprintf(stderr, "VERBOSE: Found final path element as value.\n");
 
     value = regfi_iterator_cur_value(iter);
-    tmp_path_joined = joinPath(tmp_path);
+    tmp_path_joined = iter2Path(iter);
 
     if((value == NULL) || (tmp_path_joined == NULL))
       bailOut(2, "ERROR: Unexpected error before printValue.\n");
@@ -807,10 +814,8 @@ static void usage(void)
 
 int main(int argc, char** argv)
 {
-  void_stack* path_stack;
   char** path = NULL;
   REGF_FILE* f;
-  REGF_NK_REC* root;
   REGFI_ITERATOR* iter;
   int retr_path_ret;
   uint32 argi, arge;
@@ -882,21 +887,29 @@ int main(int argc, char** argv)
   if(iter == NULL)
     bailOut(3, "ERROR: Couldn't create registry iterator.\n");
 
+  if(print_header)
+  {
+    if(print_security)
+      printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL\n");
+    else
+      printf("PATH,TYPE,VALUE,MTIME\n");
+  }
+
   if(path_filter_enabled && path_filter != NULL)
     path = splitPath(path_filter);
-  
+
   if(path != NULL)
   {
     retr_path_ret = retrievePath(iter, path);
     if(retr_path_ret == 0)
       fprintf(stderr, "WARNING: specified path not found.\n");
     else if (retr_path_ret == 2)
-      printKeyTree(iter, path_filter);
+      printKeyTree(iter);
     else if(retr_path_ret != 0)
       bailOut(4, "ERROR: Unknown error occurred in retrieving path.\n");
   }
   else
-    printKeyTree(iter, "");
+    printKeyTree(iter);
 
   regfi_iterator_free(iter);
   regfi_close(f);

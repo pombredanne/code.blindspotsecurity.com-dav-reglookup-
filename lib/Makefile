@@ -2,12 +2,12 @@
 
 ################################################################################
 
-FILES=regfio.o smb_deps.o void_stack.o
+FILES=regfi.o smb_deps.o void_stack.o
 
 all: $(FILES)
 
-regfio.o: regfio.c
-	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ regfio.c
+regfi.o: regfi.c
+	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ regfi.c
 
 smb_deps.o: smb_deps.c
 	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ smb_deps.c

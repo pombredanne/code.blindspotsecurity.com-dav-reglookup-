@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005-2006 Timothy D. Morgan
+ * Copyright (C) 2005-2007 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -67,7 +67,7 @@
 #define REG_QWORD                      11 /* 64-bit little endian */
 /* XXX: Has MS defined a REG_QWORD_BE? */
 /* Not a real type in the registry */
-#define REG_KEY                        0xFFFFFFFF
+#define REG_KEY                        0x7FFFFFFF
 
 
 #define REGF_BLOCKSIZE		0x1000
@@ -182,8 +182,8 @@ typedef struct _regf_sk_rec {
   SEC_DESC *sec_desc;
 } REGF_SK_REC;
 
-/* Key Name */ 
 
+/* Key Name */ 
 typedef struct {
   REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
@@ -219,13 +219,13 @@ typedef struct {
   
   /* link in the other records here */
   REGF_LF_REC subkeys;
-  REGF_VK_REC *values;
-  REGF_SK_REC *sec_desc;
+  REGF_VK_REC* values;
+  REGF_SK_REC* sec_desc;
 	
 } REGF_NK_REC;
 
+
 /* REGF block */
- 
 typedef struct {
   /* run time information */
   int fd;	  /* file descriptor */
@@ -289,11 +289,10 @@ char*         regfi_get_group(SEC_DESC* sec_desc);
 REGF_FILE*    regfi_open(const char* filename);
 int           regfi_close(REGF_FILE* r);
 
-REGF_NK_REC*  regfi_rootkey( REGF_FILE* file );
+REGF_NK_REC*  regfi_rootkey(REGF_FILE* file);
 /* REGF_NK_REC*  regfi_fetch_subkey( REGF_FILE* file, REGF_NK_REC* nk ); */
 
 void            regfi_key_free(REGF_NK_REC* nk);
-void            regfi_value_free(REGF_VK_REC* vk);
 
 REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh);
 void            regfi_iterator_free(REGFI_ITERATOR* i);
@@ -301,8 +300,9 @@ bool            regfi_iterator_down(REGFI_ITERATOR* i);
 bool            regfi_iterator_up(REGFI_ITERATOR* i);
 bool            regfi_iterator_to_root(REGFI_ITERATOR* i);
 
-bool            regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
+bool            regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name);
 bool            regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
+/* XXX: these which return NK and VK records should return them as consts */
 REGF_NK_REC*    regfi_iterator_cur_key(REGFI_ITERATOR* i);
 REGF_NK_REC*    regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 REGF_NK_REC*    regfi_iterator_cur_subkey(REGFI_ITERATOR* i);

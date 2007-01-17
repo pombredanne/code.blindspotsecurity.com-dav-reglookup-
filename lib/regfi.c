@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005-2006 Timothy D. Morgan
+ * Copyright (C) 2005-2007 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +24,7 @@
  * $Id$
  */
 
-#include "../include/regfio.h"
+#include "../include/regfi.h"
 
 
 /* Registry types mapping */
@@ -628,7 +628,6 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps,
   if ( !ps->io )
     nk->hbin->dirty = true;
   
-  nk->subkey_index = 0;
   return true;
 }
 
@@ -1515,7 +1514,12 @@ void regfi_key_free(REGF_NK_REC* nk)
   if((nk->values != NULL) && (nk->values_off!=REGF_OFFSET_NONE))
   {
     for(i=0; i < nk->num_values; i++)
-      regfi_value_free(nk->values[i]);
+    {
+      if(nk->values[i].valuename != NULL)
+	free(nk->values[i].valuename);
+      if(nk->values[i].data != NULL)
+	free(nk->values[i].data);
+    }
     free(nk->values);
   }
 
@@ -1532,20 +1536,6 @@ void regfi_key_free(REGF_NK_REC* nk)
 
 /******************************************************************************
  *****************************************************************************/
-void regfi_value_free(REGF_VK_REC* vk)
-{
-  if(vk->valuename != NULL)
-    free(vk->valuename);
-  if(vk->data != NULL)
-    free(vk->data);  
-  
-  /* XXX: not freeing hbin because these are cached.  This needs to be reviewed. */
-  free(vk);
-}
-
-
-/******************************************************************************
- *****************************************************************************/
 REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh)
 {
   REGF_NK_REC* root;
@@ -1553,7 +1543,7 @@ REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh)
   if(ret_val == NULL)
     return NULL;
 
-  root = regfi_rootkey(f);
+  root = regfi_rootkey(fh);
   if(root == NULL)
   {
     free(ret_val);
@@ -1724,7 +1714,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i);
+REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
   return i->cur_key;
 }
@@ -1734,9 +1724,6 @@ REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i);
  *****************************************************************************/
 REGF_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i)
 {
-  REGF_NK_REC* subkey;
-  REGF_HBIN* hbin;
-  
   i->cur_subkey = 0;
   return regfi_iterator_cur_subkey(i);
 }
@@ -1820,7 +1807,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
     if((cur->valuename != NULL)
        && (strcasecmp(cur->valuename, value_name) == 0))
       found = true;
-    cur = retfi_iterator_next_value(i);
+    cur = regfi_iterator_next_value(i);
   }
 
   if(cur == NULL)
@@ -1845,7 +1832,7 @@ REGF_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
   REGF_VK_REC* ret_val = NULL;
   if(i->cur_value < i->cur_key->num_values)
-    ret_val = i->cur_key->values[i];
+    ret_val = &(i->cur_key->values[i->cur_value]);
 
   return ret_val;
 }
