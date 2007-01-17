@@ -87,14 +87,14 @@ void_stack* void_stack_copy_reverse(const void_stack* v)
 }
 
 
-void void_stack_destroy(void_stack* stack)
+void void_stack_free(void_stack* stack)
 {
   free(stack->elements);
   free(stack);
 }
 
 
-void void_stack_destroy_deep(void_stack* stack)
+void void_stack_free_deep(void_stack* stack)
 {
   unsigned short i;
   for(i=0; i < stack->top; i++)
@@ -166,7 +166,7 @@ void_stack_iterator* void_stack_iterator_new(void_stack* stack)
 }
 
 
-void void_stack_iterator_destroy(void_stack_iterator* iter)
+void void_stack_iterator_free(void_stack_iterator* iter)
 {
   free(iter);
 }

@@ -38,17 +38,18 @@ typedef struct _void_stack_iterator
 } void_stack_iterator;
 
 
+/* XXX: need to document these interfaces */
 void_stack* void_stack_new(unsigned short max_size);
 void_stack* void_stack_copy(const void_stack* v);
 void_stack* void_stack_copy_reverse(const void_stack* v);
-void void_stack_destroy(void_stack* stack);
-void void_stack_destroy_deep(void_stack* stack);
+void void_stack_free(void_stack* stack);
+void void_stack_free_deep(void_stack* stack);
 unsigned short void_stack_size(void_stack* stack);
 void* void_stack_pop(void_stack* stack);
 bool void_stack_push(void_stack* stack, void* e);
 const void* void_stack_cur(void_stack* stack);
 void_stack_iterator* void_stack_iterator_new(void_stack* stack);
-void void_stack_iterator_destroy(void_stack_iterator* iter);
+void void_stack_iterator_free(void_stack_iterator* iter);
 const void* void_stack_iterator_next(void_stack_iterator* iter);
 
 #endif

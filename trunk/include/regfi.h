@@ -67,7 +67,7 @@
 #define REG_QWORD                      11 /* 64-bit little endian */
 /* XXX: Has MS defined a REG_QWORD_BE? */
 /* Not a real type in the registry */
-#define REG_KEY                        255
+#define REG_KEY                        0xFFFFFFFF
 
 
 #define REGF_BLOCKSIZE		0x1000
@@ -257,13 +257,23 @@ typedef struct {
 } REGF_FILE;
 
 
-
 typedef struct {
   REGF_FILE* f;
-  void_stack* keys;
+  void_stack* key_positions;
+  REGF_NK_REC* cur_key;
   uint32 cur_subkey;
   uint32 cur_value;
 } REGFI_ITERATOR;
+
+
+typedef struct {
+  REGF_NK_REC* nk;
+  uint32 cur_subkey;
+  /* We could store a cur_value here as well, but didn't see 
+   * the use in it right now.
+   */
+} REGFI_ITER_POSITION;
+
 
 /******************************************************************************/
 /* Function Declarations */
@@ -271,23 +281,36 @@ typedef struct {
 const char*   regfi_type_val2str(unsigned int val);
 int           regfi_type_str2val(const char* str);
 
-char*         regfi_get_sacl(SEC_DESC *sec_desc);
-char*         regfi_get_dacl(SEC_DESC *sec_desc);
-char*         regfi_get_owner(SEC_DESC *sec_desc);
-char*         regfi_get_group(SEC_DESC *sec_desc);
+char*         regfi_get_sacl(SEC_DESC* sec_desc);
+char*         regfi_get_dacl(SEC_DESC* sec_desc);
+char*         regfi_get_owner(SEC_DESC* sec_desc);
+char*         regfi_get_group(SEC_DESC* sec_desc);
 
-REGF_FILE*    regfi_open( const char *filename );
-int           regfi_close( REGF_FILE *r );
+REGF_FILE*    regfi_open(const char* filename);
+int           regfi_close(REGF_FILE* r);
 
-REGF_NK_REC*  regfi_rootkey( REGF_FILE *file );
-/* REGF_NK_REC*  regfi_fetch_subkey( REGF_FILE *file, REGF_NK_REC *nk ); */
+REGF_NK_REC*  regfi_rootkey( REGF_FILE* file );
+/* REGF_NK_REC*  regfi_fetch_subkey( REGF_FILE* file, REGF_NK_REC* nk ); */
 
-REGFI_ITERATOR* regfi_iterator_create(REGF_FILE* fh);
-bool            regfi_iterator_down(REGFI_ITERATOR* i, const char* subkey_name);
+void            regfi_key_free(REGF_NK_REC* nk);
+void            regfi_value_free(REGF_VK_REC* vk);
+
+REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh);
+void            regfi_iterator_free(REGFI_ITERATOR* i);
+bool            regfi_iterator_down(REGFI_ITERATOR* i);
 bool            regfi_iterator_up(REGFI_ITERATOR* i);
+bool            regfi_iterator_to_root(REGFI_ITERATOR* i);
+
+bool            regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
+bool            regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
+REGF_NK_REC*    regfi_iterator_cur_key(REGFI_ITERATOR* i);
+REGF_NK_REC*    regfi_iterator_first_subkey(REGFI_ITERATOR* i);
+REGF_NK_REC*    regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
 REGF_NK_REC*    regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+
+bool            regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name);
+REGF_VK_REC*    regfi_iterator_first_value(REGFI_ITERATOR* i);
+REGF_VK_REC*    regfi_iterator_cur_value(REGFI_ITERATOR* i);
 REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
-REGF_VK_REC*    regfi_iterator_fetch_value(REGFI_ITERATOR* i, const char* value_name);
-char*           regfi_iterator_curpath(REGFI_ITERATOR* i);
 
 #endif	/* _REGFI_H */

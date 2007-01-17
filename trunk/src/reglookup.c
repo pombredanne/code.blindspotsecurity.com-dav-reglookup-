@@ -417,7 +417,7 @@ void_stack* path2Stack(const char* s)
   }
 
   ret_val = void_stack_copy_reverse(rev_ret);
-  void_stack_destroy(rev_ret);
+  void_stack_free(rev_ret);
 
   return ret_val;
 }
@@ -571,13 +571,14 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 }
 
 
-void printValueList(REGF_NK_REC* nk, char* prefix)
+void printValueList(REGFI_ITERATOR i, char* prefix)
 {
-  uint32 i;
-  
-  for(i=0; i < nk->num_values; i++)
-    if(!type_filter_enabled || (nk->values[i].type == type_filter))
-      printValue(nk->values+i, prefix);
+  REGF_VK_REC* value;
+
+  value = regfi_iterator_first_value(i);
+  while(value != NULL)
+    if(!type_filter_enabled || (value.type == type_filter))
+      printValue(value, prefix);
 }
 
 
@@ -714,128 +715,75 @@ void printKeyTree(REGF_FILE* f, void_stack* nk_stack, const char* prefix)
     fprintf(stderr, "VERBOSE: Finished printing key tree.\n");
 }
 
-
 /*
- * Returns 0 if path was found.
- * Returns 1 if path was not found.
+ * Returns 0 if path was not found.
+ * Returns 1 if path was found as value.
+ * Returns 2 if path was found as key.
  * Returns less than 0 on other error.
  */
-int retrievePath(REGF_FILE* f, void_stack* nk_stack,
-		 void_stack* path_stack)
+int retrievePath(REGFI_ITERATOR* iter, char** path)
 {
-  REGF_NK_REC* sub = NULL; 
-  REGF_NK_REC* cur = NULL;
-  void_stack* sub_nk_stack;
-  char* prefix;
-  char* cur_str = NULL;
-  char* path = NULL;
-  char* name;
-  uint16 path_depth;
-  uint32 i, prefix_len;
-  bool found_cur = true;
-  if(path_stack == NULL)
+  REG_VK_REC* value;
+  uint32 i;
+  char* p;
+  char* tmp_path_joined;
+  char** tmp_path;
+  
+  if(path == NULL)
     return -1;
 
-  path_depth = void_stack_size(path_stack);
-  if(path_depth < 1)
+  /* One extra for any value at the end, and one more for NULL */
+  tmp_path = (char**)malloc(sizeof(char**)*(REGF_MAX_DEPTH+1+1));
+  if(tmp_path == NULL)
     return -2;
 
-  if(void_stack_size(nk_stack) < 1)
-    return -3;
-  cur = (REGF_NK_REC*)void_stack_cur(nk_stack);
+  /* Strip any potential value name at end of path */
+  for(i=0; 
+      (path[i] != NULL) && (path[i+1] != NULL) 
+	&& (i < REGF_MAX_DEPTH+1+1);
+      i++)
+    tmp_path[i] = path[i];
+
+  tmp_path[i] = NULL;
 
   if(print_verbose)
-    fprintf(stderr, "VERBOSE: Beginning retrieval of specified path: %s\n", 
+    fprintf(stderr, "VERBOSE: Attempting to retrieve specified path: %s\n",
 	    path_filter);
 
-  while(void_stack_size(path_stack) > 1)
+  if(!regfi_iterator_walk_path(iter, tmp_path))
   {
-    /* Search key records only */
-    cur_str = (char*)void_stack_pop(path_stack);
-
-    found_cur = false;
-    while(!found_cur &&
-	  (sub = regfi_fetch_subkey(f, cur)) != NULL)
-    {
-      if(strcasecmp(sub->keyname, cur_str) == 0)
-      {
-	cur = sub;
-	if(!void_stack_push(nk_stack, sub))
-	  bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
-
-	found_cur = true;
-      }
-    }
-    if(print_verbose && !found_cur)
-      fprintf(stderr, "VERBOSE: Could not find KEY '%s' in specified path.\n", 
-	      cur_str);
-
-    free(cur_str);
-    if(!found_cur)
-      return 1;
+    free(tmp_path);
+    return 0;
   }
 
-  /* Last round, search value and key records */
-  cur_str = (char*)void_stack_pop(path_stack);
-
-  if(print_verbose)
-    fprintf(stderr, "VERBOSE: Searching values for last component"
-	            " of specified path.\n");
-
-  for(i=0; (i < cur->num_values); i++)
+  if(regfi_iterator_find_value(iter, path[i]))
   {
-    /* XXX: Not sure when/why this can be NULL, but it's happened. */
-    if(sub->values[i].valuename != NULL 
-       && strcasecmp(sub->values[i].valuename, cur_str) == 0)
-    {
-      path = stack2Path(nk_stack);
+    if(print_verbose)
+      fprintf(stderr, "VERBOSE: Found final path element as value.\n");
 
-      if(print_verbose)
-	fprintf(stderr, "VERBOSE: Found final path element as value.\n");
+    value = regfi_iterator_cur_value(iter);
+    tmp_path_joined = joinPath(tmp_path);
 
-      if(!type_filter_enabled || (sub->values[i].type == type_filter))
-        printValue(&sub->values[i], path);
-      if(path != NULL)
-	free(path);
+    if((value == NULL) || (tmp_path_joined == NULL))
+      bailOut(2, "ERROR: Unexpected error before printValue.\n");
 
-      return 0;
-    }
+    printValue(value, tmp_path_joined);
+
+    free(tmp_path);
+    free(tmp_path_joined);
+    return 1;
   }
-
-  if(print_verbose)
-    fprintf(stderr, "VERBOSE: Searching keys for last component"
-	            " of specified path.\n");
-
-  while((sub = regfi_fetch_subkey(f, cur)) != NULL)
+  else if(regfi_iterator_find_subkey(iter, path[i]))
   {
-    if(strcasecmp(sub->keyname, cur_str) == 0)
-    {
-      sub_nk_stack = void_stack_new(REGF_MAX_DEPTH);
-      if(!void_stack_push(sub_nk_stack, sub))
-	bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
-      prefix = stack2Path(nk_stack);
-      prefix_len = strlen(prefix);
-      prefix = realloc(prefix, prefix_len+strlen(sub->keyname)+2);
-      if(prefix == NULL)
-	return -1;
-      name = quote_string(sub->keyname, key_special_chars);
-      strcat(prefix, "/");
-      strcat(prefix, name);
-      free(name);
-
-      if(print_verbose)
-	fprintf(stderr, "VERBOSE: Found final path element as key.\n");
-
-      printKeyTree(f, sub_nk_stack, prefix);
-
-      return 0;
-    }
+    if(print_verbose)
+      fprintf(stderr, "VERBOSE: Found final path element as key.\n");
+    return 2;
   }
 
   if(print_verbose)
     fprintf(stderr, "VERBOSE: Could not find last element of path.\n");
 
-  return 1;
+  return 0;
 }
 
 
@@ -859,10 +807,11 @@ static void usage(void)
 
 int main(int argc, char** argv)
 {
-  void_stack* nk_stack;
   void_stack* path_stack;
+  char** path = NULL;
   REGF_FILE* f;
   REGF_NK_REC* root;
+  REGFI_ITERATOR* iter;
   int retr_path_ret;
   uint32 argi, arge;
 
@@ -929,35 +878,27 @@ int main(int argc, char** argv)
     bailOut(3, "");
   }
 
-  root = regfi_rootkey(f);
-  nk_stack = void_stack_new(REGF_MAX_DEPTH);
+  iter = regfi_iterator_new(f);
+  if(iter == NULL)
+    bailOut(3, "ERROR: Couldn't create registry iterator.\n");
 
-  if(void_stack_push(nk_stack, root))
+  if(path_filter_enabled && path_filter != NULL)
+    path = splitPath(path_filter);
+  
+  if(path != NULL)
   {
-    if(print_header)
-    {
-      if(print_security)
-	printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL\n");
-      else
-	printf("PATH,TYPE,VALUE,MTIME\n");
-    }
-
-    path_stack = path2Stack(path_filter);
-    if(void_stack_size(path_stack) < 1)
-      printKeyTree(f, nk_stack, "");
-    else
-    {
-      retr_path_ret = retrievePath(f, nk_stack, path_stack);
-      if(retr_path_ret == 1)
-	fprintf(stderr, "WARNING: specified path not found.\n");
-      else if(retr_path_ret != 0)
-	bailOut(4, "ERROR:\n");
-    }
+    retr_path_ret = retrievePath(iter, path);
+    if(retr_path_ret == 0)
+      fprintf(stderr, "WARNING: specified path not found.\n");
+    else if (retr_path_ret == 2)
+      printKeyTree(iter, path_filter);
+    else if(retr_path_ret != 0)
+      bailOut(4, "ERROR: Unknown error occurred in retrieving path.\n");
   }
   else
-    bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
+    printKeyTree(iter, "");
 
-  void_stack_destroy_deep(nk_stack);
+  regfi_iterator_free(iter);
   regfi_close(f);
 
   return 0;
