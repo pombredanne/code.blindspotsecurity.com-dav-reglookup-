@@ -832,7 +832,7 @@ static void usage(void)
   fprintf(stderr, "Usage: reglookup [-v] [-s]"
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
-  fprintf(stderr, "Version: 0.3.0\n");
+  fprintf(stderr, "Version: 0.4.0\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");
