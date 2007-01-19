@@ -523,7 +523,7 @@ char* iter2Path(REGFI_ITERATOR* i)
 }
 
 
-void printValue(REGF_VK_REC* vk, char* prefix)
+void printValue(const REGF_VK_REC* vk, char* prefix)
 {
   char* quoted_value = NULL;
   char* quoted_name = NULL;
@@ -533,6 +533,9 @@ void printValue(REGF_VK_REC* vk, char* prefix)
   uint8 tmp_buf[4];
 
   /* Thanks Microsoft for making this process so straight-forward!!! */
+  /* XXX: this logic should be abstracted  and pushed into the regfi 
+   *      interface.  This includes the size limits.
+   */
   size = (vk->data_size & ~VK_DATA_IN_OFFSET);
   if(vk->data_size & VK_DATA_IN_OFFSET)
   {
@@ -617,7 +620,7 @@ void printValue(REGF_VK_REC* vk, char* prefix)
 
 void printValueList(REGFI_ITERATOR* i, char* prefix)
 {
-  REGF_VK_REC* value;
+  const REGF_VK_REC* value;
 
   value = regfi_iterator_first_value(i);
   while(value != NULL)
@@ -629,7 +632,7 @@ void printValueList(REGFI_ITERATOR* i, char* prefix)
 }
 
 
-void printKey(REGF_NK_REC* k, char* full_path)
+void printKey(const REGF_NK_REC* k, char* full_path)
 {
   static char empty_str[1] = "";
   char* owner = NULL;
@@ -678,9 +681,9 @@ void printKey(REGF_NK_REC* k, char* full_path)
 
 void printKeyTree(REGFI_ITERATOR* iter)
 {
-  REGF_NK_REC* root = NULL;
-  REGF_NK_REC* cur = NULL;
-  REGF_NK_REC* sub = NULL;
+  const REGF_NK_REC* root = NULL;
+  const REGF_NK_REC* cur = NULL;
+  const REGF_NK_REC* sub = NULL;
   char* path = NULL;
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
@@ -749,7 +752,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
  */
 int retrievePath(REGFI_ITERATOR* iter, char** path)
 {
-  REGF_VK_REC* value;
+  const REGF_VK_REC* value;
   char* tmp_path_joined;
   const char** tmp_path;
   uint32 i;

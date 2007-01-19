@@ -1,6 +1,6 @@
 /*
  * Branched from Samba project Subversion repository, version #7470:
- *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/registry/regfio.c
+ *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/registry/regfio.c?rev=7470&view=auto
  *
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
@@ -436,7 +436,7 @@ static bool prs_regf_block(const char *desc, prs_struct *ps,
 {
   depth++;
 	
-  if(!prs_uint8s(true, "header", ps, depth, file->header, sizeof(file->header)))
+  if(!prs_uint8s("header", ps, depth, file->header, sizeof(file->header)))
     return false;
 	
   /* yes, these values are always identical so store them only once */
@@ -498,7 +498,7 @@ static bool prs_hbin_block(const char *desc, prs_struct *ps,
 
   depth++;
 	
-  if(!prs_uint8s(true, "header", ps, depth, hbin->header, sizeof(hbin->header)))
+  if(!prs_uint8s("header", ps, depth, hbin->header, sizeof(hbin->header)))
     return false;
 
   if ( !prs_uint32( "first_hbin_off", ps, depth, &hbin->first_hbin_off ))
@@ -546,7 +546,7 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps,
   if ( !prs_uint32( "rec_size", ps, depth, &nk->rec_size ))
     return false;
 	
-  if (!prs_uint8s(true, "header", ps, depth, nk->header, sizeof(nk->header)))
+  if (!prs_uint8s("header", ps, depth, nk->header, sizeof(nk->header)))
     return false;
 		
   if ( !prs_uint16( "key_type", ps, depth, &nk->key_type ))
@@ -609,7 +609,7 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps,
     if(ps->io && !(nk->keyname = (char*)zcalloc(sizeof(char), name_length+1)))
 	return false;
 
-    if(!prs_uint8s(true, "name", ps, depth, (uint8*)nk->keyname, name_length))
+    if(!prs_uint8s("name", ps, depth, (uint8*)nk->keyname, name_length))
       return false;
 
     if(ps->io)
@@ -847,7 +847,7 @@ static bool prs_hash_rec( const char *desc, prs_struct *ps, int depth, REGF_HASH
 
   if ( !prs_uint32( "nk_off", ps, depth, &hash->nk_off ))
     return false;
-  if ( !prs_uint8s( true, "keycheck", ps, depth, hash->keycheck, sizeof( hash->keycheck )) )
+  if ( !prs_uint8s("keycheck", ps, depth, hash->keycheck, sizeof( hash->keycheck )) )
     return false;
 	
   return true;
@@ -883,7 +883,7 @@ static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin,
   if ( !prs_uint32( "rec_size", &hbin->ps, depth, &lf->rec_size ))
     return false;
 
-  if(!prs_uint8s(true, "header", &hbin->ps, depth, 
+  if(!prs_uint8s("header", &hbin->ps, depth, 
 		 lf->header, sizeof(lf->header)))
     return false;
 		
@@ -937,7 +937,7 @@ static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_
   if ( !prs_uint32( "rec_size", &hbin->ps, depth, &sk->rec_size ))
     return false;
 
-  if (!prs_uint8s(true, "header", ps, depth, sk->header, sizeof(sk->header)))
+  if (!prs_uint8s("header", ps, depth, sk->header, sizeof(sk->header)))
     return false;
   if ( !prs_uint16( "tag", ps, depth, &tag))
     return false;
@@ -989,7 +989,7 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
   if ( !prs_uint32( "rec_size", &hbin->ps, depth, &vk->rec_size ))
     return false;
 
-  if ( !prs_uint8s( true, "header", ps, depth, vk->header, sizeof( vk->header )) )
+  if ( !prs_uint8s("header", ps, depth, vk->header, sizeof( vk->header )) )
     return false;
 
   if ( !hbin->ps.io )
@@ -1018,7 +1018,7 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
       if ( !(vk->valuename = (char*)zcalloc(sizeof(char), name_length+1 )))
 	return false;
     }
-    if ( !prs_uint8s(true, "name", ps, depth, 
+    if ( !prs_uint8s("name", ps, depth, 
 		     (uint8*)vk->valuename, name_length) )
       return false;
   }
@@ -1029,11 +1029,6 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
 
   if ( vk->data_size != 0 ) 
   {
-    bool charmode = false;
-
-    if ( (vk->type == REG_SZ) || (vk->type == REG_MULTI_SZ) )
-      charmode = true;
-
     /* the data is stored in the offset if the size <= 4 */
     if ( !(vk->data_size & VK_DATA_IN_OFFSET) ) 
     {
@@ -1066,7 +1061,7 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
       }
       if ( !prs_uint32( "data_rec_size", &hblock->ps, depth, &data_rec_size ))
 	return false;
-      if(!prs_uint8s(charmode, "data", &hblock->ps, depth, 
+      if(!prs_uint8s("data", &hblock->ps, depth, 
 		     vk->data, vk->data_size))
 	return false;
 
@@ -1322,7 +1317,7 @@ static bool next_record( REGF_HBIN *hbin, const char *hdr, bool *eob )
 
     if ( !prs_uint32( "record_size", ps, 0, &record_size ) )
       return false;
-    if ( !prs_uint8s( true, "header", ps, 0, header, REC_HDR_SIZE ) )
+    if ( !prs_uint8s("header", ps, 0, header, REC_HDR_SIZE ) )
       return false;
 
     if ( record_size & 0x80000000 ) {
@@ -1599,7 +1594,7 @@ bool regfi_iterator_down(REGFI_ITERATOR* i)
   if(pos == NULL)
     return false;
 
-  subkey = regfi_iterator_cur_subkey(i);
+  subkey = (REGF_NK_REC*)regfi_iterator_cur_subkey(i);
   if(subkey == NULL)
   {
     free(pos);
@@ -1666,7 +1661,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
     return false;
 
   /* XXX: this alloc/free of each sub key might be a bit excessive */
-  subkey = regfi_iterator_first_subkey(i);
+  subkey = (REGF_NK_REC*)regfi_iterator_first_subkey(i);
   while((subkey != NULL) && (found == false))
   {
     if(subkey->keyname != NULL 
@@ -1675,7 +1670,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
     else
     {
       regfi_key_free(subkey);
-      subkey = regfi_iterator_next_subkey(i);
+      subkey = (REGF_NK_REC*)regfi_iterator_next_subkey(i);
     }
   }
 
@@ -1717,7 +1712,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
+const REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
   return i->cur_key;
 }
@@ -1725,7 +1720,7 @@ REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i)
+const REGF_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i)
 {
   i->cur_subkey = 0;
   return regfi_iterator_cur_subkey(i);
@@ -1734,7 +1729,7 @@ REGF_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
+const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
 {
   REGF_NK_REC* subkey;
   REGF_HBIN* hbin;
@@ -1777,9 +1772,9 @@ REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
 /******************************************************************************
  *****************************************************************************/
 /* XXX: some way of indicating reason for failure should be added. */
-REGF_NK_REC* regfi_iterator_next_subkey(REGFI_ITERATOR* i)
+const REGF_NK_REC* regfi_iterator_next_subkey(REGFI_ITERATOR* i)
 {
-  REGF_NK_REC* subkey;
+  const REGF_NK_REC* subkey;
 
   i->cur_subkey++;
   subkey = regfi_iterator_cur_subkey(i);
@@ -1795,7 +1790,7 @@ REGF_NK_REC* regfi_iterator_next_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
 {
-  REGF_VK_REC* cur;
+  const REGF_VK_REC* cur;
   bool found = false;
 
   /* XXX: cur->valuename can be NULL in the registry.  
@@ -1822,7 +1817,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i)
+const REGF_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i)
 {
   i->cur_value = 0;
   return regfi_iterator_cur_value(i);
@@ -1831,7 +1826,7 @@ REGF_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
+const REGF_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
   REGF_VK_REC* ret_val = NULL;
   if(i->cur_value < i->cur_key->num_values)
@@ -1843,9 +1838,9 @@ REGF_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-REGF_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
+const REGF_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
 {
-  REGF_VK_REC* ret_val;
+  const REGF_VK_REC* ret_val;
 
   i->cur_value++;
   ret_val = regfi_iterator_cur_value(i);

@@ -150,8 +150,8 @@ typedef struct _prs_struct {
 #define TIME_T_MAX (~ (time_t) 0 - TIME_T_MIN)
 #define TIME_FIXUP_CONSTANT (369.0*365.25*24*60*60-(3.0*24*60*60+6.0*60*60))
 
-void unix_to_nt_time(NTTIME *nt, time_t t);
-time_t nt_time_to_unix(NTTIME *nt);
+void unix_to_nt_time(NTTIME* nt, time_t t);
+time_t nt_time_to_unix(const NTTIME* nt);
 
 /* End of stuff from lib/time.c */
 
@@ -168,7 +168,7 @@ bool prs_align(prs_struct *ps);
 bool prs_init(prs_struct *ps, uint32 size, void *ctx, bool io);
 char *prs_mem_get(prs_struct *ps, uint32 extra_size);
 bool prs_uint32(const char *name, prs_struct *ps, int depth, uint32 *data32);
-bool prs_uint32s(bool charmode, const char *name, prs_struct *ps, 
+bool prs_uint32s(const char *name, prs_struct *ps, 
 		 int depth, uint32 *data32s, int len);
 bool prs_uint16(const char *name, prs_struct *ps, int depth, uint16 *data16);
 bool prs_uint16_pre(const char *name, prs_struct *ps, int depth, 
@@ -176,7 +176,7 @@ bool prs_uint16_pre(const char *name, prs_struct *ps, int depth,
 bool prs_uint16_post(const char *name, prs_struct *ps, int depth, 
 		     uint16 *data16, uint32 ptr_uint16, uint32 start_offset);
 bool prs_uint8(const char *name, prs_struct *ps, int depth, uint8 *data8);
-bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth, 
+bool prs_uint8s(const char *name, prs_struct *ps, int depth, 
 		uint8* data8s, int len);
 bool prs_set_offset(prs_struct *ps, uint32 offset);
 
