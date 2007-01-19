@@ -100,7 +100,7 @@ void unix_to_nt_time(NTTIME *nt, time_t t)
  serverzone. This is NOT the same as GMT in some cases. This routine
  converts this to real GMT.
 ****************************************************************************/
-time_t nt_time_to_unix(NTTIME *nt)
+time_t nt_time_to_unix(const NTTIME* nt)
 {
   double d;
   time_t ret;
@@ -315,7 +315,7 @@ bool prs_uint32(const char *name, prs_struct *ps, int depth, uint32 *data32)
 /******************************************************************
  Stream an array of uint32s. Length is number of uint32s.
  ********************************************************************/
-bool prs_uint32s(bool charmode, const char *name, prs_struct *ps, 
+bool prs_uint32s(const char *name, prs_struct *ps, 
 		 int depth, uint32 *data32s, int len)
 {
   int i;
@@ -461,7 +461,7 @@ bool prs_uint8(const char *name, prs_struct *ps, int depth, uint8 *data8)
 /******************************************************************
  Stream an array of uint8s. Length is number of uint8s.
  ********************************************************************/
-bool prs_uint8s(bool charmode, const char *name, prs_struct *ps, int depth, 
+bool prs_uint8s(const char *name, prs_struct *ps, int depth, 
 		uint8* data8s, int len)
 {
   int i;
@@ -525,11 +525,11 @@ bool smb_io_uuid(const char *desc, struct uuid *uuid,
   if(!prs_uint16 ("data   ", ps, depth, &uuid->time_hi_and_version))
     return false;
   
-  if(!prs_uint8s (false, "data   ", ps, depth, 
+  if(!prs_uint8s ("data   ", ps, depth, 
 		  uuid->clock_seq, sizeof(uuid->clock_seq)))
     return false;
 
-  if(!prs_uint8s (false, "data   ", ps, depth, uuid->node, sizeof(uuid->node)))
+  if(!prs_uint8s ("data   ", ps, depth, uuid->node, sizeof(uuid->node)))
     return false;
   
   return true;
@@ -586,7 +586,7 @@ bool smb_io_dom_sid(const char *desc, DOM_SID *sid, prs_struct *ps, int depth)
   if (sid->num_auths > MAXSUBAUTHS)
     sid->num_auths = MAXSUBAUTHS;
 
-  if(!prs_uint32s(false, "sub_auths ", ps, depth, 
+  if(!prs_uint32s("sub_auths ", ps, depth, 
 		  sid->sub_auths, sid->num_auths))
   { return false; }
 

@@ -1,6 +1,6 @@
 /*
  * Branched from Samba project, Subversion repository version #6903:
- *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/include/regfio.h
+ *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/include/regfio.h?rev=6903&view=auto
  *
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
@@ -108,15 +108,15 @@ typedef struct regf_hbin {
   uint32 file_off;       /* my offset in the registry file */
   uint32 free_off;       /* offset to free space within the hbin record */
   uint32 free_size;      /* amount of data left in the block */
-  int    ref_count;      /* how many active records are pointing to this
+  uint32 ref_count;      /* how many active records are pointing to this
                           * block (not used currently) 
 			  */
-	
-  uint8  header[HBIN_HDR_SIZE]; /* "hbin" */
+  
   uint32 first_hbin_off; /* offset from first hbin block */
   uint32 block_size;     /* block size of this block is
                           * usually a multiple of 4096Kb 
 			  */
+  uint8  header[HBIN_HDR_SIZE]; /* "hbin" */
   prs_struct ps;	 /* data */
   bool dirty;            /* has this hbin block been modified? */
 } REGF_HBIN;
@@ -128,33 +128,33 @@ typedef struct {
 } REGF_HASH_REC;
 
 typedef struct {
-  REGF_HBIN *hbin;       /* pointer to HBIN record (in memory) containing 
+  REGF_HBIN* hbin;       /* pointer to HBIN record (in memory) containing 
 			  * this nk record 
 			  */
+  REGF_HASH_REC* hashes;
   uint32 hbin_off;	 /* offset from beginning of this hbin block */
   uint32 rec_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
   
   uint8 header[REC_HDR_SIZE];
   uint16 num_keys;
-  REGF_HASH_REC *hashes;
 } REGF_LF_REC;
 
 /* Key Value */
 
 typedef struct {
-  REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
+  REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
 			 */
+  char*  valuename;
+  uint8* data;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
   uint32 rec_off;	/* offset stored in the value list */
   
-  uint8  header[REC_HDR_SIZE];
-  char*  valuename;
   uint32 data_size;
   uint32 data_off;
-  uint8* data;
   uint32 type;
+  uint8  header[REC_HDR_SIZE];
   uint16 flag;
 } REGF_VK_REC;
 
@@ -163,10 +163,12 @@ typedef struct {
 struct _regf_sk_rec;
 
 typedef struct _regf_sk_rec {
-  struct _regf_sk_rec *next, *prev;
-  REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
+  struct _regf_sk_rec* next;
+  struct _regf_sk_rec* prev;
+  REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
 			 */
+  SEC_DESC* sec_desc;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
   
@@ -174,32 +176,35 @@ typedef struct _regf_sk_rec {
 			 * to lookup reference to this SK record 
 			 */
   
-  uint8  header[REC_HDR_SIZE];
   uint32 prev_sk_off;
   uint32 next_sk_off;
   uint32 ref_count;
   uint32 size;
-  SEC_DESC *sec_desc;
+  uint8  header[REC_HDR_SIZE];
 } REGF_SK_REC;
 
 
 /* Key Name */ 
 typedef struct {
-  REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
-			 * this nk record 
-			 */
   uint32 hbin_off;	/* offset from beginning of this hbin block */
-  /*uint32 subkey_index;*/	/* index to next subkey record to return */
   uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
+  REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
+			 * this nk record */
+
+  /* link in the other records here */
+  REGF_VK_REC* values;
+  REGF_SK_REC* sec_desc;
+  REGF_LF_REC subkeys;
   
   /* header information */
+  /* XXX: should we be looking for types other than the root key type? */
+  uint16 key_type;      
   uint8  header[REC_HDR_SIZE];
-  uint16 key_type;
   NTTIME mtime;
+  char* classname;
+  char* keyname;
   uint32 parent_off;	/* back pointer in registry hive */
   uint32 classname_off;	
-  char *classname;
-  char *keyname;
   
   /* max lengths */
   uint32 max_bytes_subkeyname;	    /* max subkey name * 2 */
@@ -217,11 +222,6 @@ typedef struct {
   uint32 values_off;	/* value lists which point to VK records */
   uint32 sk_off;	/* offset to SK record */
   
-  /* link in the other records here */
-  REGF_LF_REC subkeys;
-  REGF_VK_REC* values;
-  REGF_SK_REC* sec_desc;
-	
 } REGF_NK_REC;
 
 
@@ -230,22 +230,21 @@ typedef struct {
   /* run time information */
   int fd;	  /* file descriptor */
   int open_flags; /* flags passed to the open() call */
-  void *mem_ctx;  /* memory context for run-time file access information */
-  REGF_HBIN *block_list; /* list of open hbin blocks */
+  void* mem_ctx;  /* memory context for run-time file access information */
+  REGF_HBIN* block_list; /* list of open hbin blocks */
   
   /* file format information */
+  REGF_SK_REC* sec_desc_list;	/* list of security descriptors referenced 
+				 * by NK records 
+				 */
   
   uint8  header[REGF_HDR_SIZE];	/* "regf" */
+  NTTIME mtime;
   uint32 data_offset;		/* offset to record in the first (or any?) 
 				 * hbin block 
 				 */
   uint32 last_block;		/* offset to last hbin block in file */
   uint32 checksum;		/* XOR of bytes 0x0000 - 0x01FB */
-  NTTIME mtime;
-  
-  REGF_SK_REC *sec_desc_list;	/* list of security descriptors referenced 
-				 * by NK records 
-				 */
   
   /* unknowns */
   uint32 unknown1;
@@ -278,39 +277,42 @@ typedef struct {
 /******************************************************************************/
 /* Function Declarations */
 
-const char*   regfi_type_val2str(unsigned int val);
-int           regfi_type_str2val(const char* str);
+const char*           regfi_type_val2str(unsigned int val);
+int                   regfi_type_str2val(const char* str);
 
-char*         regfi_get_sacl(SEC_DESC* sec_desc);
-char*         regfi_get_dacl(SEC_DESC* sec_desc);
-char*         regfi_get_owner(SEC_DESC* sec_desc);
-char*         regfi_get_group(SEC_DESC* sec_desc);
+char*                 regfi_get_sacl(SEC_DESC* sec_desc);
+char*                 regfi_get_dacl(SEC_DESC* sec_desc);
+char*                 regfi_get_owner(SEC_DESC* sec_desc);
+char*                 regfi_get_group(SEC_DESC* sec_desc);
 
-REGF_FILE*    regfi_open(const char* filename);
-int           regfi_close(REGF_FILE* r);
+REGF_FILE*            regfi_open(const char* filename);
+int                   regfi_close(REGF_FILE* r);
 
-REGF_NK_REC*  regfi_rootkey(REGF_FILE* file);
-/* REGF_NK_REC*  regfi_fetch_subkey( REGF_FILE* file, REGF_NK_REC* nk ); */
+REGFI_ITERATOR*       regfi_iterator_new(REGF_FILE* fh);
+void                  regfi_iterator_free(REGFI_ITERATOR* i);
+bool                  regfi_iterator_down(REGFI_ITERATOR* i);
+bool                  regfi_iterator_up(REGFI_ITERATOR* i);
+bool                  regfi_iterator_to_root(REGFI_ITERATOR* i);
 
-void            regfi_key_free(REGF_NK_REC* nk);
+bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i, 
+						 const char* subkey_name);
+bool                  regfi_iterator_walk_path(REGFI_ITERATOR* i, 
+					       const char** path);
+const REGF_NK_REC*    regfi_iterator_cur_key(REGFI_ITERATOR* i);
+const REGF_NK_REC*    regfi_iterator_first_subkey(REGFI_ITERATOR* i);
+const REGF_NK_REC*    regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
+const REGF_NK_REC*    regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
-REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh);
-void            regfi_iterator_free(REGFI_ITERATOR* i);
-bool            regfi_iterator_down(REGFI_ITERATOR* i);
-bool            regfi_iterator_up(REGFI_ITERATOR* i);
-bool            regfi_iterator_to_root(REGFI_ITERATOR* i);
+bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
+						const char* value_name);
+const REGF_VK_REC*    regfi_iterator_first_value(REGFI_ITERATOR* i);
+const REGF_VK_REC*    regfi_iterator_cur_value(REGFI_ITERATOR* i);
+const REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
 
-bool            regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name);
-bool            regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
-/* XXX: these which return NK and VK records should return them as consts */
-REGF_NK_REC*    regfi_iterator_cur_key(REGFI_ITERATOR* i);
-REGF_NK_REC*    regfi_iterator_first_subkey(REGFI_ITERATOR* i);
-REGF_NK_REC*    regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
-REGF_NK_REC*    regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
-bool            regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name);
-REGF_VK_REC*    regfi_iterator_first_value(REGFI_ITERATOR* i);
-REGF_VK_REC*    regfi_iterator_cur_value(REGFI_ITERATOR* i);
-REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
+/* Private Functions */
+REGF_NK_REC*          regfi_rootkey(REGF_FILE* file);
+void                  regfi_key_free(REGF_NK_REC* nk);
+
 
 #endif	/* _REGFI_H */
