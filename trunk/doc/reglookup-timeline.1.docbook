@@ -72,7 +72,7 @@
       a key's stamp is updated anytime an immediate sub-value or sub-key is 
       created, renamed, deleted, or it's value is modified.  If this MTIME 
       data is critical to an investigation, any conclusions should be 
-      validated through experimentation in a lab environment.
+      validated through experimentation in a controlled lab environment.
     </para>
     <para>
       This software should be considered unstable at this time.

@@ -164,12 +164,90 @@
     <title>OUTPUT</title>
     <para>
       <!-- XXX: this should be a bit more formal -->
-      <command>reglookup</command> generates a comma-separated values (CSV) 
-      compatible format to stdout.  The format is designed to simplify parsing 
+      <command>reglookup</command> generates comma-separated values (CSV) 
+      and writes them to stdout.  The format is designed to simplify parsing 
       algorithms of other tools by quoting CSV special characters using a 
       common hexadecimal format.  Specifically, special characters or non-ascii 
       bytes are converted to "\xQQ" where QQ is the hexadecimal value for 
       the byte.
+    </para>
+    <para>
+      The number of columns or fields in each line is fixed for a given run 
+      of the program, but may vary based on the command line options provided.
+      See the header line for information on which fields are available and 
+      what they contain.
+    </para>
+    <para>
+      Some fields in some lines may contain sub-fields which require additional
+      delimiters.  If these sub-delimiters occur in these sub-fields, they are 
+      also encoded in the same way as commas or other special characters are.  
+      Currently, the second, third, and fourth level delimiters are "|", ":", 
+      and " ", respectively.  These are particularly important to take note of 
+      when security attributes are printed.  Please note that these delimiters
+      may occur in fields that are not sub-delimited, and should not be 
+      interpreted as special.
+    </para>
+    <para>
+      Security attributes of registry keys have a complex structure which is 
+      outlined here.  Each key will generally have an associated ACL (Access 
+      Control List), which is made up of ACEs (Access Control Entries).  Each 
+      ACE is delimited by the secondary delimiter mentioned above, "|".  The 
+      fields within an ACE are delimited by the third-level delimiter, ":", 
+      and consist of a SID, the ACE type (ALLOW, DENY, etc), a list of access 
+      rights, and a list of flags.  The last two fields are delimited by the 
+      fourth-level delimiter " ".  These final lists are simply human-readable 
+      interpretations of bits.  The access rights abbreviations are listed 
+      below along with their Microsoft-assigned names:
+      <screen>
+      QRY_VAL		KEY_QUERY_VALUE
+      SET_VAL		KEY_SET_VALUE
+      CREATE_KEY	KEY_CREATE_SUB_KEY
+      ENUM_KEYS		KEY_ENUMERATE_SUB_KEYS
+      NOTIFY		KEY_NOTIFY
+      CREATE_LNK	KEY_CREATE_LINK
+      WOW64_64		KEY_WOW64_64KEY
+      WOW64_32		KEY_WOW64_32KEY
+      DELETE		DELETE
+      R_CONT		READ_CONTROL
+      W_DAC		WRITE_DAC
+      W_OWNER		WRITE_OWNER
+      SYNC		SYNCHRONIZE
+      SYS_SEC		ACCESS_SYSTEM_SECURITY
+      MAX_ALLWD		MAXIMUM_ALLOWED
+      GEN_A		GENERIC_ALL
+      GEN_X		GENERIC_EXECUTE
+      GEN_W		GENERIC_WRITE
+      GEN_R		GENERIC_READ
+      </screen>
+
+      And the meaning of each flag is:
+      <screen>
+      OI	Object Inherit
+      CI	Container Inherit
+      NP	Non-Propagate
+      IO	Inherit Only
+      IA	Inherited ACE
+      </screen>
+
+      Please see the following references for more information:
+      <screen>
+        http://msdn2.microsoft.com/en-gb/library/ms724878.aspx
+        http://msdn2.microsoft.com/en-gb/library/aa374892.aspx
+        http://msdn2.microsoft.com/en-us/library/aa772242.aspx
+        http://support.microsoft.com/kb/220167
+      </screen>
+    </para>
+    <para>
+      Note that some of the bits listed above have either not been allocated by 
+      Microsoft, or simply aren't documented.  If any bits are set in the above 
+      two fields that aren't recognized, a hexidecimal representation of all of 
+      these mystery bits will be included in the output.  For instance, if the 
+      lowest bit and third lowest bit were not recognized while being set, 
+      the number "0x5" would be included as an element in the list.
+    </para>
+    <para>
+      While the ACL/ACE output format is mostly stable at this point, minor 
+      changes may be introduced in future versions.
     </para>
   </refsect1>
 
@@ -239,11 +317,11 @@
     </para>
     <para>
       You'll notice that registry paths aren't all the same as the
-      equivalents you see in the windows registry editor.  Don't ask me why 
-      that is.  I just work here.
-    </para>
-    <para>
-      This software should be considered unstable at this time.
+      equivalents you see in the windows registry editor.  This is because
+      Windows constructs the registry view from multiple registry files, 
+      each with their own roots.  This utility merely shows what exists 
+      under a single root.  This isn't really a bug, but one should be 
+      aware of the differences in path.
     </para>
   </refsect1>
 
