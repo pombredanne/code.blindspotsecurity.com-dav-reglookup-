@@ -91,11 +91,11 @@ const char* regfi_ace_type2str(uint8 type)
 char* regfi_ace_flags2str(uint8 flags)
 {
   static const char* flag_map[32] = 
-    { "OI",
-      "CI",
-      "NP",
-      "IO",
-      "IA",
+    { "OI", /* Object Inherit */
+      "CI", /* Container Inherit */
+      "NP", /* Non-Propagate */
+      "IO", /* Inherit Only */
+      "IA", /* Inherited ACE */
       NULL,
       NULL,
       NULL,
