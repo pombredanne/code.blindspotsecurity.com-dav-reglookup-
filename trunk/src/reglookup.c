@@ -23,6 +23,7 @@
 
 
 #include <stdlib.h>
+#include <sysexits.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -408,7 +409,7 @@ char** splitPath(const char* s)
     {
       copy = (char*)malloc((next-cur+1)*sizeof(char));
       if(copy == NULL)
-	bailOut(2, "ERROR: Memory allocation problem.\n");
+	bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
 	  
       memcpy(copy, cur, next-cur);
       copy[next-cur] = '\0';
@@ -416,7 +417,7 @@ char** splitPath(const char* s)
       if(ret_cur < (REGF_MAX_DEPTH+1+1))
 	ret_val[ret_cur] = NULL;
       else
-	bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
+	bailOut(EX_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
     }
     cur = next+1;
   }
@@ -429,7 +430,7 @@ char** splitPath(const char* s)
     if(ret_cur < (REGF_MAX_DEPTH+1+1))
       ret_val[ret_cur] = NULL;
     else
-      bailOut(2, "ERROR: Registry maximum depth exceeded.\n");
+      bailOut(EX_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
   }
 
   return ret_val;
@@ -574,6 +575,13 @@ void printValue(const REGF_VK_REC* vk, char* prefix)
    *      for that condition.
    */
   quoted_name = quote_string(vk->valuename, common_special_chars);
+  if (quoted_name == NULL)
+  {
+    quoted_name = malloc(1*sizeof(char));
+    if(quoted_name == NULL)
+      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+    quoted_name[0] = '\0';
+  }
 
   if(quoted_value == NULL)
   {
@@ -692,7 +700,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
   sub = regfi_iterator_first_subkey(iter);
   
   if(root == NULL)
-    bailOut(3, "ERROR: root cannot be NULL.\n");
+    bailOut(EX_DATAERR, "ERROR: root cannot be NULL.\n");
   
   do
   {
@@ -700,7 +708,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     {
       path = iter2Path(iter);
       if(path == NULL)
-	bailOut(2, "ERROR: Could not construct iterator's path.\n");
+	bailOut(EX_OSERR, "ERROR: Could not construct iterator's path.\n");
       
       if(!type_filter_enabled || (key_type == type_filter))
 	printKey(cur, path);
@@ -716,11 +724,11 @@ void printKeyTree(REGFI_ITERATOR* iter)
       {
 	/* We're done with this sub-tree, going up and hitting other branches. */
 	if(!regfi_iterator_up(iter))
-	  bailOut(3, "ERROR: could not traverse iterator upward.\n");
+	  bailOut(EX_DATAERR, "ERROR: could not traverse iterator upward.\n");
 	
 	cur = regfi_iterator_cur_key(iter);
 	if(cur == NULL)
-	  bailOut(3, "ERROR: unexpected NULL for key.\n");
+	  bailOut(EX_DATAERR, "ERROR: unexpected NULL for key.\n");
 	
 	sub = regfi_iterator_next_subkey(iter);
       }
@@ -731,7 +739,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
        * Let's move down and print this first sub-tree out. 
        */
       if(!regfi_iterator_down(iter))
-	bailOut(3, "ERROR: could not traverse iterator downward.\n");
+	bailOut(EX_DATAERR, "ERROR: could not traverse iterator downward.\n");
 
       cur = sub;
       sub = regfi_iterator_first_subkey(iter);
@@ -801,7 +809,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     tmp_path_joined = iter2Path(iter);
 
     if((value == NULL) || (tmp_path_joined == NULL))
-      bailOut(2, "ERROR: Unexpected error before printValue.\n");
+      bailOut(EX_OSERR, "ERROR: Unexpected error before printValue.\n");
 
     printValue(value, tmp_path_joined);
 
@@ -815,7 +823,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
       fprintf(stderr, "VERBOSE: Found final path element as key.\n");
 
     if(!regfi_iterator_down(iter))
-      bailOut(2, "ERROR: Unexpected error on traversing path filter key.\n");
+      bailOut(EX_DATAERR, "ERROR: Unexpected error on traversing path filter key.\n");
 
     return 2;
   }
@@ -857,7 +865,7 @@ int main(int argc, char** argv)
   if(argc < 2)
   {
     usage();
-    bailOut(1, "ERROR: Requires at least one argument.\n");
+    bailOut(EX_USAGE, "ERROR: Requires at least one argument.\n");
   }
   
   arge = argc-1;
@@ -868,10 +876,10 @@ int main(int argc, char** argv)
       if(++argi >= arge)
       {
 	usage();
-	bailOut(1, "ERROR: '-p' option requires parameter.\n");
+	bailOut(EX_USAGE, "ERROR: '-p' option requires parameter.\n");
       }
       if((path_filter = strdup(argv[argi])) == NULL)
-	bailOut(2, "ERROR: Memory allocation problem.\n");
+	bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
 
       path_filter_enabled = true;
     }
@@ -880,12 +888,12 @@ int main(int argc, char** argv)
       if(++argi >= arge)
       {
 	usage();
-	bailOut(1, "ERROR: '-t' option requires parameter.\n");
+	bailOut(EX_USAGE, "ERROR: '-t' option requires parameter.\n");
       }
       if((type_filter = regfi_type_str2val(argv[argi])) < 0)
       {
 	fprintf(stderr, "ERROR: Invalid type specified: %s.\n", argv[argi]);
-	bailOut(1, "");
+	bailOut(EX_USAGE, "");
       }
       type_filter_enabled = true;
     }
@@ -903,22 +911,22 @@ int main(int argc, char** argv)
     {
       usage();
       fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
-      bailOut(1, "");
+      bailOut(EX_USAGE, "");
     }
   }
   if((registry_file = strdup(argv[argi])) == NULL)
-    bailOut(2, "ERROR: Memory allocation problem.\n");
+    bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
 
   f = regfi_open(registry_file);
   if(f == NULL)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
-    bailOut(3, "");
+    bailOut(EX_NOINPUT, "");
   }
 
   iter = regfi_iterator_new(f);
   if(iter == NULL)
-    bailOut(3, "ERROR: Couldn't create registry iterator.\n");
+    bailOut(EX_OSERR, "ERROR: Couldn't create registry iterator.\n");
 
   if(print_header)
   {
@@ -941,7 +949,7 @@ int main(int argc, char** argv)
     else if (retr_path_ret == 2)
       printKeyTree(iter);
     else if(retr_path_ret != 0)
-      bailOut(4, "ERROR: Unknown error occurred in retrieving path.\n");
+      bailOut(EX_DATAERR, "ERROR: Unknown error occurred in retrieving path.\n");
   }
   else
     printKeyTree(iter);
