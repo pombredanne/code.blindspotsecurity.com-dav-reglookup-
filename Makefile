@@ -10,12 +10,12 @@ MAN_PREFIX=$(PREFIX)/man
 ################################################################################
 
 CC=gcc
-OPTS=-std=gnu89 -pedantic -Wall -ggdb
+OPTS=-std=gnu89 -pedantic -Wall
 INC=-I/usr/local/include
 LIB=-L/usr/local/lib
 
 UNAME := $(shell uname)
-ifeq ($(UNAME),FreeBSD) 	
+ifneq ($(UNAME),Linux) 	
   LIB:=$(LIB) -liconv
 endif
 
