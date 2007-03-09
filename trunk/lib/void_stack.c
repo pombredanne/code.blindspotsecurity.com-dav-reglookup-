@@ -104,9 +104,23 @@ void void_stack_free_deep(void_stack* stack)
 }
 
 
-unsigned short void_stack_size(void_stack* stack)
+unsigned short void_stack_size(const void_stack* stack)
 {
   return stack->top;
+}
+
+
+void* void_stack_pop(void_stack* stack)
+{
+  void* ret_val = NULL;
+
+  if(stack->top > 0)
+  {
+    ret_val = stack->elements[--(stack->top)];
+    stack->elements[stack->top] = NULL;
+  }
+
+  return ret_val;
 }
 
 
@@ -122,44 +136,29 @@ bool void_stack_push(void_stack* stack, void* e)
 }
 
 
-void* void_stack_pop(void_stack* stack)
-{
-  void* ret_val = NULL;
-
-  if(stack->top > 0)
-  {
-    ret_val = stack->elements[--(stack->top)];
-    stack->elements[stack->top] = NULL;
-  }
-  else
-    ret_val = NULL;
-
-  return ret_val;
-}
-
-
-const void* void_stack_cur(void_stack* stack)
+const void* void_stack_cur(const void_stack* stack)
 {
   void* ret_val = NULL;
 
   if(stack->top > 0)
     ret_val = stack->elements[stack->top-1];
-  else
-    ret_val = NULL;
 
   return ret_val;
 }
 
 
-void_stack_iterator* void_stack_iterator_new(void_stack* stack)
+void_stack_iterator* void_stack_iterator_new(const void_stack* stack)
 {
   void_stack_iterator* ret_val = NULL;
   
-  ret_val = (void_stack_iterator*)malloc(sizeof(void_stack_iterator));
-  if (ret_val != NULL)
+  if(stack != NULL)
   {
-    ret_val->stack = stack;
-    ret_val->cur = 0;
+    ret_val = (void_stack_iterator*)malloc(sizeof(void_stack_iterator));
+    if (ret_val != NULL)
+    {
+      ret_val->stack = stack;
+      ret_val->cur = 0;
+    }
   }
 
   return ret_val;
