@@ -25,6 +25,7 @@
 usage()
 {
   echo "Usage: $0 [-H] <REGISTRY_FILE> [<REGISTRY_FILE> ...]" 1>&2
+  echo "   -H  Omit header line" 1>&2
 }
 
 if [ $# -eq 0 ]; then

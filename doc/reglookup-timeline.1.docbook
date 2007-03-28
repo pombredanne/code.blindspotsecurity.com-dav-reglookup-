@@ -15,7 +15,8 @@
     <title>SYNOPSIS</title>
     <para>
       <command>
-	reglookup-timeline <replaceable>registry-file</replaceable>
+	reglookup-timeline [<replaceable>-H</replaceable>] 
+                            <replaceable>registry-file</replaceable>
                            [<replaceable>registry-file</replaceable> ...]
       </command>
     </para>
@@ -36,7 +37,8 @@
     <para>
       <command>reglookup-timeline</command> accepts one or more registry file
       names.  All of the provided registries will be parsed using 
-      <command>reglookup(1)</command>.
+      <command>reglookup(1)</command>.  The <command>-H</command> option may be
+      used to omit the header line.
     </para>
   </refsect1>
 
