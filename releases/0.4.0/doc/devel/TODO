@@ -1,0 +1,56 @@
+$Id$
+
+If you are interested in contributing to this project, here's a few
+things you could look into:
+
+ - Testing, testing, and more testing.  reglookup needs to be tested on 
+   NT/XP/2k3/Vista.  A regression test suite would be nice too.  Some 
+   thoughts on this include a script which randomly fuzzes an existing
+   registry file, and tries to detect crashes of reglookup when parsing
+   it.  Another test script might randomly truncate an existing registry
+   file, which will help improve reglookup's parsing on fragmentary
+   files.
+
+ - Build system.  I do not wish to use automake/autoconf in this
+   project.  I have also now decided that make is painful to use for
+   everything.  I'd like to switch to a suite of shell scripts driven by
+   minimal make rules.  If you got any ideas on this, shoot them my way.
+
+ - Unicode support still needs improvement.  While parsing strings seems
+   to be decent, UTF-8 output would be nice.
+
+ - The interface between reglookup.c and regfi.c is much better than it
+   used to be, but the iter2Stack function needs to be moved into the 
+   library, which means the \xQQ quoting syntax will have to go with it.
+   This syntax will need to be more carefully documented if it's going 
+   to be a part of the library.
+
+ - NK/VK/SK record caching.  Right now, HBINs and perhaps SK records are 
+   cached, but it's pretty haphazard, and NK/VK records are repeatedly
+   re-parsed.  A generic caching library should be introduced which can
+   cache many of these records with a specific memory limit in mind.  
+   I think this will speed things up greatly.
+
+ - It might be nice to have a way to filter results by security 
+   descriptor information.
+
+ - Documentation.  The security descriptor output format needs to be 
+   documented.  Also, function contracts should be added to the 
+   lower-level functions of regfi.c.
+
+ - The stuff in smb_deps.h and smb_deps.c needs to be cleaned up.  The
+   eventual goal is to have it all either integrated into regfi, or to
+   be eliminated, or broken out into small supporting libraries, as
+   necessary.  It is currently just a jumble of old Samba code that I
+   haven't decided where to put yet.
+
+ - At least one user reported that they use reglookup on a Windows host 
+   through Cygwin, but after version 0.3.0 came out, the dependency on
+   libiconv caused that to break.  libiconv seems to be a portability
+   issue on other platforms as well.  However, it's interface is a POSIX
+   standard, and I think I'd like to keep it around.  Perhaps it would 
+   be nice if reglookup could be cross-compiled using MinGW.  Then a 
+   binary could be distributed for that platform.  This app was never 
+   meant for Windows though, so this isn't a high priority.
+
+ - Grep through the source for 'XXX', and you'll find more.
