@@ -4,7 +4,7 @@
 # files to produce an MTIME sorted output.  This is helpful when building
 # timelines for investigations.
 #
-# Copyright (C) 2005-2006 Timothy D. Morgan
+# Copyright (C) 2005-2007 Timothy D. Morgan
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 
 usage()
 {
-  echo "Usage: $0 <REGISTRY_FILE> [<REGISTRY_FILE> ...]" 1>&2
+  echo "Usage: $0 [-H] <REGISTRY_FILE> [<REGISTRY_FILE> ...]" 1>&2
 }
 
 if [ $# -eq 0 ]; then
@@ -33,7 +33,16 @@ if [ $# -eq 0 ]; then
   exit 1
 fi
 
-echo "MTIME,FILE,PATH"
+PRINT_HEADER=true
+if [ "$1" = "-H" ]; then
+  PRINT_HEADER=false
+  shift
+fi
+
+if [ "$PRINT_HEADER" = "true" ]; then
+  echo "MTIME,FILE,PATH"
+fi
+
 for F in $@; do
   reglookup -t KEY -H "$F" | awk -F',' '{ printf "%s,'"$F"',%s\n",$4,$1; }'
 done | sort

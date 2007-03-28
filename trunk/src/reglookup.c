@@ -545,10 +545,11 @@ void printValue(const REGF_VK_REC* vk, char* prefix)
     tmp_buf[2] = (uint8)((vk->data_off >> 1) & 0xFF);
     tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
     if(size > 4)
-      /* XXX: should we kick out a warning here?  If it is in the 
-       *      offset and longer than four, file could be corrupt 
-       *      or malicious... */
+    {
+      fprintf(stderr, "WARNING: value stored in offset larger than 4. "
+	      "Truncating...\n");
       size = 4;
+    }
     quoted_value = data_to_ascii(tmp_buf, 4, vk->type, &conv_error);
   }
   else
