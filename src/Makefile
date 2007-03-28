@@ -15,7 +15,7 @@ reglookup.o: reglookup.c
 	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ reglookup.c
 
 install:
-	cp -r $(FILES) $(BIN_PREFIX)
+	install -m 0755 $(FILES) $(BIN_PREFIX)
 
 clean:
 	rm -f *.o
