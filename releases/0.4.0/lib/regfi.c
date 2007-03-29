@@ -1805,13 +1805,11 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
     if((cur->valuename != NULL)
        && (strcasecmp(cur->valuename, value_name) == 0))
       found = true;
-    cur = regfi_iterator_next_value(i);
+    else
+      cur = regfi_iterator_next_value(i);
   }
 
-  if(cur == NULL)
-    return false;
-  
-  return true;
+  return found;
 }
 
 
