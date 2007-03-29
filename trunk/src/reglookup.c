@@ -949,8 +949,12 @@ int main(int argc, char** argv)
       fprintf(stderr, "WARNING: specified path not found.\n");
     else if (retr_path_ret == 2)
       printKeyTree(iter);
-    else if(retr_path_ret != 0)
-      bailOut(EX_DATAERR, "ERROR: Unknown error occurred in retrieving path.\n");
+    else if(retr_path_ret < 0)
+    {
+      fprintf(stderr, "ERROR: retrievePath() returned %d.\n", 
+	      retr_path_ret);
+      bailOut(EX_DATAERR,"ERROR: Unknown error occurred in retrieving path.\n");
+    }
   }
   else
     printKeyTree(iter);
