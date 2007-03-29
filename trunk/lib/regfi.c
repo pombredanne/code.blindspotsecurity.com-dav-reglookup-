@@ -1808,10 +1808,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
     cur = regfi_iterator_next_value(i);
   }
 
-  if(cur == NULL)
-    return false;
-  
-  return true;
+  return found;
 }
 
 
