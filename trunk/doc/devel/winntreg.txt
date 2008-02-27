@@ -109,9 +109,12 @@ Offset      Size      Contents
 0x0000      Word      ID: ASCII-"nk" = 0x6B6E
 0x0002      Word      for the root-key: 0x2C, otherwise 0x20  //key symbolic links 0x10. Nigel
 0x0004      Q-Word      write-date/time in windows nt notation
+0x000C      D-Word      UNKNOWN // added by TDM
 0x0010      D-Word      Offset of Owner/Parent key
 0x0014      D-Word      number of sub-Keys
+0x0018      D-Word      UNKNOWN // added by TDM
 0x001C      D-Word      Offset of the sub-key lf-Records
+0x0020      D-Word      UNKNOWN // added by TDM
 0x0024      D-Word      number of values
 0x0028      D-Word      Offset of the Value-List
 0x002C      D-Word      Offset of the sk-Record

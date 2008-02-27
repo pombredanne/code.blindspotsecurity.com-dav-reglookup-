@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005-2007 Timothy D. Morgan
+ * Copyright (C) 2005-2008 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -339,193 +339,6 @@ char* regfi_get_group(SEC_DESC *sec_desc)
 
 /*******************************************************************
  *******************************************************************/
-static int read_block( REGF_FILE *file, prs_struct *ps, uint32 file_offset, 
-		       uint32 block_size )
-{
-  const int hdr_size = 0x20;
-  int bytes_read, returned;
-  char *buffer;
-  SMB_STRUCT_STAT sbuf;
-
-  /* check for end of file */
-
-  if ( fstat( file->fd, &sbuf ) ) {
-    /*DEBUG(0,("read_block: stat() failed! (%s)\n", strerror(errno)));*/
-    return -1;
-  }
-
-  if ( (size_t)file_offset >= sbuf.st_size )
-    return -1;
-	
-  /* if block_size == 0, we are parsnig HBIN records and need 
-     to read some of the header to get the block_size from there */
-	   
-  if ( block_size == 0 ) {
-    uint8 hdr[0x20];
-
-    if ( lseek( file->fd, file_offset, SEEK_SET ) == -1 ) {
-      /*DEBUG(0,("read_block: lseek() failed! (%s)\n", strerror(errno) ));*/
-      return -1;
-    }
-
-    bytes_read = returned = 0;
-    while (bytes_read < hdr_size)
-    {
-      returned = read(file->fd, hdr + bytes_read, hdr_size - bytes_read);
-      if(returned == -1 && errno != EINTR && errno != EAGAIN)
-      {
-	/*DEBUG(0,("read_block: read of hdr failed (%s)\n",strerror(errno)));*/
-	return -1;
-      }
-
-      if(returned == 0)
-	return -1;
-
-      bytes_read += returned;
-    }
-
-    /* make sure this is an hbin header */
-
-    if ( strncmp( (char*)hdr, "hbin", HBIN_HDR_SIZE ) != 0 ) {
-      /*DEBUG(0,("read_block: invalid block header!\n"));*/
-      return -1;
-    }
-
-    block_size = IVAL( hdr, 0x08 );
-  }
-
-  /*DEBUG(10,("read_block: block_size == 0x%x\n", block_size ));*/
-
-  /* set the offset, initialize the buffer, and read the block from disk */
-
-  if ( lseek( file->fd, file_offset, SEEK_SET ) == -1 ) {
-    /*DEBUG(0,("read_block: lseek() failed! (%s)\n", strerror(errno) ));*/
-    return -1;
-  }
-	
-  prs_init( ps, block_size, file->mem_ctx, UNMARSHALL );
-  buffer = ps->data_p;
-  bytes_read = returned = 0;
-
-  while ( bytes_read < block_size ) 
-  {
-    returned = read(file->fd, buffer+bytes_read, block_size-bytes_read);
-    if(returned == -1 && errno != EINTR && errno != EAGAIN)
-    {
-      /*DEBUG(0,("read_block: read() failed (%s)\n", strerror(errno) ));*/
-      return -1;
-    }
-
-    if ((returned == 0) && (bytes_read < block_size)) 
-    {
-      /*DEBUG(0,("read_block: not a vald registry file ?\n" ));*/
-      return -1;
-    }	
-
-    bytes_read += returned;
-  }
-	
-  return bytes_read;
-}
-
-
-/*******************************************************************
- *******************************************************************/
-static bool prs_regf_block(const char *desc, prs_struct *ps, 
-			   int depth, REGF_FILE *file)
-{
-  depth++;
-	
-  if(!prs_uint8s("header", ps, depth, file->header, sizeof(file->header)))
-    return false;
-	
-  /* yes, these values are always identical so store them only once */
-	
-  if ( !prs_uint32( "unknown1", ps, depth, &file->unknown1 ))
-    return false;
-  if ( !prs_uint32( "unknown1 (again)", ps, depth, &file->unknown1 ))
-    return false;
-
-  /* get the modtime */
-	
-  if ( !prs_set_offset( ps, 0x0c ) )
-    return false;
-  if ( !smb_io_time( "modtime", &file->mtime, ps, depth ) )
-    return false;
-
-  /* constants */
-	
-  if ( !prs_uint32( "unknown2", ps, depth, &file->unknown2 ))
-    return false;
-  if ( !prs_uint32( "unknown3", ps, depth, &file->unknown3 ))
-    return false;
-  if ( !prs_uint32( "unknown4", ps, depth, &file->unknown4 ))
-    return false;
-  if ( !prs_uint32( "unknown5", ps, depth, &file->unknown5 ))
-    return false;
-
-  /* get file offsets */
-	
-  if ( !prs_set_offset( ps, 0x24 ) )
-    return false;
-  if ( !prs_uint32( "data_offset", ps, depth, &file->data_offset ))
-    return false;
-  if ( !prs_uint32( "last_block", ps, depth, &file->last_block ))
-    return false;
-		
-  /* one more constant */
-	
-  if ( !prs_uint32( "unknown6", ps, depth, &file->unknown6 ))
-    return false;
-		
-  /* get the checksum */
-	
-  if ( !prs_set_offset( ps, 0x01fc ) )
-    return false;
-  if ( !prs_uint32( "checksum", ps, depth, &file->checksum ))
-    return false;
-	
-  return true;
-}
-
-
-/*******************************************************************
- *******************************************************************/
-static bool prs_hbin_block(const char *desc, prs_struct *ps, 
-			   int depth, REGF_HBIN *hbin)
-{
-  uint32 block_size2;
-
-  depth++;
-	
-  if(!prs_uint8s("header", ps, depth, hbin->header, sizeof(hbin->header)))
-    return false;
-
-  if ( !prs_uint32( "first_hbin_off", ps, depth, &hbin->first_hbin_off ))
-    return false;
-
-  /* The dosreg.cpp comments say that the block size is at 0x1c.
-     According to a WINXP NTUSER.dat file, this is wrong.  The block_size
-     is at 0x08 */
-
-  if ( !prs_uint32( "block_size", ps, depth, &hbin->block_size ))
-    return false;
-
-  block_size2 = hbin->block_size;
-  prs_set_offset( ps, 0x1c );
-  if ( !prs_uint32( "block_size2", ps, depth, &block_size2 ))
-    return false;
-
-  if ( !ps->io )
-    hbin->dirty = true;
-	
-
-  return true;
-}
-
-
-/*******************************************************************
- *******************************************************************/
 static bool prs_nk_rec( const char *desc, prs_struct *ps, 
 			int depth, REGF_NK_REC *nk )
 {
@@ -625,153 +438,7 @@ static bool prs_nk_rec( const char *desc, prs_struct *ps,
   /*if ( data_size > nk->rec_size )
       DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, nk->rec_size));*/
 
-  if ( !ps->io )
-    nk->hbin->dirty = true;
-  
   return true;
-}
-
-
-/*******************************************************************
- *******************************************************************/
-static uint32 regf_block_checksum( prs_struct *ps )
-{
-  char *buffer = ps->data_p;
-  uint32 checksum, x;
-  int i;
-
-  /* XOR of all bytes 0x0000 - 0x01FB */
-		
-  checksum = x = 0;
-	
-  for ( i=0; i<0x01FB; i+=4 ) {
-    x = IVAL(buffer, i );
-    checksum ^= x;
-  }
-	
-  return checksum;
-}
-
-
-/*******************************************************************
- *******************************************************************/
-static bool read_regf_block( REGF_FILE *file )
-{
-  prs_struct ps;
-  uint32 checksum;
-	
-  /* grab the first block from the file */
-		
-  if ( read_block( file, &ps, 0, REGF_BLOCKSIZE ) == -1 )
-    return false;
-	
-  /* parse the block and verify the checksum */
-	
-  if ( !prs_regf_block( "regf_header", &ps, 0, file ) )
-    return false;	
-		
-  checksum = regf_block_checksum( &ps );
-	
-  if(ps.is_dynamic)
-    SAFE_FREE(ps.data_p);
-  ps.is_dynamic = false;
-  ps.buffer_size = 0;
-  ps.data_offset = 0;
-
-  if ( file->checksum !=  checksum ) {
-    /*DEBUG(0,("read_regf_block: invalid checksum\n" ));*/
-    return false;
-  }
-
-  return true;
-}
-
-
-/*******************************************************************
- *******************************************************************/
-static REGF_HBIN* read_hbin_block( REGF_FILE *file, off_t offset )
-{
-  REGF_HBIN *hbin;
-  uint32 record_size, curr_off, block_size, header;
-	
-  if ( !(hbin = (REGF_HBIN*)zalloc(sizeof(REGF_HBIN))) ) 
-    return NULL;
-  hbin->file_off = offset;
-  hbin->free_off = -1;
-		
-  if ( read_block( file, &hbin->ps, offset, 0 ) == -1 )
-    return NULL;
-	
-  if ( !prs_hbin_block( "hbin", &hbin->ps, 0, hbin ) )
-    return NULL;	
-
-  /* this should be the same thing as hbin->block_size but just in case */
-
-  block_size = hbin->ps.buffer_size;
-
-  /* Find the available free space offset.  Always at the end,
-     so walk the record list and stop when you get to the end.
-     The end is defined by a record header of 0xffffffff.  The 
-     previous 4 bytes contains the amount of free space remaining 
-     in the hbin block. */
-
-  /* remember that the record_size is in the 4 bytes preceeding the record itself */
-
-  if ( !prs_set_offset( &hbin->ps, file->data_offset+HBIN_HDR_SIZE-sizeof(uint32) ) )
-    return false;
-
-  record_size = 0;
-  curr_off = hbin->ps.data_offset;
-  while ( header != 0xffffffff ) {
-    /* not done yet so reset the current offset to the 
-       next record_size field */
-
-    curr_off = curr_off+record_size;
-
-    /* for some reason the record_size of the last record in
-       an hbin block can extend past the end of the block
-       even though the record fits within the remaining 
-       space....aaarrrgggghhhhhh */
-
-    if ( curr_off >= block_size ) {
-      record_size = -1;
-      curr_off = -1;
-      break;
-    }
-
-    if ( !prs_set_offset( &hbin->ps, curr_off) )
-      return false;
-
-    if ( !prs_uint32( "rec_size", &hbin->ps, 0, &record_size ) )
-      return false;
-    if ( !prs_uint32( "header", &hbin->ps, 0, &header ) )
-      return false;
-		
-    assert( record_size != 0 );
-
-    if ( record_size & 0x80000000 ) {
-      /* absolute_value(record_size) */
-      record_size = (record_size ^ 0xffffffff) + 1;
-    }
-  }
-
-  /* save the free space offset */
-
-  if ( header == 0xffffffff ) {
-
-    /* account for the fact that the curr_off is 4 bytes behind the actual 
-       record header */
-
-    hbin->free_off = curr_off + sizeof(uint32);
-    hbin->free_size = record_size;
-  }
-
-  /*DEBUG(10,("read_hbin_block: free space offset == 0x%x\n", hbin->free_off));*/
-
-  if ( !prs_set_offset( &hbin->ps, file->data_offset+HBIN_HDR_SIZE )  )
-    return false;
-	
-  return hbin;
 }
 
 
@@ -823,7 +490,7 @@ static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
 	hbin->ps.data_offset = 0;
       }
 
-      hbin = read_hbin_block( file, block_off );
+      hbin = regfi_parse_hbin(file, block_off, true, false);
 
       if ( hbin ) 
 	block_off = hbin->file_off + hbin->block_size;
@@ -872,7 +539,7 @@ static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin,
 
   /* move to the LF record */
 
-  if ( !prs_set_offset( &hbin->ps, nk->subkeys_off + HBIN_HDR_SIZE - hbin->first_hbin_off ) )
+  if ( !prs_set_offset( &hbin->ps, nk->subkeys_off + HBIN_MAGIC_SIZE - hbin->first_hbin_off ) )
     return false;
 
   /* backup and get the data_size */
@@ -908,9 +575,6 @@ static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin,
   /*  if ( data_size > lf->rec_size )*/
     /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, lf->rec_size));*/
 
-  if ( !hbin->ps.io )
-    hbin->dirty = true;
-
   return true;
 }
 
@@ -926,7 +590,7 @@ static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_
 
   depth++;
 
-  if ( !prs_set_offset( &hbin->ps, sk->sk_off + HBIN_HDR_SIZE - hbin->first_hbin_off ) )
+  if ( !prs_set_offset( &hbin->ps, sk->sk_off + HBIN_MAGIC_SIZE - hbin->first_hbin_off ) )
     return false;
 
   /* backup and get the data_size */
@@ -961,9 +625,6 @@ static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_
   data_size = ((start_off - end_off) & 0xfffffff8 );
   /*  if ( data_size > sk->rec_size )*/
     /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, sk->rec_size));*/
-
-  if ( !hbin->ps.io )
-    hbin->dirty = true;
 
   return true;
 }
@@ -1049,7 +710,7 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
       }
       if (!(prs_set_offset(&hblock->ps, 
 			   (vk->data_off
-			    + HBIN_HDR_SIZE
+			    + HBIN_MAGIC_SIZE
 			    - hblock->first_hbin_off)
 			   - sizeof(uint32))))
       {	return false; }
@@ -1065,8 +726,6 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
 		     vk->data, vk->data_size))
 	return false;
 
-      if ( !hblock->ps.io )
-	hblock->dirty = true;
     }
     else 
     {
@@ -1083,9 +742,6 @@ static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth,
   /* XXX: should probably print a warning here */
   /*if ( data_size !=  vk->rec_size )
     DEBUG(10,("prs_vk_rec: data_size check failed (0x%x < 0x%x)\n", data_size, vk->rec_size));*/
-
-  if ( !hbin->ps.io )
-    hbin->dirty = true;
 
   return true;
 }
@@ -1117,7 +773,7 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
   /* convert the offset to something relative to this HBIN block */
   if (!prs_set_offset(&hbin->ps, 
 		      nk->values_off
-		      + HBIN_HDR_SIZE
+		      + HBIN_MAGIC_SIZE
 		      - hbin->first_hbin_off
 		      - sizeof(uint32)))
   { return false; }
@@ -1154,7 +810,7 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
     }
   	
     new_offset = nk->values[i].rec_off 
-      + HBIN_HDR_SIZE 
+      + HBIN_MAGIC_SIZE 
       - sub_hbin->first_hbin_off;
 
     if (!prs_set_offset(&sub_hbin->ps, new_offset))
@@ -1162,9 +818,6 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
     if (!hbin_prs_vk_rec("vk_rec", sub_hbin, depth, &nk->values[i], file))
       return false;
   }
-
-  if ( !hbin->ps.io )
-    hbin->dirty = true;
 
   return true;
 }
@@ -1298,7 +951,7 @@ static bool next_record( REGF_HBIN *hbin, const char *hdr, bool *eob )
 	
   curr_off = ps->data_offset;
   if ( curr_off == 0 )
-    prs_set_offset( ps, HBIN_HEADER_REC_SIZE );
+    prs_set_offset( ps, HBIN_HEADER_REC_SIZE+4 );
 
   /* assume that the current offset is at the reacord header 
      and we need to backup to read the record size */
@@ -1361,47 +1014,31 @@ static bool next_nk_record(REGF_FILE *file, REGF_HBIN *hbin,
 
 
 /*******************************************************************
- Open the registry file and then read in the REGF block to get the 
- first hbin offset.
-*******************************************************************/
-REGF_FILE* regfi_open( const char *filename )
+ * Open the registry file and then read in the REGF block to get the
+ * first hbin offset.
+ *******************************************************************/
+REGF_FILE* regfi_open(const char* filename)
 {
-  REGF_FILE *rb;
+  REGF_FILE* rb;
+  int fd;
   int flags = O_RDONLY;
 
-  if ( !(rb = (REGF_FILE*)malloc(sizeof(REGF_FILE))) ) {
-    /* DEBUG(0,("ERROR allocating memory\n")); */
-    return NULL;
-  }
-  memset(rb, 0, sizeof(REGF_FILE));
-  rb->fd = -1;
-	
-  /*	if ( !(rb->mem_ctx = talloc_init( "read_regf_block" )) ) 
-    {
-    regfi_close( rb );
-    return NULL;
-    }
-  */
-  rb->open_flags = flags;
-	
-  /* open and existing file */
-
-  if ( (rb->fd = open(filename, flags)) == -1 ) {
+  /* open an existing file */
+  if ((fd = open(filename, flags)) == -1) 
+  {
     /* DEBUG(0,("regfi_open: failure to open %s (%s)\n", filename, strerror(errno)));*/
-    regfi_close( rb );
     return NULL;
   }
 	
   /* read in an existing file */
-	
-  if ( !read_regf_block( rb ) ) {
+  if ((rb = regfi_parse_regf(fd, true)) == NULL) 
+  {
     /* DEBUG(0,("regfi_open: Failed to read initial REGF block\n"));*/
-    regfi_close( rb );
+    close(fd);
     return NULL;
   }
 	
   /* success */
-	
   return rb;
 }
 
@@ -1465,7 +1102,7 @@ REGF_NK_REC* regfi_rootkey( REGF_FILE *file )
      Normally this is the first nk record in the first hbin 
      block (but I'm not assuming that for now) */
 	
-  while ( (hbin = read_hbin_block( file, offset )) ) {
+  while ( (hbin = regfi_parse_hbin(file, offset, true, false)) ) {
     eob = false;
 
     while ( !eob) {
@@ -1753,7 +1390,7 @@ const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
   }
   
   if(!prs_set_offset(&hbin->ps, 
-		     HBIN_HDR_SIZE + nk_offset - hbin->first_hbin_off))
+		     HBIN_MAGIC_SIZE + nk_offset - hbin->first_hbin_off))
     return NULL;
 		
   if(!(subkey = (REGF_NK_REC*)zalloc(sizeof(REGF_NK_REC))))
@@ -1846,4 +1483,261 @@ const REGF_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
     i->cur_value--;
 
   return ret_val;
+}
+
+
+
+/****************/
+/* Experimental */
+/****************/
+/*
+typedef struct {
+  uint32 offset;
+  uint32 size;
+} REGFI_CELL_INFO;
+
+typedef struct {
+  uint32 count
+  REGFI_CELL_INFO** cells;
+} REGFI_CELL_LIST;
+*/
+
+
+/*******************************************************************
+ * Computes the checksum of the registry file header.
+ * buffer must be at least the size of an regf header (4096 bytes).
+ *******************************************************************/
+static uint32 regfi_compute_header_checksum(uint8* buffer)
+{
+  uint32 checksum, x;
+  int i;
+
+  /* XOR of all bytes 0x0000 - 0x01FB */
+
+  checksum = x = 0;
+  
+  for ( i=0; i<0x01FB; i+=4 ) {
+    x = IVAL(buffer, i );
+    checksum ^= x;
+  }
+  
+  return checksum;
+}
+
+
+/*******************************************************************
+ * TODO: add way to return more detailed error information.
+ *******************************************************************/
+REGF_FILE* regfi_parse_regf(int fd, bool strict)
+{
+  uint8 file_header[REGF_BLOCKSIZE];
+  uint32 ret, length;
+  uint32 file_length;
+  struct stat sbuf;
+  REGF_FILE* ret_val;
+
+  /* Determine file length.  Must be at least big enough 
+   * for the header and one hbin. 
+   */
+  if (fstat(fd, &sbuf) == -1)
+    return NULL;
+  file_length = sbuf.st_size;
+  if(file_length < REGF_BLOCKSIZE+REGF_ALLOC_BLOCK)
+    return NULL;
+
+  ret_val = (REGF_FILE*)zalloc(sizeof(REGF_FILE));
+  if(ret_val == NULL)
+    return NULL;
+
+  ret_val->fd = fd;
+  ret_val->file_length = file_length;
+
+  length = REGF_BLOCKSIZE;
+  if((ret = regfi_read(fd, file_header, &length)) != 0 
+     || length != REGF_BLOCKSIZE)
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  ret_val->checksum = IVAL(file_header, 0x1FC);
+  ret_val->computed_checksum = regfi_compute_header_checksum(file_header);
+  if (strict && (ret_val->checksum != ret_val->computed_checksum))
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  memcpy(ret_val->magic, file_header, 4);
+  if(strict && (memcmp(ret_val->magic, "regf", 4) != 0))
+  {
+    free(ret_val);
+    return NULL;
+  }
+  
+  ret_val->unknown1 = IVAL(file_header, 0x4);
+  ret_val->unknown2 = IVAL(file_header, 0x8);
+
+  ret_val->mtime.low = IVAL(file_header, 0xC);
+  ret_val->mtime.high = IVAL(file_header, 0x10);
+
+  ret_val->unknown3 = IVAL(file_header, 0x14);
+  ret_val->unknown4 = IVAL(file_header, 0x18);
+  ret_val->unknown5 = IVAL(file_header, 0x1C);
+  ret_val->unknown6 = IVAL(file_header, 0x20);
+  
+  ret_val->data_offset = IVAL(file_header, 0x24);
+  ret_val->last_block = IVAL(file_header, 0x28);
+
+  ret_val->unknown7 = IVAL(file_header, 0x2C);
+
+  return ret_val;
+}
+
+
+
+/*******************************************************************
+ * Given real file offset, read and parse the hbin at that location
+ * along with it's associated cells.  If save_unalloc is true, a list
+ * of unallocated cell offsets will be stored in TODO.
+ *******************************************************************/
+/* TODO: Need a way to return types of errors.  Also need to free 
+ *       the hbin/ps when an error occurs.
+ */
+REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
+			    bool strict, bool save_unalloc)
+{
+  REGF_HBIN *hbin;
+  uint8 hbin_header[HBIN_HEADER_REC_SIZE];
+  uint32 length, curr_off;
+  int32 cell_len;
+  bool is_unalloc;
+
+  if(!(hbin = (REGF_HBIN*)zalloc(sizeof(REGF_HBIN)))) 
+    return NULL;
+  hbin->file_off = offset;
+  
+  if(lseek(file->fd, offset, SEEK_SET) == -1)
+    return NULL;
+
+  length = HBIN_HEADER_REC_SIZE;
+  if((regfi_read(file->fd, hbin_header, &length) != 0) 
+     || length != HBIN_HEADER_REC_SIZE)
+    return NULL;
+
+  if(lseek(file->fd, offset, SEEK_SET) == -1)
+    return NULL;
+
+  memcpy(hbin->magic, hbin_header, 4);
+  if(strict && (memcmp(hbin->magic, "hbin", 4) != 0))
+    return NULL;
+
+  hbin->first_hbin_off = IVAL(hbin_header, 0x4);
+  hbin->block_size = IVAL(hbin_header, 0x8);
+  /* this should be the same thing as hbin->block_size but just in case */
+  hbin->next_block = IVAL(hbin_header, 0x1C);
+
+
+  /* TODO: This check is this more of a way to determine if they are ever
+   *       not the same than to really do sanity checking.  This may need
+   *       to be changed or removed once these fields are better understood. */
+  if(strict && (hbin->block_size != hbin->next_block))
+  {
+    fprintf(stderr, "DEBUG: hbin->block_size != hbin->next_block\n");
+    return NULL;
+  }
+
+
+  /* Ensure the block size is a multiple of 0x1000 and doesn't run off 
+   * the end of the file. 
+   */
+  /* TODO: This may need to be relaxed for dealing with 
+   *       partial or corrupt files. */
+  if((offset + hbin->block_size > file->file_length)
+     || (hbin->block_size & 0xFFFFF000) != hbin->block_size)
+    return NULL;
+
+
+  /* TODO: need to get rid of this, but currently lots depends on the 
+   * ps structure. 
+   */
+  if(!prs_init(&hbin->ps, hbin->block_size, file->mem_ctx, UNMARSHALL))
+    return NULL;
+  length = hbin->block_size;
+  if((regfi_read(file->fd, (uint8*)hbin->ps.data_p, &length) != 0) 
+     || length != hbin->block_size)
+    return NULL;
+
+
+  if(save_unalloc)
+  {
+    is_unalloc = false;
+    cell_len = 0;
+    curr_off = HBIN_HEADER_REC_SIZE;
+    while ( curr_off < hbin->block_size ) 
+    {
+      cell_len = IVALS(hbin->ps.data_p, curr_off);
+      
+      if(cell_len > 0)
+	is_unalloc = true;
+      else
+	cell_len = -1*cell_len;
+
+      if((cell_len == 0) || ((cell_len & 0xFFFFFFFC) != cell_len))
+	/* TODO: should report an error here. */
+	break;
+
+      /* for some reason the record_size of the last record in
+	 an hbin block can extend past the end of the block
+	 even though the record fits within the remaining 
+	 space....aaarrrgggghhhhhh */  
+      if(curr_off + cell_len >= hbin->block_size)
+	cell_len = hbin->block_size - curr_off;
+
+      if(is_unalloc)
+	/* TODO: save cell info */
+
+      curr_off = curr_off+cell_len;
+    }
+  }
+
+  /* TODO: need to get rid of this, but currently lots depends on the 
+   * ps structure. 
+   */
+  if(!prs_set_offset(&hbin->ps, file->data_offset+HBIN_MAGIC_SIZE))
+    return NULL;
+
+  return hbin;
+}
+
+
+/*****************************************************************************
+ * This function is just like read(2), except that it continues to
+ * re-try reading from the file descriptor if EINTR or EAGAIN is received.  
+ * regfi_read will attempt to read length bytes from fd and write them to buf.
+ *
+ * On success, 0 is returned.  Upon failure, an errno code is returned.
+ *
+ * The number of bytes successfully read is returned through the length 
+ * parameter by reference.  If both the return value and length parameter are 
+ * returned as 0, then EOF was encountered immediately
+ *****************************************************************************/
+uint32 regfi_read(int fd, uint8* buf, uint32* length)
+{
+  uint32 rsize = 0;
+  uint32 rret = 0;
+
+  do
+  {
+    rret = read(fd, buf + rsize, *length - rsize);
+    if(rret > 0)
+      rsize += rret;
+  }while(*length - rsize > 0 
+         && (rret > 0 || (rret == -1 && (errno == EAGAIN || errno == EINTR))));
+  
+  *length = rsize;
+  if (rret == -1 && errno != EINTR && errno != EAGAIN)
+    return errno;
+
+  return 0;
 }

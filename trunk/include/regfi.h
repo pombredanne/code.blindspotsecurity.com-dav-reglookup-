@@ -71,14 +71,14 @@
 
 
 #define REGF_BLOCKSIZE		0x1000
-#define REGF_ALLOC_BLOCK	0x1000
+#define REGF_ALLOC_BLOCK	0x1000  /* Minimum allocation unit for hbins */
 #define REGF_MAX_DEPTH		512
 
 /* header sizes for various records */
 
-#define REGF_HDR_SIZE		4
-#define HBIN_HDR_SIZE		4
-#define HBIN_HEADER_REC_SIZE	0x24
+#define REGF_MAGIC_SIZE		4
+#define HBIN_MAGIC_SIZE		4
+#define HBIN_HEADER_REC_SIZE	0x20
 #define REC_HDR_SIZE		2
 
 #define REGF_OFFSET_NONE	0xffffffff
@@ -102,32 +102,40 @@
 
 /* HBIN block */
 struct regf_hbin;
-typedef struct regf_hbin {
+typedef struct regf_hbin 
+{
   struct regf_hbin* prev;
   struct regf_hbin* next;
   uint32 file_off;       /* my offset in the registry file */
-  uint32 free_off;       /* offset to free space within the hbin record */
-  uint32 free_size;      /* amount of data left in the block */
   uint32 ref_count;      /* how many active records are pointing to this
                           * block (not used currently) 
 			  */
   
   uint32 first_hbin_off; /* offset from first hbin block */
-  uint32 block_size;     /* block size of this block is
-                          * usually a multiple of 4096Kb 
+  uint32 block_size;     /* block size of this block 
+                          * Should be a multiple of 4096 (0x1000)
 			  */
-  uint8  header[HBIN_HDR_SIZE]; /* "hbin" */
+  uint32 next_block;     /* relative offset to next block.  Should be 
+			  * exactly the same as block_size.  Stored just
+			  * in case this is found to be different in the
+			  * future.
+			  */
+
+  uint8 magic[HBIN_MAGIC_SIZE]; /* "hbin" */
   prs_struct ps;	 /* data */
-  bool dirty;            /* has this hbin block been modified? */
 } REGF_HBIN;
 
-/* ??? List -- list of key offsets and hashed names for consistency */
-typedef struct {
+
+/* Hash List -- list of key offsets and hashed names for consistency */
+typedef struct 
+{
   uint32 nk_off;
-  uint8 keycheck[sizeof(uint32)];
+  uint8 keycheck[4];
 } REGF_HASH_REC;
 
-typedef struct {
+
+typedef struct 
+{
   REGF_HBIN* hbin;       /* pointer to HBIN record (in memory) containing 
 			  * this nk record 
 			  */
@@ -139,9 +147,10 @@ typedef struct {
   uint16 num_keys;
 } REGF_LF_REC;
 
-/* Key Value */
 
-typedef struct {
+/* Key Value */
+typedef struct 
+{
   REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
 			 */
@@ -162,7 +171,8 @@ typedef struct {
 /* Key Security */
 struct _regf_sk_rec;
 
-typedef struct _regf_sk_rec {
+typedef struct _regf_sk_rec 
+{
   struct _regf_sk_rec* next;
   struct _regf_sk_rec* prev;
   REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
@@ -185,7 +195,8 @@ typedef struct _regf_sk_rec {
 
 
 /* Key Name */ 
-typedef struct {
+typedef struct 
+{
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
   REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
@@ -220,16 +231,18 @@ typedef struct {
   uint32 subkeys_off;	/* hash records that point to NK records */	
   uint32 num_values;
   uint32 values_off;	/* value lists which point to VK records */
-  uint32 sk_off;	/* offset to SK record */
-  
+  uint32 sk_off;	/* offset to SK record */  
 } REGF_NK_REC;
 
 
+
 /* REGF block */
-typedef struct {
+typedef struct 
+{
   /* run time information */
   int fd;	  /* file descriptor */
-  int open_flags; /* flags passed to the open() call */
+  /* For sanity checking (not part of the registry header) */
+  uint32 file_length;
   void* mem_ctx;  /* memory context for run-time file access information */
   REGF_HBIN* block_list; /* list of open hbin blocks */
   
@@ -238,25 +251,32 @@ typedef struct {
 				 * by NK records 
 				 */
   
-  uint8  header[REGF_HDR_SIZE];	/* "regf" */
+  uint8  magic[REGF_MAGIC_SIZE];/* "regf" */
   NTTIME mtime;
   uint32 data_offset;		/* offset to record in the first (or any?) 
 				 * hbin block 
 				 */
   uint32 last_block;		/* offset to last hbin block in file */
-  uint32 checksum;		/* XOR of bytes 0x0000 - 0x01FB */
+
+  uint32 checksum;		/* Stored checksum. */
+  uint32 computed_checksum;     /* Our own calculation of the checksum.
+				 * (XOR of bytes 0x0000 - 0x01FB) 
+				 */
   
-  /* unknowns */
+  /* unknown data structure values */
   uint32 unknown1;
   uint32 unknown2;
   uint32 unknown3;
   uint32 unknown4;
   uint32 unknown5;
   uint32 unknown6;
+  uint32 unknown7;
 } REGF_FILE;
 
 
-typedef struct {
+
+typedef struct 
+{
   REGF_FILE* f;
   void_stack* key_positions;
   REGF_NK_REC* cur_key;
@@ -265,7 +285,8 @@ typedef struct {
 } REGFI_ITERATOR;
 
 
-typedef struct {
+typedef struct 
+{
   REGF_NK_REC* nk;
   uint32 cur_subkey;
   /* We could store a cur_value here as well, but didn't see 
@@ -314,5 +335,29 @@ const REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
 REGF_NK_REC*          regfi_rootkey(REGF_FILE* file);
 void                  regfi_key_free(REGF_NK_REC* nk);
 
+
+
+/****************/
+/* Experimental */
+/****************/
+typedef struct 
+{
+  uint32 offset;
+  uint32 size;
+} REGFI_CELL_INFO;
+
+typedef struct 
+{
+  uint32 count;
+  REGFI_CELL_INFO** cells;
+} REGFI_CELL_LIST;
+
+
+REGF_FILE* regfi_parse_regf(int fd, bool strict);
+REGFI_CELL_LIST* regfi_get_unallocated_cells(REGF_FILE* file);
+REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
+			    bool strict, bool save_unalloc);
+REGF_NK_REC* regfi_parse_nk(REGF_FILE* f, uint32);
+uint32 regfi_read(int fd, uint8* buf, uint32* length);
 
 #endif	/* _REGFI_H */
