@@ -753,6 +753,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
 }
 
 
+/* XXX: what if there is BOTH a value AND a key with that name?? */
 /*
  * Returns 0 if path was not found.
  * Returns 1 if path was found as value.
