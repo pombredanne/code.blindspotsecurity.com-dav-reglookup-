@@ -12,7 +12,7 @@ MAN_PREFIX=$(PREFIX)/man
 CC=gcc
 OPTS=-std=gnu89 -pedantic -Wall
 INC=-I/usr/local/include
-LIB=-L/usr/local/lib
+LIB=-L/usr/local/lib -lm
 
 UNAME := $(shell uname)
 ifneq ($(UNAME),Linux) 	

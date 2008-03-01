@@ -2,7 +2,7 @@
 
 ################################################################################
 
-FILES=regfi.o smb_deps.o void_stack.o
+FILES=regfi.o smb_deps.o void_stack.o range_list.o
 
 all: $(FILES)
 
@@ -14,6 +14,9 @@ smb_deps.o: smb_deps.c
 
 void_stack.o: void_stack.c
 	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ void_stack.c
+
+range_list.o: range_list.c
+	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ range_list.c
 
 clean:
 	rm -f $(FILES)
