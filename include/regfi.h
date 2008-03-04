@@ -47,6 +47,7 @@
 
 #include "smb_deps.h"
 #include "void_stack.h"
+#include "range_list.h"
 
 /******************************************************************************/
 /* Macros */
@@ -82,6 +83,7 @@
 #define REC_HDR_SIZE		2
 
 #define REGF_OFFSET_NONE	0xffffffff
+#define REGFI_NK_MIN_LENGTH     0x50
 
 /* Flags for the vk records */
 
@@ -115,10 +117,8 @@ typedef struct regf_hbin
   uint32 block_size;     /* block size of this block 
                           * Should be a multiple of 4096 (0x1000)
 			  */
-  uint32 next_block;     /* relative offset to next block.  Should be 
-			  * exactly the same as block_size.  Stored just
-			  * in case this is found to be different in the
-			  * future.
+  uint32 next_block;     /* relative offset to next block.  
+			  * NOTE: This value may be unreliable!
 			  */
 
   uint8 magic[HBIN_MAGIC_SIZE]; /* "hbin" */
@@ -141,7 +141,7 @@ typedef struct
 			  */
   REGF_HASH_REC* hashes;
   uint32 hbin_off;	 /* offset from beginning of this hbin block */
-  uint32 rec_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
+  uint32 cell_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
   
   uint8 header[REC_HDR_SIZE];
   uint16 num_keys;
@@ -157,7 +157,7 @@ typedef struct
   char*  valuename;
   uint8* data;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
-  uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
+  uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
   uint32 rec_off;	/* offset stored in the value list */
   
   uint32 data_size;
@@ -180,7 +180,7 @@ typedef struct _regf_sk_rec
 			 */
   SEC_DESC* sec_desc;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
-  uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
+  uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
   
   uint32 sk_off;	/* offset parsed from NK record used as a key
 			 * to lookup reference to this SK record 
@@ -197,10 +197,10 @@ typedef struct _regf_sk_rec
 /* Key Name */ 
 typedef struct 
 {
-  uint32 hbin_off;	/* offset from beginning of this hbin block */
-  uint32 rec_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
-  REGF_HBIN *hbin;	/* pointer to HBIN record (in memory) containing 
-			 * this nk record */
+  uint32 offset;	/* Real offset of this record's cell in the file */
+  uint32 cell_size;	/* Actual or estimated length of the cell.  
+			 * Always in multiples of 8. 
+			 */
 
   /* link in the other records here */
   REGF_VK_REC* values;
@@ -212,6 +212,8 @@ typedef struct
   uint16 key_type;      
   uint8  header[REC_HDR_SIZE];
   NTTIME mtime;
+  uint16 name_length;
+  uint16 classname_length;
   char* classname;
   char* keyname;
   uint32 parent_off;	/* back pointer in registry hive */
@@ -224,6 +226,9 @@ typedef struct
   uint32 max_bytes_value;           /* max value data size */
   
   /* unknowns */
+  uint32 unknown1;
+  uint32 unknown2;
+  uint32 unknown3;
   uint32 unk_index;		    /* nigel says run time index ? */
   
   /* children */
@@ -245,7 +250,11 @@ typedef struct
   uint32 file_length;
   void* mem_ctx;  /* memory context for run-time file access information */
   REGF_HBIN* block_list; /* list of open hbin blocks */
-  
+
+  /* Experimental hbin lists */
+  range_list* hbins;
+  range_list* unalloc_cells;
+
   /* file format information */
   REGF_SK_REC* sec_desc_list;	/* list of security descriptors referenced 
 				 * by NK records 
@@ -297,7 +306,7 @@ typedef struct
 
 /******************************************************************************/
 /* Function Declarations */
-
+/*  Main API */
 const char*           regfi_type_val2str(unsigned int val);
 int                   regfi_type_str2val(const char* str);
 
@@ -330,34 +339,39 @@ const REGF_VK_REC*    regfi_iterator_first_value(REGFI_ITERATOR* i);
 const REGF_VK_REC*    regfi_iterator_cur_value(REGFI_ITERATOR* i);
 const REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
 
+/************************************/
+/*  Low-layer data structure access */
+/************************************/
+REGF_FILE*            regfi_parse_regf(int fd, bool strict);
+REGF_HBIN*            regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
+				       bool strict, bool save_unalloc);
+
+
+/* regfi_parse_nk: Parses an NK record.
+ *
+ * Arguments:
+ *   f        -- the registry file structure
+ *   offset   -- the offset of the cell (not the record) to be parsed.
+ *   max_size -- the maximum size the NK cell could be. (for validation)
+ *   strict   -- if true, rejects any malformed records.  Otherwise,
+ *               tries to minimally validate integrity.
+ * Returns:
+ *   A newly allocated NK record structure, or NULL on failure.
+ */
+REGF_NK_REC*          regfi_parse_nk(REGF_FILE* file, uint32 offset, 
+				     uint32 max_size, bool strict);
+
 
 /* Private Functions */
 REGF_NK_REC*          regfi_rootkey(REGF_FILE* file);
 void                  regfi_key_free(REGF_NK_REC* nk);
+uint32                regfi_read(int fd, uint8* buf, uint32* length);
 
 
 
 /****************/
 /* Experimental */
 /****************/
-typedef struct 
-{
-  uint32 offset;
-  uint32 size;
-} REGFI_CELL_INFO;
 
-typedef struct 
-{
-  uint32 count;
-  REGFI_CELL_INFO** cells;
-} REGFI_CELL_LIST;
-
-
-REGF_FILE* regfi_parse_regf(int fd, bool strict);
-REGFI_CELL_LIST* regfi_get_unallocated_cells(REGF_FILE* file);
-REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
-			    bool strict, bool save_unalloc);
-REGF_NK_REC* regfi_parse_nk(REGF_FILE* f, uint32);
-uint32 regfi_read(int fd, uint8* buf, uint32* length);
 
 #endif	/* _REGFI_H */

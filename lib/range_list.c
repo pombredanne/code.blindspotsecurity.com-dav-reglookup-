@@ -17,6 +17,7 @@
  * $Id: $
  */
 
+#include <stdio.h>
 #include <math.h>
 #include "../include/range_list.h"
 
@@ -25,6 +26,18 @@
 /* Private symbols */
 /*******************/
 #define RANGE_LIST_ALLOC_SIZE 256
+
+
+static void range_list_print(const range_list* rl)
+{
+  uint32_t i;
+  for(i=0; i<rl->size; i++)
+    fprintf(stderr, " %d=%p,%d,%d,%p", i, (void*)rl->elements[i],
+	    rl->elements[i]->offset, rl->elements[i]->length, 
+	    rl->elements[i]->data);
+  fprintf(stderr, "\n");
+}
+
 
 /*
  * Inserts elem into rl at the specified index and updates rl->size. 
@@ -39,7 +52,9 @@ static bool range_list_insert(range_list* rl, range_list_element* elem, uint32_t
 
   if(rl->size == rl->elem_alloced)
   {
-    tmp = (range_list_element**)realloc(rl->elements, rl->elem_alloced+RANGE_LIST_ALLOC_SIZE);
+    tmp = (range_list_element**)realloc(rl->elements, 
+					(rl->elem_alloced+RANGE_LIST_ALLOC_SIZE)
+					* sizeof(range_list_element*));
     if(tmp == NULL)
       return false;
     rl->elements = tmp;
@@ -89,7 +104,7 @@ static int32_t range_list_find_previous(const range_list* rl, uint32_t offset)
       cur_idx = l_idx;
     cur_elem = rl->elements[cur_idx];
 
-    if((offset >= cur_elem->offset) && (offset < (cur_elem+1)->offset))
+    if((offset >= cur_elem->offset) && (offset < rl->elements[cur_idx+1]->offset))
       return cur_idx;
     
     if(offset < cur_elem->offset)
@@ -115,6 +130,7 @@ range_list* range_list_new()
 
   rl->elements = (range_list_element**)malloc(sizeof(range_list_element*)
 					      * RANGE_LIST_ALLOC_SIZE);
+
   if(rl->elements == NULL)
   {
     free(rl);
@@ -151,7 +167,7 @@ bool range_list_add(range_list* rl, uint32_t offset, uint32_t length, void* data
   uint32_t insert_index;
   range_list_element* elem;
   range_list_element* prev_elem;
-
+  /*fprintf(stderr, "DEBUG: rl->size=%d\n", rl->size);*/
   /* Sorry, limited to 2**31-1 elements. */
   if(rl->size >= 0x7FFFFFFF)
     return false;
@@ -214,10 +230,11 @@ bool range_list_remove(range_list* rl, uint32_t index)
   rl->size--;
 
   /* Try to keep memory usage down */
-  if(rl->size < (rl->elem_alloced - 2*RANGE_LIST_ALLOC_SIZE))
+  if(rl->size < (rl->elem_alloced - 2 * RANGE_LIST_ALLOC_SIZE))
   {
     tmp = (range_list_element**)realloc(rl->elements, 
-					rl->elem_alloced - 2*RANGE_LIST_ALLOC_SIZE);
+					(rl->elem_alloced-2*RANGE_LIST_ALLOC_SIZE)
+					* sizeof(range_list_element*));
     if(tmp != NULL)
     {
       rl->elements = tmp;
