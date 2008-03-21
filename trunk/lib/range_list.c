@@ -230,7 +230,7 @@ bool range_list_remove(range_list* rl, uint32_t index)
   rl->size--;
 
   /* Try to keep memory usage down */
-  if(rl->size < (rl->elem_alloced - 2 * RANGE_LIST_ALLOC_SIZE))
+  if(rl->size + 2 * RANGE_LIST_ALLOC_SIZE  < rl->elem_alloced)
   {
     tmp = (range_list_element**)realloc(rl->elements, 
 					(rl->elem_alloced-2*RANGE_LIST_ALLOC_SIZE)

@@ -22,7 +22,7 @@ Offset            Size      Contents
 0x00000028      D-Word      Size of the data-blocks (Filesize-4kb)
 0x0000002C      D-Word      1
 0x000001FC      D-Word      Sum of all D-Words from 0x00000000 to
-0x000001FB  //XOR of all words. Nigel
+                            0x000001FB  //XOR of all words. Nigel
 
 I have analyzed more registry files (from multiple machines running
 NT 4.0 german version) and could not find an explanation for the values
@@ -160,10 +160,10 @@ Wert      Beteutung
 0x0007      RegMultiSZ:      multiple strings, seperated with 0
                   (UNICODE!)
 
-The "lf"-record
+The "lf"/"lh"/"ri"-record (hash list header)
 ===============
 Offset      Size      Contents
-0x0000      Word      ID: ASCII-"lf" = 0x666C
+0x0000      Word      ID: ASCII-"lf" = 0x666C  (or "lh" or "ri")
 0x0002      Word      number of keys
 0x0004      ????      Hash-Records
 
@@ -171,8 +171,9 @@ Hash-Record
 ===========
 Offset      Size      Contents
 0x0000      D-Word      Offset of corresponding "nk"-Record
-0x0004      D-Word      ASCII: the first 4 characters of the key-name, padded with 0-s. Case sensitiv!
-
+0x0004      D-Word      ASCII: the first 4 characters of the key-name, padded with 0-s. Case sensitive! 
+			(the hash value may be computed differently for the various header types 
+			 "lf"/"lh"/"ri"/etc)
 Keep in mind, that the value at 0x0004 is used for checking the data-consistency! If you change the 
 key-name you have to change the hash-value too!
 
