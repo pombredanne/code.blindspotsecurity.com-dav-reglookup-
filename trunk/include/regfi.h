@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005-2007 Timothy D. Morgan
+ * Copyright (C) 2005-2008 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -83,7 +83,8 @@
 #define REC_HDR_SIZE		2
 
 #define REGF_OFFSET_NONE	0xffffffff
-#define REGFI_NK_MIN_LENGTH     0x50
+#define REGFI_NK_MIN_LENGTH     0x4C
+#define REGFI_VK_MIN_LENGTH     0x14
 
 /* Flags for the vk records */
 
@@ -96,6 +97,8 @@
 #define NK_TYPE_LINKKEY		0x0010
 #define NK_TYPE_NORMALKEY	0x0020
 #define NK_TYPE_ROOTKEY		0x002c
+  /* TODO: Unknown type that shows up in Vista registries */
+#define NK_TYPE_UNKNOWN1         0x1020 
 
 #define HBIN_STORE_REF(x, y) { x->hbin = y; y->ref_count++ };
 /* if the count == 0; we can clean up */
@@ -151,20 +154,23 @@ typedef struct
 /* Key Value */
 typedef struct 
 {
+  uint32 offset;	/* Real offset of this record's cell in the file */
+  uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
+
   REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
 			 */
-  char*  valuename;
   uint8* data;
+  uint16 name_length;
+  char*  valuename;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
-  uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
-  uint32 rec_off;	/* offset stored in the value list */
   
   uint32 data_size;
-  uint32 data_off;
+  uint32 data_off;      /* offset of data cell (virtual) */
   uint32 type;
-  uint8  header[REC_HDR_SIZE];
+  uint8  magic[REC_HDR_SIZE];
   uint16 flag;
+  uint16 unknown1;
 } REGF_VK_REC;
 
 
@@ -203,14 +209,14 @@ typedef struct
 			 */
 
   /* link in the other records here */
-  REGF_VK_REC* values;
+  REGF_VK_REC** values;
   REGF_SK_REC* sec_desc;
   REGF_LF_REC subkeys;
   
   /* header information */
   /* XXX: should we be looking for types other than the root key type? */
   uint16 key_type;      
-  uint8  header[REC_HDR_SIZE];
+  uint8  magic[REC_HDR_SIZE];
   NTTIME mtime;
   uint16 name_length;
   uint16 classname_length;
@@ -372,6 +378,11 @@ uint32                regfi_read(int fd, uint8* buf, uint32* length);
 /****************/
 /* Experimental */
 /****************/
+
+REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset, 
+			    uint32 max_size, bool strict);
+uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
+			uint32 length, bool strict);
 
 
 #endif	/* _REGFI_H */

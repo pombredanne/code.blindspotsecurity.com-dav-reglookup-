@@ -336,8 +336,80 @@ char* regfi_get_group(SEC_DESC *sec_desc)
 }
 
 
+/*****************************************************************************
+ * This function is just like read(2), except that it continues to
+ * re-try reading from the file descriptor if EINTR or EAGAIN is received.  
+ * regfi_read will attempt to read length bytes from fd and write them to buf.
+ *
+ * On success, 0 is returned.  Upon failure, an errno code is returned.
+ *
+ * The number of bytes successfully read is returned through the length 
+ * parameter by reference.  If both the return value and length parameter are 
+ * returned as 0, then EOF was encountered immediately
+ *****************************************************************************/
+uint32 regfi_read(int fd, uint8* buf, uint32* length)
+{
+  uint32 rsize = 0;
+  uint32 rret = 0;
+
+  do
+  {
+    rret = read(fd, buf + rsize, *length - rsize);
+    if(rret > 0)
+      rsize += rret;
+  }while(*length - rsize > 0 
+         && (rret > 0 || (rret == -1 && (errno == EAGAIN || errno == EINTR))));
+  
+  *length = rsize;
+  if (rret == -1 && errno != EINTR && errno != EAGAIN)
+    return errno;
+
+  return 0;
+}
+
+
+/*****************************************************************************
+ *
+ *****************************************************************************/
+static bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
+			     uint32* cell_length, bool* unalloc)
+{
+  uint32 length;
+  int32 raw_length;
+  uint8 tmp[4];
+
+  if(lseek(fd, offset, SEEK_SET) == -1)
+    return false;
+
+  length = 4;
+  if((regfi_read(fd, tmp, &length) != 0) || length != 4)
+    return false;
+  raw_length = IVALS(tmp, 0);
+
+  if(hdr_len > 0)
+  {
+    length = hdr_len;
+    if((regfi_read(fd, hdr, &length) != 0) || length != hdr_len)
+      return false;
+  }
+
+  if(raw_length < 0)
+  {
+    (*cell_length) = raw_length*(-1);
+    (*unalloc) = false;
+  }
+  else
+  {
+    (*cell_length) = raw_length;
+    (*unalloc) = true;
+  }
+
+  return true;
+}
+
+
 /*******************************************************************
- Input a randon offset and receive the correpsonding HBIN 
+ Input a random offset and receive the correpsonding HBIN 
  block for it
 *******************************************************************/
 static bool hbin_contains_offset( REGF_HBIN *hbin, uint32 offset )
@@ -447,7 +519,9 @@ static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin,
   if(!prs_uint8s("header", &hbin->ps, depth, 
 		 lf->header, sizeof(lf->header)))
     return false;
-		
+
+  /*fprintf(stdout, "DEBUG: lf->header=%c%c\n", lf->header[0], lf->header[1]);*/
+
   if ( !prs_uint16( "num_keys", &hbin->ps, depth, &lf->num_keys))
     return false;
 
@@ -524,132 +598,17 @@ static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_
 }
 
 
-/*******************************************************************
- *******************************************************************/
-static bool hbin_prs_vk_rec( const char *desc, REGF_HBIN *hbin, int depth, 
-			     REGF_VK_REC *vk, REGF_FILE *file )
-{
-  uint32 offset;
-  uint16 name_length;
-  prs_struct *ps = &hbin->ps;
-  uint32 data_size, start_off, end_off;
-
-  depth++;
-
-  /* backup and get the data_size */
-	
-  if ( !prs_set_offset( &hbin->ps, hbin->ps.data_offset-sizeof(uint32)) )
-    return false;
-  start_off = hbin->ps.data_offset;
-  if ( !prs_uint32( "cell_size", &hbin->ps, depth, &vk->cell_size ))
-    return false;
-
-  if ( !prs_uint8s("header", ps, depth, vk->header, sizeof( vk->header )) )
-    return false;
-
-  if ( !hbin->ps.io )
-    name_length = strlen(vk->valuename);
-
-  if ( !prs_uint16( "name_length", ps, depth, &name_length ))
-    return false;
-  if ( !prs_uint32( "data_size", ps, depth, &vk->data_size ))
-    return false;
-  if ( !prs_uint32( "data_off", ps, depth, &vk->data_off ))
-    return false;
-  if ( !prs_uint32( "type", ps, depth, &vk->type))
-    return false;
-  if ( !prs_uint16( "flag", ps, depth, &vk->flag))
-    return false;
-
-  offset = ps->data_offset;
-  offset += 2;	/* skip 2 bytes */
-  prs_set_offset( ps, offset );
-
-  /* get the name */
-
-  if ( vk->flag&VK_FLAG_NAME_PRESENT ) {
-
-    if ( hbin->ps.io ) {
-      if ( !(vk->valuename = (char*)zcalloc(sizeof(char), name_length+1 )))
-	return false;
-    }
-    if ( !prs_uint8s("name", ps, depth, 
-		     (uint8*)vk->valuename, name_length) )
-      return false;
-  }
-
-  end_off = hbin->ps.data_offset;
-
-  /* get the data if necessary */
-
-  if ( vk->data_size != 0 ) 
-  {
-    /* the data is stored in the offset if the size <= 4 */
-    if ( !(vk->data_size & VK_DATA_IN_OFFSET) ) 
-    {
-      REGF_HBIN *hblock = hbin;
-      uint32 data_rec_size;
-
-      if ( hbin->ps.io ) 
-      {
-	if ( !(vk->data = (uint8*)zcalloc(sizeof(uint8), vk->data_size) ) )
-	  return false;
-      }
-
-      /* this data can be in another hbin */
-      if ( !hbin_contains_offset( hbin, vk->data_off ) ) 
-      {
-	if ( !(hblock = lookup_hbin_block( file, vk->data_off )) )
-	  return false;
-      }
-      if (!(prs_set_offset(&hblock->ps, 
-			   (vk->data_off
-			    + HBIN_MAGIC_SIZE
-			    - hblock->first_hbin_off)
-			   - sizeof(uint32))))
-      {	return false; }
-
-      if ( !hblock->ps.io ) 
-      {
-	data_rec_size = ( (vk->data_size+sizeof(uint32)) & 0xfffffff8 ) + 8;
-	data_rec_size = ( data_rec_size - 1 ) ^ 0xFFFFFFFF;
-      }
-      if ( !prs_uint32( "data_rec_size", &hblock->ps, depth, &data_rec_size ))
-	return false;
-      if(!prs_uint8s("data", &hblock->ps, depth, 
-		     vk->data, vk->data_size))
-	return false;
-
-    }
-    else 
-    {
-      if(!(vk->data = zcalloc(sizeof(uint8), 4)))
-	return false;
-      SIVAL( vk->data, 0, vk->data_off );
-    }
-		
-  }
-
-  /* data_size must be divisible by 8 and large enough to hold the original record */
-
-  data_size = ((start_off - end_off ) & 0xfffffff8 );
-  /* XXX: should probably print a warning here */
-  /*if ( data_size !=  vk->cell_size )
-    DEBUG(10,("prs_vk_rec: data_size check failed (0x%x < 0x%x)\n", data_size, vk->cell_size));*/
-
-  return true;
-}
-
 
 /*******************************************************************
  read a VK record which is contained in the HBIN block stored 
  in the prs_struct *ps.
 *******************************************************************/
-static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin, 
-				int depth, REGF_NK_REC *nk, REGF_FILE *file)
+static bool hbin_prs_vk_records(const char* desc, REGF_HBIN* hbin, 
+				int depth, REGF_NK_REC* nk, REGF_FILE* file)
 {
   int i;
-  uint32 record_size;
+  uint32 record_size, vk_raw_offset, vk_offset, vk_max_length;
+  REGF_HBIN* sub_hbin;
 
   depth++;
   
@@ -659,7 +618,7 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
   	
   if(hbin->ps.io)
   {
-    if (!(nk->values = (REGF_VK_REC*)zcalloc(sizeof(REGF_VK_REC), 
+    if (!(nk->values = (REGF_VK_REC**)zcalloc(sizeof(REGF_VK_REC*), 
 					      nk->num_values )))
       return false;
   }
@@ -683,29 +642,22 @@ static bool hbin_prs_vk_records(const char *desc, REGF_HBIN *hbin,
   	
   for ( i=0; i<nk->num_values; i++ ) 
   {
-    if ( !prs_uint32( "vk_off", &hbin->ps, depth, &nk->values[i].rec_off ) )
+    if ( !prs_uint32( "vk_off", &hbin->ps, depth, &vk_raw_offset) )
       return false;
-  }
-
-  for ( i=0; i<nk->num_values; i++ ) 
-  {
-    REGF_HBIN *sub_hbin = hbin;
-    uint32 new_offset;
-	
-    if ( !hbin_contains_offset( hbin, nk->values[i].rec_off ) ) 
+    
+    if(hbin_contains_offset(hbin, vk_raw_offset))
+      sub_hbin = hbin;
+    else
     {
-      sub_hbin = lookup_hbin_block( file, nk->values[i].rec_off );
-      if ( !sub_hbin ) 
+      sub_hbin = lookup_hbin_block( file, vk_raw_offset );
+      if (!sub_hbin)
 	return false;
     }
   	
-    new_offset = nk->values[i].rec_off 
-      + HBIN_MAGIC_SIZE 
-      - sub_hbin->first_hbin_off;
-
-    if (!prs_set_offset(&sub_hbin->ps, new_offset))
-      return false;
-    if (!hbin_prs_vk_rec("vk_rec", sub_hbin, depth, &nk->values[i], file))
+    vk_offset =  vk_raw_offset + REGF_BLOCKSIZE;
+    vk_max_length = sub_hbin->block_size - vk_offset + sizeof(uint32);
+    if((nk->values[i] = regfi_parse_vk(file, vk_offset, vk_max_length, true))
+	== NULL)
       return false;
   }
 
@@ -761,7 +713,10 @@ static REGF_NK_REC* hbin_prs_key(REGF_FILE *file, REGF_HBIN *hbin)
   nk_cell_offset = hbin->file_off + hbin->ps.data_offset - sizeof(uint32);
   nk_max_length = hbin->block_size - hbin->ps.data_offset + sizeof(uint32);
   if ((nk = regfi_parse_nk(file, nk_cell_offset, nk_max_length, true)) == NULL)
+  {
+fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
     return NULL;
+  }
 
   /* fill in values */
   if ( nk->num_values && (nk->values_off!=REGF_OFFSET_NONE) ) 
@@ -1039,10 +994,11 @@ void regfi_key_free(REGF_NK_REC* nk)
   {
     for(i=0; i < nk->num_values; i++)
     {
-      if(nk->values[i].valuename != NULL)
-	free(nk->values[i].valuename);
-      if(nk->values[i].data != NULL)
-	free(nk->values[i].data);
+      if(nk->values[i]->valuename != NULL)
+	free(nk->values[i]->valuename);
+      if(nk->values[i]->data != NULL)
+	free(nk->values[i]->data);
+      free(nk->values[i]);
     }
     free(nk->values);
   }
@@ -1351,7 +1307,7 @@ const REGF_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
   REGF_VK_REC* ret_val = NULL;
   if(i->cur_value < i->cur_key->num_values)
-    ret_val = &(i->cur_key->values[i->cur_value]);
+    ret_val = i->cur_key->values[i->cur_value];
 
   return ret_val;
 }
@@ -1602,30 +1558,35 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset,
 }
 
 
+
 REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset, 
 			    uint32 max_size, bool strict)
 {
   uint8 nk_header[REGFI_NK_MIN_LENGTH];
   REGF_NK_REC* ret_val;
   uint32 length;
-  if(lseek(file->fd, offset, SEEK_SET) == -1)
-    return NULL;
+  uint32 cell_length;
+  bool unalloc = false;
 
-  length = REGFI_NK_MIN_LENGTH;
-  if((regfi_read(file->fd, nk_header, &length) != 0)
-     || length != REGFI_NK_MIN_LENGTH)
-    return NULL;
+  if(!regfi_parse_cell(file->fd, offset, nk_header, REGFI_NK_MIN_LENGTH,
+		       &cell_length, &unalloc))
+     return NULL;
  
   /* A bit of validation before bothering to allocate memory */
-  if(strict && ((nk_header[0x4] != 'n') || (nk_header[0x5] != 'k')))
+  if((nk_header[0x0] != 'n') || (nk_header[0x1] != 'k'))
+  {
+    /* TODO: deal with subkey-lists that reference other subkey-lists. */
+    /*fprintf(stderr, "DEBUG: magic check failed! \"%c%c\"\n", nk_header[0x0], nk_header[0x1]);*/
     return NULL;
+  }
 
   ret_val = (REGF_NK_REC*)zalloc(sizeof(REGF_NK_REC));
   if(ret_val == NULL)
     return NULL;
 
   ret_val->offset = offset;
-  ret_val->cell_size = IVAL(nk_header, 0x0);
+  ret_val->cell_size = cell_length;
+
   if(ret_val->cell_size > max_size)
     ret_val->cell_size = max_size & 0xFFFFFFF8;
   if((ret_val->cell_size < REGFI_NK_MIN_LENGTH) 
@@ -1635,43 +1596,63 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
     return NULL;
   }
 
-  ret_val->header[0] = nk_header[0x4];
-  ret_val->header[1] = nk_header[0x5];
-  ret_val->key_type = SVAL(nk_header, 0x6);
-  if(strict && ((ret_val->key_type != NK_TYPE_NORMALKEY) 
-		&& (ret_val->key_type != NK_TYPE_ROOTKEY) 
-		&& (ret_val->key_type != NK_TYPE_LINKKEY)))
+  ret_val->magic[0] = nk_header[0x0];
+  ret_val->magic[1] = nk_header[0x1];
+  ret_val->key_type = SVAL(nk_header, 0x2);
+  if((ret_val->key_type != NK_TYPE_NORMALKEY)
+     && (ret_val->key_type != NK_TYPE_ROOTKEY) 
+     && (ret_val->key_type != NK_TYPE_LINKKEY)
+     && (ret_val->key_type != NK_TYPE_UNKNOWN1))
   {
     free(ret_val);
     return NULL;
   }
+
+  ret_val->mtime.low = IVAL(nk_header, 0x4);
+  ret_val->mtime.high = IVAL(nk_header, 0x8);
   
-  ret_val->mtime.low = IVAL(nk_header, 0x8);
-  ret_val->mtime.high = IVAL(nk_header, 0xC);
-  
-  ret_val->unknown1 = IVAL(nk_header, 0x10);
-  ret_val->parent_off = IVAL(nk_header, 0x14);
-  ret_val->num_subkeys = IVAL(nk_header, 0x18);
-  ret_val->unknown2 = IVAL(nk_header, 0x1C);
-  ret_val->subkeys_off = IVAL(nk_header, 0x20);
-  ret_val->unknown3 = IVAL(nk_header, 0x24);
-  ret_val->num_values = IVAL(nk_header, 0x28);
-  ret_val->values_off = IVAL(nk_header, 0x2C);
-  ret_val->sk_off = IVAL(nk_header, 0x30);
+  ret_val->unknown1 = IVAL(nk_header, 0xC);
+  ret_val->parent_off = IVAL(nk_header, 0x10);
+  ret_val->num_subkeys = IVAL(nk_header, 0x14);
+  ret_val->unknown2 = IVAL(nk_header, 0x18);
+  ret_val->subkeys_off = IVAL(nk_header, 0x1C);
+  ret_val->unknown3 = IVAL(nk_header, 0x20);
+  ret_val->num_values = IVAL(nk_header, 0x24);
+  ret_val->values_off = IVAL(nk_header, 0x28);
+  ret_val->sk_off = IVAL(nk_header, 0x2C);
   /* TODO: currently we do nothing with class names.  Need to investigate. */
-  ret_val->classname_off = IVAL(nk_header, 0x34);
+  ret_val->classname_off = IVAL(nk_header, 0x30);
 
-  ret_val->max_bytes_subkeyname = IVAL(nk_header, 0x38);
-  ret_val->max_bytes_subkeyclassname = IVAL(nk_header, 0x3C);
-  ret_val->max_bytes_valuename = IVAL(nk_header, 0x40);
-  ret_val->max_bytes_value = IVAL(nk_header, 0x44);
-  ret_val->unk_index = IVAL(nk_header, 0x48);
+  ret_val->max_bytes_subkeyname = IVAL(nk_header, 0x34);
+  ret_val->max_bytes_subkeyclassname = IVAL(nk_header, 0x38);
+  ret_val->max_bytes_valuename = IVAL(nk_header, 0x3C);
+  ret_val->max_bytes_value = IVAL(nk_header, 0x40);
+  ret_val->unk_index = IVAL(nk_header, 0x44);
 
-  ret_val->name_length = SVAL(nk_header, 0x4C);
-  ret_val->classname_length = SVAL(nk_header, 0x4E);
+  ret_val->name_length = SVAL(nk_header, 0x48);
+  ret_val->classname_length = SVAL(nk_header, 0x4A);
 
   if(ret_val->name_length + REGFI_NK_MIN_LENGTH > ret_val->cell_size)
-    ret_val->name_length = ret_val->cell_size - REGFI_NK_MIN_LENGTH;
+  {
+    if(strict)
+    {
+      free(ret_val);
+      return NULL;
+    }
+    else
+      ret_val->name_length = ret_val->cell_size - REGFI_NK_MIN_LENGTH;
+  }
+  else if (unalloc)
+  { /* Truncate cell_size if it's much larger than the apparent total record length. */
+    /* Round up to the next multiple of 8 */
+    length = (ret_val->name_length + REGFI_NK_MIN_LENGTH) & 0xFFFFFFF8;
+    if(length < ret_val->name_length + REGFI_NK_MIN_LENGTH)
+      length+=8;
+
+    /* If cell_size is still greater, truncate. */
+    if(length < ret_val->cell_size)
+      ret_val->cell_size = length;
+  }
 
   ret_val->keyname = (char*)zalloc(sizeof(char)*(ret_val->name_length+1));
   if(ret_val->keyname == NULL)
@@ -1682,7 +1663,7 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 
   /* Don't need to seek, should be at the right offset */
   length = ret_val->name_length;
-  if((regfi_read(file->fd, ret_val->keyname, &length) != 0)
+  if((regfi_read(file->fd, (uint8*)ret_val->keyname, &length) != 0)
      || length != ret_val->name_length)
   {
     free(ret_val->keyname);
@@ -1696,33 +1677,165 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 
 
 
-/*****************************************************************************
- * This function is just like read(2), except that it continues to
- * re-try reading from the file descriptor if EINTR or EAGAIN is received.  
- * regfi_read will attempt to read length bytes from fd and write them to buf.
- *
- * On success, 0 is returned.  Upon failure, an errno code is returned.
- *
- * The number of bytes successfully read is returned through the length 
- * parameter by reference.  If both the return value and length parameter are 
- * returned as 0, then EOF was encountered immediately
- *****************************************************************************/
-uint32 regfi_read(int fd, uint8* buf, uint32* length)
+/*******************************************************************
+ *******************************************************************/
+REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset, 
+			    uint32 max_size, bool strict)
 {
-  uint32 rsize = 0;
-  uint32 rret = 0;
+  REGF_VK_REC* ret_val;
+  uint8 vk_header[REGFI_VK_MIN_LENGTH];
+  uint32 raw_data_size, length, cell_length;
+  bool unalloc = false;
 
-  do
+  if(!regfi_parse_cell(file->fd, offset, vk_header, REGFI_VK_MIN_LENGTH,
+		       &cell_length, &unalloc))
+    return NULL;
+   
+  ret_val = (REGF_VK_REC*)zalloc(sizeof(REGF_VK_REC));
+  if(ret_val == NULL)
+    return NULL;
+
+  ret_val->offset = offset;
+  ret_val->cell_size = cell_length;
+
+  if(ret_val->cell_size > max_size)
+    ret_val->cell_size = max_size & 0xFFFFFFF8;
+  if((ret_val->cell_size < REGFI_VK_MIN_LENGTH) 
+     || (strict && ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8)))
   {
-    rret = read(fd, buf + rsize, *length - rsize);
-    if(rret > 0)
-      rsize += rret;
-  }while(*length - rsize > 0 
-         && (rret > 0 || (rret == -1 && (errno == EAGAIN || errno == EINTR))));
-  
-  *length = rsize;
-  if (rret == -1 && errno != EINTR && errno != EAGAIN)
-    return errno;
+    free(ret_val);
+    return NULL;
+  }
 
-  return 0;
+  ret_val->magic[0] = vk_header[0x0];
+  ret_val->magic[1] = vk_header[0x1];
+  if((ret_val->magic[0] != 'v') || (ret_val->magic[1] != 'k'))
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  ret_val->name_length = SVAL(vk_header, 0x2);
+  raw_data_size = IVAL(vk_header, 0x4);
+  ret_val->data_size = raw_data_size & ~VK_DATA_IN_OFFSET;
+  ret_val->data_off = IVAL(vk_header, 0x8);
+  ret_val->type = IVAL(vk_header, 0xC);
+  ret_val->flag = SVAL(vk_header, 0x10);
+  ret_val->unknown1 = SVAL(vk_header, 0x12);
+
+  if(ret_val->flag & VK_FLAG_NAME_PRESENT)
+  {
+    if(ret_val->name_length + REGFI_VK_MIN_LENGTH > ret_val->cell_size)
+    {
+      if(strict)
+      {
+	free(ret_val);
+	return NULL;
+      }
+      else
+	ret_val->name_length = ret_val->cell_size - REGFI_VK_MIN_LENGTH;
+    }
+
+    /* Round up to the next multiple of 8 */
+    length = (ret_val->name_length + REGFI_NK_MIN_LENGTH) & 0xFFFFFFF8;
+    if(length < ret_val->name_length + REGFI_NK_MIN_LENGTH)
+      length+=8;
+
+    ret_val->valuename = (char*)zalloc(sizeof(char)*(ret_val->name_length+1));
+    if(ret_val->valuename == NULL)
+    {
+      free(ret_val);
+      return NULL;
+    }
+    
+    /* Don't need to seek, should be at the right offset */
+    length = ret_val->name_length;
+    if((regfi_read(file->fd, (uint8*)ret_val->valuename, &length) != 0)
+       || length != ret_val->name_length)
+    {
+      free(ret_val->valuename);
+      free(ret_val);
+      return NULL;
+    }
+    ret_val->valuename[ret_val->name_length] = '\0';
+  }
+  else
+    length = REGFI_VK_MIN_LENGTH;
+
+  if(unalloc)
+  {
+    /* If cell_size is still greater, truncate. */
+    if(length < ret_val->cell_size)
+      ret_val->cell_size = length;
+  }
+
+  if(ret_val->data_size == 0)
+    ret_val->data = NULL;
+  else
+  {
+    ret_val->data = regfi_parse_data(file, ret_val->data_off+REGF_BLOCKSIZE,
+				     raw_data_size, strict);
+    if(strict && (ret_val->data == NULL))
+    {
+      free(ret_val->valuename);
+      free(ret_val);
+      return NULL;
+    }
+  }
+
+  return ret_val;
+}
+
+
+uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool strict)
+{
+  uint8* ret_val;
+  uint32 read_length, cell_length;
+  bool unalloc;
+
+  /* The data is stored in the offset if the size <= 4 */
+  if (length & VK_DATA_IN_OFFSET)   
+  {
+    length = length & ~VK_DATA_IN_OFFSET;
+    if(length > 4)
+      return NULL;
+
+    if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
+      return NULL;
+    memcpy(ret_val, &offset, length);
+  }
+  else
+  {
+    if(!regfi_parse_cell(file->fd, offset, NULL, 0,
+			 &cell_length, &unalloc))
+      return NULL;
+    
+    if(cell_length < 8 || ((cell_length & 0xFFFFFFF8) != cell_length))
+      return NULL;
+
+    if(cell_length - 4 < length)
+    {
+      if(strict)
+	return NULL;
+      else
+	length = cell_length - 4;
+    }
+
+    /* TODO: There is currently no check to ensure the data 
+     *       cell doesn't cross HBIN boundary.
+     */
+
+    if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
+      return NULL;
+
+    read_length = length;
+    if((regfi_read(file->fd, ret_val, &read_length) != 0) 
+       || read_length != length)
+    {
+      free(ret_val);
+      return NULL;
+    }
+  }
+
+  return ret_val;
 }
