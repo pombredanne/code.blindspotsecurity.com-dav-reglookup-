@@ -86,6 +86,7 @@
 #define REGFI_NK_MIN_LENGTH     0x4C
 #define REGFI_VK_MIN_LENGTH     0x14
 #define REGFI_SK_MIN_LENGTH     0x14
+#define REGFI_HASH_LIST_MIN_LENGTH     0x4
 
 /* Flags for the vk records */
 
@@ -134,22 +135,23 @@ typedef struct regf_hbin
 typedef struct 
 {
   uint32 nk_off;
-  uint8 keycheck[4];
-} REGF_HASH_REC;
+  uint32 hash;
+} REGF_HASH_LIST_ELEM;
 
 
 typedef struct 
 {
+  uint32 offset;	/* Real offset of this record's cell in the file */
+  uint32 cell_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
   REGF_HBIN* hbin;       /* pointer to HBIN record (in memory) containing 
 			  * this nk record 
 			  */
-  REGF_HASH_REC* hashes;
   uint32 hbin_off;	 /* offset from beginning of this hbin block */
-  uint32 cell_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
+  REGF_HASH_LIST_ELEM* hashes;
   
-  uint8 header[REC_HDR_SIZE];
+  uint8 magic[REC_HDR_SIZE];
   uint16 num_keys;
-} REGF_LF_REC;
+} REGF_HASH_LIST;
 
 
 /* Key Value */
@@ -203,8 +205,8 @@ typedef struct _regf_sk_rec
 } REGF_SK_REC;
 
 
-/* Key Name */ 
-typedef struct 
+/* Key Name */
+typedef struct
 {
   uint32 offset;	/* Real offset of this record's cell in the file */
   uint32 cell_size;	/* Actual or estimated length of the cell.  
@@ -214,7 +216,7 @@ typedef struct
   /* link in the other records here */
   REGF_VK_REC** values;
   REGF_SK_REC* sec_desc;
-  REGF_LF_REC subkeys;
+  REGF_HASH_LIST* subkeys;
   
   /* header information */
   /* XXX: should we be looking for types other than the root key type? */
@@ -381,6 +383,8 @@ uint32                regfi_read(int fd, uint8* buf, uint32* length);
 /****************/
 /* Experimental */
 /****************/
+REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset, 
+				    uint32 num_keys, bool strict);
 
 REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
 				   uint32 num_values);
