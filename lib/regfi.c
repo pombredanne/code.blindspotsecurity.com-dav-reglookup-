@@ -386,13 +386,6 @@ static bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
     return false;
   raw_length = IVALS(tmp, 0);
 
-  if(hdr_len > 0)
-  {
-    length = hdr_len;
-    if((regfi_read(fd, hdr, &length) != 0) || length != hdr_len)
-      return false;
-  }
-
   if(raw_length < 0)
   {
     (*cell_length) = raw_length*(-1);
@@ -402,6 +395,16 @@ static bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
   {
     (*cell_length) = raw_length;
     (*unalloc) = true;
+  }
+
+  if(*cell_length - 4 < hdr_len)
+    return false;
+
+  if(hdr_len > 0)
+  {
+    length = hdr_len;
+    if((regfi_read(fd, hdr, &length) != 0) || length != hdr_len)
+      return false;
   }
 
   return true;
@@ -628,69 +631,61 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
 
 
 
-/*******************************************************************
- read a VK record which is contained in the HBIN block stored 
- in the prs_struct *ps.
-*******************************************************************/
-static bool hbin_prs_vk_records(const char* desc, REGF_HBIN* hbin, 
-				int depth, REGF_NK_REC* nk, REGF_FILE* file)
+/******************************************************************************
+ *
+ ******************************************************************************/
+REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
+				   uint32 num_values)
 {
-  int i;
-  uint32 record_size, vk_raw_offset, vk_offset, vk_max_length;
+  REGF_VK_REC** ret_val;
   REGF_HBIN* sub_hbin;
+  uint8* buf;
+  uint32 i, cell_length, vk_raw_offset, vk_offset, vk_max_length, buf_len;
+  bool unalloc;
 
-  depth++;
-  
-  /* check if we have anything to do first */
-  if(nk->num_values == 0)
-    return true;
-  	
-  if(hbin->ps.io)
+  buf_len = sizeof(uint8) * 4 * num_values;
+  buf = (uint8*)zalloc(buf_len);
+  if(buf == NULL)
+    return NULL; 
+
+  if(!regfi_parse_cell(file->fd, offset, buf, buf_len, &cell_length, &unalloc))
   {
-    if (!(nk->values = (REGF_VK_REC**)zcalloc(sizeof(REGF_VK_REC*), 
-					      nk->num_values )))
-      return false;
-  }
-  
-  /* convert the offset to something relative to this HBIN block */
-  if (!prs_set_offset(&hbin->ps, 
-		      nk->values_off
-		      + HBIN_MAGIC_SIZE
-		      - hbin->first_hbin_off
-		      - sizeof(uint32)))
-  { return false; }
-
-  if ( !hbin->ps.io ) 
-  { 
-    record_size = ( ( nk->num_values * sizeof(uint32) ) & 0xfffffff8 ) + 8;
-    record_size = (record_size - 1) ^ 0xFFFFFFFF;
+    free(buf);
+    return NULL;
   }
 
-  if ( !prs_uint32( "record_size", &hbin->ps, depth, &record_size ) )
-    return false;
-  	
-  for ( i=0; i<nk->num_values; i++ ) 
+  ret_val = (REGF_VK_REC**)zalloc(sizeof(REGF_VK_REC*) * num_values);
+  if(ret_val == NULL)
   {
-    if ( !prs_uint32( "vk_off", &hbin->ps, depth, &vk_raw_offset) )
-      return false;
+    free(buf);
+    return NULL;
+  }
+  
+  for (i=0; i < num_values; i++) 
+  {
+    vk_raw_offset = IVAL(buf, i*4);
     
-    if(hbin_contains_offset(hbin, vk_raw_offset))
-      sub_hbin = hbin;
-    else
+    sub_hbin = lookup_hbin_block(file, vk_raw_offset);
+    if (!sub_hbin)
     {
-      sub_hbin = lookup_hbin_block( file, vk_raw_offset );
-      if (!sub_hbin)
-	return false;
+      free(buf);
+      free(ret_val);
+      return NULL;
     }
-  	
+    
     vk_offset =  vk_raw_offset + REGF_BLOCKSIZE;
     vk_max_length = sub_hbin->block_size - vk_offset + sizeof(uint32);
-    if((nk->values[i] = regfi_parse_vk(file, vk_offset, vk_max_length, true))
-	== NULL)
-      return false;
+    ret_val[i] = regfi_parse_vk(file, vk_offset, vk_max_length, true);
+    if(ret_val[i] == NULL)
+    {
+      free(buf);
+      free(ret_val);
+      return NULL;     
+    }
   }
 
-  return true;
+  free(buf);
+  return ret_val;
 }
 
 
@@ -762,9 +757,14 @@ fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
 	return NULL;
       }
     }
-		
-    if(!hbin_prs_vk_records("vk_rec", sub_hbin, depth, nk, file))
+    
+    nk->values = regfi_load_valuelist(file, nk->values_off+REGF_BLOCKSIZE,
+				      nk->num_values);
+    if(nk->values == NULL)
+    {
+      printf("values borked!\n");
       return NULL;
+    }
   }
 		
   /* now get subkeys */
@@ -781,13 +781,13 @@ fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
 	return NULL;
       }
     }
-		
+    
     if (!hbin_prs_lf_records("lf_rec", sub_hbin, depth, nk))
       return NULL;
   }
 
   /* get the security descriptor.  First look if we have already parsed it */
-  if ((nk->sk_off!=REGF_OFFSET_NONE) 
+  if ((nk->sk_off!=REGF_OFFSET_NONE)
       && !(nk->sec_desc = find_sk_record_by_offset( file, nk->sk_off )))
   {
     sub_hbin = hbin;
@@ -1553,7 +1553,7 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   if((nk_header[0x0] != 'n') || (nk_header[0x1] != 'k'))
   {
     /* TODO: deal with subkey-lists that reference other subkey-lists. */
-    /*fprintf(stderr, "DEBUG: magic check failed! \"%c%c\"\n", nk_header[0x0], nk_header[0x1]);*/
+printf("DEBUG: magic check failed! \"%c%c\"\n", nk_header[0x0], nk_header[0x1]);
     return NULL;
   }
 

@@ -382,10 +382,15 @@ uint32                regfi_read(int fd, uint8* buf, uint32* length);
 /* Experimental */
 /****************/
 
+REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
+				   uint32 num_values);
+
 REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset, 
 			    uint32 max_size, bool strict);
+
 uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
 			uint32 length, bool strict);
+
 
 
 #endif	/* _REGFI_H */
