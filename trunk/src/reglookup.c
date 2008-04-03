@@ -247,7 +247,7 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
       return NULL;
 
     snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
-	     datap[0], datap[1], datap[2], datap[3]);
+	     datap[3], datap[2], datap[1], datap[0]);
     return ascii;
     break;
 
@@ -258,7 +258,7 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
       return NULL;
 
     snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
-	     datap[3], datap[2], datap[1], datap[0]);
+	     datap[0], datap[1], datap[2], datap[3]);
     return ascii;
     break;
 
@@ -276,7 +276,8 @@ static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type,
     
 
   /* XXX: this MULTI_SZ parser is pretty inefficient.  Should be
-   *      redone with fewer malloc calls and better string concatenation. 
+   *      redone with fewer malloc calls and better string concatenation.
+   *      Also, gives lame output when "\0\0" is the string.
    */
   case REG_MULTI_SZ:
     ascii_max = sizeof(char)*(len*4+1);
@@ -531,45 +532,23 @@ void printValue(const REGF_VK_REC* vk, char* prefix)
   char* conv_error = NULL;
   const char* str_type = NULL;
   uint32 size;
-  uint8 tmp_buf[4];
 
-  /* Thanks Microsoft for making this process so straight-forward!!! */
-  /* XXX: this logic should be abstracted  and pushed into the regfi 
-   *      interface.  This includes the size limits.
+  /* Microsoft's documentation indicates that "available memory" is 
+   * the limit on value sizes.  Annoying.  We limit it to 1M which 
+   * should rarely be exceeded, unless the file is corrupt or 
+   * malicious. For more info, see:
+   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
    */
-  size = (vk->data_size & ~VK_DATA_IN_OFFSET);
-  if(vk->data_size & VK_DATA_IN_OFFSET)
+  if(size > VK_MAX_DATA_LENGTH)
   {
-    tmp_buf[0] = (uint8)((vk->data_off >> 3) & 0xFF);
-    tmp_buf[1] = (uint8)((vk->data_off >> 2) & 0xFF);
-    tmp_buf[2] = (uint8)((vk->data_off >> 1) & 0xFF);
-    tmp_buf[3] = (uint8)(vk->data_off & 0xFF);
-    if(size > 4)
-    {
-      fprintf(stderr, "WARNING: value stored in offset larger than 4. "
-	      "Truncating...\n");
-      size = 4;
-    }
-    quoted_value = data_to_ascii(tmp_buf, 4, vk->type, &conv_error);
+    fprintf(stderr, "WARNING: value data size %d larger than "
+	    "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
+    size = VK_MAX_DATA_LENGTH;
   }
-  else
-  {
-    /* Microsoft's documentation indicates that "available memory" is 
-     * the limit on value sizes.  Annoying.  We limit it to 1M which 
-     * should rarely be exceeded, unless the file is corrupt or 
-     * malicious. For more info, see:
-     *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
-     */
-    if(size > VK_MAX_DATA_LENGTH)
-    {
-      fprintf(stderr, "WARNING: value data size %d larger than "
-	      "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
-      size = VK_MAX_DATA_LENGTH;
-    }
+  
+  quoted_value = data_to_ascii(vk->data, vk->data_size, 
+			       vk->type, &conv_error);
 
-    quoted_value = data_to_ascii(vk->data, vk->data_size, 
-				 vk->type, &conv_error);
-  }
   
   /* XXX: Sometimes value names can be NULL in registry.  Need to
    *      figure out why and when, and generate the appropriate output

@@ -425,7 +425,7 @@ static bool hbin_contains_offset( REGF_HBIN *hbin, uint32 offset )
 
 
 /*******************************************************************
- Input a randon offset and receive the correpsonding HBIN 
+ Input a random offset and receive the correpsonding HBIN 
  block for it
 *******************************************************************/
 static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
@@ -547,54 +547,83 @@ static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin,
 }
 
 
+
 /*******************************************************************
  *******************************************************************/
-static bool hbin_prs_sk_rec( const char *desc, REGF_HBIN *hbin, int depth, REGF_SK_REC *sk )
+REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, bool strict)
 {
-  prs_struct *ps = &hbin->ps;
-  uint16 tag = 0xFFFF;
-  uint32 data_size, start_off, end_off;
+  REGF_SK_REC* ret_val;
+  uint32 cell_length, length;
+  prs_struct ps;
+  uint8 sk_header[REGFI_SK_MIN_LENGTH];
+  bool unalloc = false;
 
 
-  depth++;
+  if(!regfi_parse_cell(file->fd, offset, sk_header, REGFI_SK_MIN_LENGTH,
+		       &cell_length, &unalloc))
+    return NULL;
+   
+  if(sk_header[0] != 's' || sk_header[1] != 'k')
+    return NULL;
+  
+  ret_val = (REGF_SK_REC*)zalloc(sizeof(REGF_SK_REC));
+  if(ret_val == NULL)
+    return NULL;
 
-  if ( !prs_set_offset( &hbin->ps, sk->sk_off + HBIN_MAGIC_SIZE - hbin->first_hbin_off ) )
-    return false;
+  ret_val->offset = offset;
+  ret_val->cell_size = cell_length;
 
-  /* backup and get the data_size */
-	
-  if ( !prs_set_offset( &hbin->ps, hbin->ps.data_offset-sizeof(uint32)) )
-    return false;
-  start_off = hbin->ps.data_offset;
-  if ( !prs_uint32( "cell_size", &hbin->ps, depth, &sk->cell_size ))
-    return false;
+  if(ret_val->cell_size > max_size)
+    ret_val->cell_size = max_size & 0xFFFFFFF8;
+  if((ret_val->cell_size < REGFI_SK_MIN_LENGTH) 
+     || (strict && ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8)))
+  {
+    free(ret_val);
+    return NULL;
+  }
 
-  if (!prs_uint8s("header", ps, depth, sk->header, sizeof(sk->header)))
-    return false;
-  if ( !prs_uint16( "tag", ps, depth, &tag))
-    return false;
 
-  if ( !prs_uint32( "prev_sk_off", ps, depth, &sk->prev_sk_off))
-    return false;
-  if ( !prs_uint32( "next_sk_off", ps, depth, &sk->next_sk_off))
-    return false;
-  if ( !prs_uint32( "ref_count", ps, depth, &sk->ref_count))
-    return false;
-  if ( !prs_uint32( "size", ps, depth, &sk->size))
-    return false;
+  ret_val->magic[0] = sk_header[0];
+  ret_val->magic[1] = sk_header[1];
 
-  if ( !sec_io_desc( "sec_desc", &sk->sec_desc, ps, depth )) 
-    return false;
+  ret_val->unknown_tag = SVAL(sk_header, 0x2);
+  ret_val->prev_sk_off = IVAL(sk_header, 0x4);
+  ret_val->next_sk_off = IVAL(sk_header, 0x8);
+  ret_val->ref_count = IVAL(sk_header, 0xC);
+  ret_val->desc_size = IVAL(sk_header, 0x10);
 
-  end_off = hbin->ps.data_offset;
+  if(ret_val->desc_size + REGFI_SK_MIN_LENGTH > ret_val->cell_size)
+  {
+    free(ret_val);
+    return NULL;
+  }
 
-  /* data_size must be divisible by 8 and large enough to hold the original record */
+  /* TODO: need to get rid of this, but currently the security descriptor
+   * code depends on the ps structure.
+   */
+  if(!prs_init(&ps, ret_val->desc_size, NULL, UNMARSHALL))
+  {
+    free(ret_val);
+    return NULL;
+  }
 
-  data_size = ((start_off - end_off) & 0xfffffff8 );
-  /*  if ( data_size > sk->cell_size )*/
-    /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, sk->cell_size));*/
+  length = ret_val->desc_size;
+  if(regfi_read(file->fd, (uint8*)ps.data_p, &length) != 0 
+     || length != ret_val->desc_size)
+  {
+    free(ret_val);
+    return NULL;
+  }
 
-  return true;
+  if (!sec_io_desc("sec_desc", &ret_val->sec_desc, &ps, 0))
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  free(ps.data_p);
+
+  return ret_val;
 }
 
 
@@ -705,6 +734,7 @@ static REGF_NK_REC* hbin_prs_key(REGF_FILE *file, REGF_HBIN *hbin)
   REGF_NK_REC* nk;
   uint32 nk_cell_offset;
   uint32 nk_max_length;
+  uint32 sk_max_length;
   int depth = 0;
 
   depth++;
@@ -756,8 +786,7 @@ fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
       return NULL;
   }
 
-  /* get the to the security descriptor.  First look if we have already parsed it */
-	
+  /* get the security descriptor.  First look if we have already parsed it */
   if ((nk->sk_off!=REGF_OFFSET_NONE) 
       && !(nk->sec_desc = find_sk_record_by_offset( file, nk->sk_off )))
   {
@@ -774,15 +803,14 @@ fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
       }
     }
     
-    if ( !(nk->sec_desc = (REGF_SK_REC*)zalloc(sizeof(REGF_SK_REC) )) )
+    sk_max_length = sub_hbin->block_size - (nk->sk_off - sub_hbin->first_hbin_off);
+    nk->sec_desc = regfi_parse_sk(file, nk->sk_off + REGF_BLOCKSIZE, 
+				  sk_max_length, true);
+    if(nk->sec_desc == NULL)
       return NULL;
     nk->sec_desc->sk_off = nk->sk_off;
-    if ( !hbin_prs_sk_rec( "sk_rec", sub_hbin, depth, nk->sec_desc ))
-      return NULL;
 			
     /* add to the list of security descriptors (ref_count has been read from the files) */
-
-    nk->sec_desc->sk_off = nk->sk_off;
     /* XXX: this kind of caching needs to be re-evaluated */
     DLIST_ADD( file->sec_desc_list, nk->sec_desc );
   }
@@ -791,78 +819,47 @@ fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
 }
 
 
-/*******************************************************************
- *******************************************************************/
-static bool next_record( REGF_HBIN *hbin, const char *hdr, bool *eob )
+/******************************************************************************
+
+ ******************************************************************************/
+static bool regfi_find_root_nk(REGF_FILE* file, uint32 offset, uint32 hbin_size,
+			       uint32* root_offset)
 {
-  uint8 header[REC_HDR_SIZE] = "";
-  uint32 record_size;
-  uint32 curr_off, block_size;
+  uint8 tmp[4];
+  int32 record_size;
+  uint32 length, hbin_offset = 0;
+  REGF_NK_REC* nk = NULL;
   bool found = false;
-  prs_struct *ps = &hbin->ps;
-	
-  curr_off = ps->data_offset;
-  if ( curr_off == 0 )
-    prs_set_offset( ps, HBIN_HEADER_REC_SIZE+4 );
 
-  /* assume that the current offset is at the reacord header 
-     and we need to backup to read the record size */
-  curr_off -= sizeof(uint32);
-
-  block_size = ps->buffer_size;
-  record_size = 0;
-  while ( !found ) 
+  for(record_size=0; !found && (hbin_offset < hbin_size); )
   {
-    curr_off = curr_off+record_size;
-    if ( curr_off >= block_size ) 
-      break;
-
-    if ( !prs_set_offset( &hbin->ps, curr_off) )
+    if(lseek(file->fd, offset+hbin_offset, SEEK_SET) == -1)
       return false;
-
-    if ( !prs_uint32( "record_size", ps, 0, &record_size ) )
+    
+    length = 4;
+    if((regfi_read(file->fd, tmp, &length) != 0) || length != 4)
       return false;
-    if ( !prs_uint8s("header", ps, 0, header, REC_HDR_SIZE ) )
-      return false;
+    record_size = IVALS(tmp, 0);
 
-    if ( record_size & 0x80000000 ) {
-      /* absolute_value(record_size) */
-      record_size = (record_size ^ 0xffffffff) + 1;
+    if(record_size < 0)
+    {
+      record_size = record_size*(-1);
+      nk = regfi_parse_nk(file, offset+hbin_offset, hbin_size-hbin_offset, true);
+      if(nk != NULL)
+      {
+	if(nk->key_type == NK_TYPE_ROOTKEY)
+	{
+	  found = true;
+	  *root_offset = nk->offset;
+	}
+	free(nk);
+      }
     }
 
-    if ( memcmp( header, hdr, REC_HDR_SIZE ) == 0 ) {
-      found = true;
-      curr_off += sizeof(uint32);
-    }
-  } 
-
-  /* mark prs_struct as done ( at end ) if no more SK records */
-  /* mark end-of-block as true */	
-  if ( !found )
-  {
-    prs_set_offset( &hbin->ps, hbin->ps.buffer_size );
-    *eob = true;
-    return false;
+    hbin_offset += record_size;
   }
 
-  if (!prs_set_offset(ps, curr_off))
-    return false;
-
-  return true;
-}
-
-
-/*******************************************************************
- *******************************************************************/
-static REGF_NK_REC* next_nk_record(REGF_FILE *file, REGF_HBIN *hbin, bool *eob)
-{
-  REGF_NK_REC* ret_val;
-  if(next_record(hbin, "nk", eob)
-     && (ret_val = hbin_prs_key(file, hbin)) != NULL)
-    return ret_val;
-
-fprintf(stderr, "ACK!");
-  return NULL;
+  return found;
 }
 
 
@@ -929,56 +926,36 @@ int regfi_close( REGF_FILE *file )
  * There should be only *one* root key in the registry file based 
  * on my experience.  --jerry
  *****************************************************************************/
-REGF_NK_REC* regfi_rootkey( REGF_FILE *file )
+REGF_NK_REC* regfi_rootkey(REGF_FILE *file)
 {
-  REGF_NK_REC *nk;
-  REGF_HBIN   *hbin;
-  uint32      offset = REGF_BLOCKSIZE;
-  bool        found = false;
-  bool        eob;
+  REGF_NK_REC* nk = NULL;
+  REGF_HBIN*   hbin;
+  uint32       offset = REGF_BLOCKSIZE;
+  uint32       root_offset;
   
   if(!file)
     return NULL;
 
-  /* scan through the file on HBIN block at a time looking 
+  /* Scan through the file one HBIN block at a time looking 
      for an NK record with a type == 0x002c.
      Normally this is the first nk record in the first hbin 
      block (but I'm not assuming that for now) */
-	
+
   while((hbin = regfi_parse_hbin(file, offset, true, false))) 
   {
-    eob = false;
-
-    while(!eob) 
+    if(regfi_find_root_nk(file, hbin->file_off+HBIN_HEADER_REC_SIZE, 
+			  hbin->block_size-HBIN_HEADER_REC_SIZE, &root_offset))
     {
-      if((nk = next_nk_record(file, hbin, &eob)) != NULL) 
-      {
-	if ( nk->key_type == NK_TYPE_ROOTKEY ) 
-	{
-	  found = true;
-	  break;
-	}
-      }
-      if(hbin->ps.is_dynamic)
-	SAFE_FREE(hbin->ps.data_p);
-      hbin->ps.is_dynamic = false;
-      hbin->ps.buffer_size = 0;
-      hbin->ps.data_offset = 0;
-    }
-		
-    if(found) 
+      if(!prs_set_offset(&hbin->ps, root_offset + 4 
+			 - hbin->first_hbin_off - REGF_BLOCKSIZE))
+	return NULL;
+      
+      nk = hbin_prs_key(file, hbin);
       break;
+    }
 
     offset += hbin->block_size;
   }
-  
-  if (!found) {
-    /*DEBUG(0,("regfi_rootkey: corrupt registry file ?  No root key record located\n"));*/
-    return NULL;
-  }
-
-  /* XXX: this kind of caching needs to be re-evaluated */
-  DLIST_ADD( file->block_list, hbin );
 
   return nk;
 }
@@ -1373,7 +1350,7 @@ static uint32 regfi_compute_header_checksum(uint8* buffer)
 REGF_FILE* regfi_parse_regf(int fd, bool strict)
 {
   uint8 file_header[REGF_BLOCKSIZE];
-  uint32 ret, length;
+  uint32 length;
   uint32 file_length;
   struct stat sbuf;
   REGF_FILE* ret_val;
@@ -1395,7 +1372,7 @@ REGF_FILE* regfi_parse_regf(int fd, bool strict)
   ret_val->file_length = file_length;
 
   length = REGF_BLOCKSIZE;
-  if((ret = regfi_read(fd, file_header, &length)) != 0 
+  if((regfi_read(fd, file_header, &length)) != 0 
      || length != REGF_BLOCKSIZE)
   {
     free(ret_val);
@@ -1791,10 +1768,11 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
 {
   uint8* ret_val;
   uint32 read_length, cell_length;
+  uint8 i;
   bool unalloc;
 
   /* The data is stored in the offset if the size <= 4 */
-  if (length & VK_DATA_IN_OFFSET)   
+  if (length & VK_DATA_IN_OFFSET)
   {
     length = length & ~VK_DATA_IN_OFFSET;
     if(length > 4)
@@ -1802,7 +1780,10 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
 
     if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
       return NULL;
-    memcpy(ret_val, &offset, length);
+
+    offset = offset - REGF_BLOCKSIZE;
+    for(i = 0; i < length; i++)
+      ret_val[i] = (uint8)((offset >> i*8) & 0xFF);
   }
   else
   {

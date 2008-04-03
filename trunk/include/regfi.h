@@ -85,6 +85,7 @@
 #define REGF_OFFSET_NONE	0xffffffff
 #define REGFI_NK_MIN_LENGTH     0x4C
 #define REGFI_VK_MIN_LENGTH     0x14
+#define REGFI_SK_MIN_LENGTH     0x14
 
 /* Flags for the vk records */
 
@@ -187,6 +188,7 @@ typedef struct _regf_sk_rec
   SEC_DESC* sec_desc;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
+  uint32 offset;        /* Real file offset of this record */
   
   uint32 sk_off;	/* offset parsed from NK record used as a key
 			 * to lookup reference to this SK record 
@@ -195,8 +197,9 @@ typedef struct _regf_sk_rec
   uint32 prev_sk_off;
   uint32 next_sk_off;
   uint32 ref_count;
-  uint32 size;
-  uint8  header[REC_HDR_SIZE];
+  uint32 desc_size;     /* size of security descriptor */
+  uint16 unknown_tag;
+  uint8  magic[REC_HDR_SIZE];
 } REGF_SK_REC;
 
 
