@@ -475,78 +475,102 @@ static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
 }
 
 
-/*******************************************************************
- *******************************************************************/
-static bool prs_hash_rec( const char *desc, prs_struct *ps, int depth, REGF_HASH_REC *hash )
-{
-  depth++;
-
-  if ( !prs_uint32( "nk_off", ps, depth, &hash->nk_off ))
-    return false;
-  if ( !prs_uint8s("keycheck", ps, depth, hash->keycheck, sizeof( hash->keycheck )) )
-    return false;
-	
-  return true;
-}
-
 
 /*******************************************************************
  *******************************************************************/
-static bool hbin_prs_lf_records(const char *desc, REGF_HBIN *hbin, 
-				int depth, REGF_NK_REC *nk)
+REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset, 
+				    uint32 num_keys, bool strict)
 {
-  int i;
-  REGF_LF_REC *lf = &nk->subkeys;
-  uint32 data_size, start_off, end_off;
+  REGF_HASH_LIST* ret_val;
+  uint32 i, cell_length, length;
+  uint8* hashes;
+  uint8 buf[REGFI_HASH_LIST_MIN_LENGTH];
+  bool unalloc;
 
-  depth++;
+  if(!regfi_parse_cell(file->fd, offset, buf, REGFI_HASH_LIST_MIN_LENGTH, 
+		       &cell_length, &unalloc))
+    return NULL;
 
-  /* check if we have anything to do first */
-	
-  if ( nk->num_subkeys == 0 )
-    return true;
+  ret_val = (REGF_HASH_LIST*)zalloc(sizeof(REGF_HASH_LIST));
+  if(ret_val == NULL)
+    return NULL;
 
-  /* move to the LF record */
+  ret_val->offset = offset;
+  ret_val->cell_size = cell_length;
 
-  if ( !prs_set_offset( &hbin->ps, nk->subkeys_off + HBIN_MAGIC_SIZE - hbin->first_hbin_off ) )
-    return false;
-
-  /* backup and get the data_size */
-	
-  if ( !prs_set_offset( &hbin->ps, hbin->ps.data_offset-sizeof(uint32)) )
-    return false;
-  start_off = hbin->ps.data_offset;
-  if ( !prs_uint32( "cell_size", &hbin->ps, depth, &lf->cell_size ))
-    return false;
-
-  if(!prs_uint8s("header", &hbin->ps, depth, 
-		 lf->header, sizeof(lf->header)))
-    return false;
-
-  /*fprintf(stdout, "DEBUG: lf->header=%c%c\n", lf->header[0], lf->header[1]);*/
-
-  if ( !prs_uint16( "num_keys", &hbin->ps, depth, &lf->num_keys))
-    return false;
-
-  if ( hbin->ps.io ) {
-    if ( !(lf->hashes = (REGF_HASH_REC*)zcalloc(sizeof(REGF_HASH_REC), lf->num_keys )) )
-      return false;
+  if((buf[0] != 'l' || buf[1] != 'f') && (buf[0] != 'l' || buf[1] != 'h')
+     && (buf[0] != 'r' || buf[1] != 'i'))
+  {
+    /*printf("DEBUG: lf->header=%c%c\n", buf[0], buf[1]);*/
+    free(ret_val);
+    return NULL;
   }
 
-  for ( i=0; i<lf->num_keys; i++ ) {
-    if ( !prs_hash_rec( "hash_rec", &hbin->ps, depth, &lf->hashes[i] ) )
-      return false;
+  if(buf[0] == 'r' && buf[1] == 'i')
+  {
+    fprintf(stderr, "WARNING: ignoring encountered \"ri\" record.\n");
+    free(ret_val);
+    return NULL;
   }
 
-  end_off = hbin->ps.data_offset;
+  ret_val->magic[0] = buf[0];
+  ret_val->magic[1] = buf[1];
 
-  /* data_size must be divisible by 8 and large enough to hold the original record */
+  ret_val->num_keys = SVAL(buf, 0x2);
+  if(num_keys != ret_val->num_keys)
+  {
+    if(strict)
+    {
+      free(ret_val);
+      return NULL;
+    }
+    /* TODO: Not sure which should be authoritative, the number from the 
+     *       NK record, or the number in the hash list.  Go with the larger
+     *       of the two to ensure all keys are found.  Note the length checks
+     *       on the cell later ensure that there won't be any critical errors.
+     */
+    if(num_keys < ret_val->num_keys)
+      num_keys = ret_val->num_keys;
+    else
+      ret_val->num_keys = num_keys;
+  }
 
-  data_size = ((start_off - end_off) & 0xfffffff8 );
-  /*  if ( data_size > lf->cell_size )*/
-    /*DEBUG(10,("Encountered reused record (0x%x < 0x%x)\n", data_size, lf->cell_size));*/
+  if(cell_length - REGFI_HASH_LIST_MIN_LENGTH - sizeof(uint32) 
+     < ret_val->num_keys*sizeof(REGF_HASH_LIST_ELEM))
+    return NULL;
 
-  return true;
+  length = sizeof(REGF_HASH_LIST_ELEM)*ret_val->num_keys;
+  ret_val->hashes = (REGF_HASH_LIST_ELEM*)zalloc(length);
+  if(ret_val->hashes == NULL)
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  hashes = (uint8*)zalloc(length);
+  if(hashes == NULL)
+  {
+    free(ret_val->hashes);
+    free(ret_val);
+    return NULL;
+  }
+
+  if(regfi_read(file->fd, hashes, &length) != 0
+     || length != sizeof(REGF_HASH_LIST_ELEM)*ret_val->num_keys)
+  {
+    free(ret_val->hashes);
+    free(ret_val);
+    return NULL;
+  }
+
+  for (i=0; i < ret_val->num_keys; i++)
+  {
+    ret_val->hashes[i].nk_off = IVAL(hashes, i*sizeof(REGF_HASH_LIST_ELEM));
+    ret_val->hashes[i].hash = IVAL(hashes, i*sizeof(REGF_HASH_LIST_ELEM)+4);
+  }
+  free(hashes);
+
+  return ret_val;
 }
 
 
@@ -781,9 +805,14 @@ fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
 	return NULL;
       }
     }
-    
-    if (!hbin_prs_lf_records("lf_rec", sub_hbin, depth, nk))
-      return NULL;
+
+    nk->subkeys = regfi_load_hashlist(file, nk->subkeys_off + REGF_BLOCKSIZE,
+				      nk->num_subkeys, true);
+    if (nk->subkeys == NULL)
+    {
+      /* TODO: temporary hack to get around 'ri' records */
+      nk->num_subkeys = 0;
+    }
   }
 
   /* get the security descriptor.  First look if we have already parsed it */
@@ -1202,7 +1231,7 @@ const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
       || (i->cur_subkey >= i->cur_key->num_subkeys))
     return NULL;
 
-  nk_offset = i->cur_key->subkeys.hashes[i->cur_subkey].nk_off;
+  nk_offset = i->cur_key->subkeys->hashes[i->cur_subkey].nk_off;
 
   /* find the HBIN block which should contain the nk record */
   hbin = lookup_hbin_block(i->f, nk_offset);
@@ -1210,7 +1239,7 @@ const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
   {
     /* XXX: should print out some kind of error message every time here */
     /*DEBUG(0,("hbin_prs_key: Failed to find HBIN block containing offset [0x%x]\n", 
-      i->cur_key->subkeys.hashes[i->cur_subkey].nk_off));*/
+      i->cur_key->subkeys->hashes[i->cur_subkey].nk_off));*/
     return NULL;
   }
   
