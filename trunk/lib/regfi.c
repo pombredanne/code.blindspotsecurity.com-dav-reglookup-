@@ -449,16 +449,6 @@ static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
 
     block_off = REGF_BLOCKSIZE;
     do {
-      /* cleanup before the next round */
-      if ( hbin )
-      {
-	if(hbin->ps.is_dynamic)
-	  SAFE_FREE(hbin->ps.data_p);
-	hbin->ps.is_dynamic = false;
-	hbin->ps.buffer_size = 0;
-	hbin->ps.data_offset = 0;
-      }
-
       hbin = regfi_parse_hbin(file, block_off, true, false);
 
       if ( hbin ) 
@@ -477,9 +467,11 @@ static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
 
 
 /*******************************************************************
+ TODO: not currently validating against max_size
  *******************************************************************/
 REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset, 
-				    uint32 num_keys, bool strict)
+				    uint32 num_keys, uint32 max_size, 
+				    bool strict)
 {
   REGF_HASH_LIST* ret_val;
   uint32 i, cell_length, length;
@@ -656,10 +648,11 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
 
 
 /******************************************************************************
- *
+ TODO: not currently validating against max_size.
  ******************************************************************************/
 REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
-				   uint32 num_values)
+				   uint32 num_values, uint32 max_size, 
+				   bool strict)
 {
   REGF_VK_REC** ret_val;
   REGF_HBIN* sub_hbin;
@@ -747,98 +740,115 @@ static REGF_SK_REC* find_sk_record_by_sec_desc( REGF_FILE *file, SEC_DESC *sd )
 
 /*******************************************************************
  *******************************************************************/
-static REGF_NK_REC* hbin_prs_key(REGF_FILE *file, REGF_HBIN *hbin)
+REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
 {
+  REGF_HBIN* hbin;
   REGF_HBIN* sub_hbin;
   REGF_NK_REC* nk;
-  uint32 nk_cell_offset;
-  uint32 nk_max_length;
-  uint32 sk_max_length;
-  int depth = 0;
+  uint32 max_length, off;
 
-  depth++;
+  hbin = lookup_hbin_block(file, offset-REGF_BLOCKSIZE);
+  if (hbin == NULL) 
+    return NULL;
 
   /* get the initial nk record */
-  nk_cell_offset = hbin->file_off + hbin->ps.data_offset - sizeof(uint32);
-  nk_max_length = hbin->block_size - hbin->ps.data_offset + sizeof(uint32);
-  if ((nk = regfi_parse_nk(file, nk_cell_offset, nk_max_length, true)) == NULL)
-  {
-fprintf(stderr, "DEBUG: regfi_parse_nk returned NULL!\n");
+  max_length = hbin->block_size + hbin->file_off - offset;
+  if ((nk = regfi_parse_nk(file, offset, max_length, true)) == NULL)
     return NULL;
-  }
 
   /* fill in values */
-  if ( nk->num_values && (nk->values_off!=REGF_OFFSET_NONE) ) 
+  if(nk->num_values && (nk->values_off!=REGF_OFFSET_NONE)) 
   {
     sub_hbin = hbin;
-    if ( !hbin_contains_offset( hbin, nk->values_off ) ) 
+    if(!hbin_contains_offset(hbin, nk->values_off)) 
+      sub_hbin = lookup_hbin_block(file, nk->values_off);
+    
+    if(sub_hbin == NULL)
     {
-      sub_hbin = lookup_hbin_block( file, nk->values_off );
-      if ( !sub_hbin ) 
+      if(strict)
       {
-	/*DEBUG(0,("hbin_prs_key: Failed to find HBIN block containing value_list_offset [0x%x]\n", 
-	  nk->values_off));*/
+	free(nk);
 	return NULL;
       }
+      else
+	nk->values = NULL;
     }
-    
-    nk->values = regfi_load_valuelist(file, nk->values_off+REGF_BLOCKSIZE,
-				      nk->num_values);
-    if(nk->values == NULL)
+    else
     {
-      printf("values borked!\n");
-      return NULL;
+      off = nk->values_off + REGF_BLOCKSIZE;
+      max_length = sub_hbin->block_size + sub_hbin->file_off - off;
+      nk->values = regfi_load_valuelist(file, off, nk->num_values, max_length, 
+					true);
+      if(strict && nk->values == NULL)
+      {
+	free(nk);
+	return NULL;
+      }
     }
   }
-		
+
   /* now get subkeys */
-  if ( nk->num_subkeys && (nk->subkeys_off!=REGF_OFFSET_NONE) ) 
+  if(nk->num_subkeys && (nk->subkeys_off != REGF_OFFSET_NONE)) 
   {
     sub_hbin = hbin;
-    if ( !hbin_contains_offset( hbin, nk->subkeys_off ) ) 
+    if(!hbin_contains_offset(hbin, nk->subkeys_off))
+      sub_hbin = lookup_hbin_block(file, nk->subkeys_off);
+
+    if (sub_hbin == NULL) 
     {
-      sub_hbin = lookup_hbin_block( file, nk->subkeys_off );
-      if ( !sub_hbin ) 
+      if(strict)
       {
-	/*DEBUG(0,("hbin_prs_key: Failed to find HBIN block containing subkey_offset [0x%x]\n", 
-	  nk->subkeys_off));*/
+	free(nk);
+	/* TODO: need convenient way to free nk->values deeply in all cases. */
 	return NULL;
       }
+      else
+	nk->subkeys = NULL;
     }
-
-    nk->subkeys = regfi_load_hashlist(file, nk->subkeys_off + REGF_BLOCKSIZE,
-				      nk->num_subkeys, true);
-    if (nk->subkeys == NULL)
+    else
     {
-      /* TODO: temporary hack to get around 'ri' records */
-      nk->num_subkeys = 0;
+      off = nk->subkeys_off + REGF_BLOCKSIZE;
+      max_length = sub_hbin->block_size + sub_hbin->file_off - off;
+      nk->subkeys = regfi_load_hashlist(file, off, nk->num_subkeys, 
+					max_length, true);
+      if(nk->subkeys == NULL)
+      {
+	/* TODO: temporary hack to get around 'ri' records */
+	nk->num_subkeys = 0;
+      }
     }
   }
 
   /* get the security descriptor.  First look if we have already parsed it */
-  if ((nk->sk_off!=REGF_OFFSET_NONE)
-      && !(nk->sec_desc = find_sk_record_by_offset( file, nk->sk_off )))
+  if((nk->sk_off!=REGF_OFFSET_NONE)
+     && !(nk->sec_desc = find_sk_record_by_offset( file, nk->sk_off )))
   {
     sub_hbin = hbin;
-    if (!hbin_contains_offset(hbin, nk->sk_off))
+    if(!hbin_contains_offset(hbin, nk->sk_off))
+      sub_hbin = lookup_hbin_block(file, nk->sk_off);
+
+    if(sub_hbin == NULL)
     {
-      sub_hbin = lookup_hbin_block( file, nk->sk_off );
-      if ( !sub_hbin ) 
-      {
-	free(nk);
-	/*DEBUG(0,("hbin_prs_key: Failed to find HBIN block containing sk_offset [0x%x]\n", 
-	  nk->subkeys_off));*/
-	return NULL;
-      }
-    }
-    
-    sk_max_length = sub_hbin->block_size - (nk->sk_off - sub_hbin->first_hbin_off);
-    nk->sec_desc = regfi_parse_sk(file, nk->sk_off + REGF_BLOCKSIZE, 
-				  sk_max_length, true);
-    if(nk->sec_desc == NULL)
+      free(nk);
+      /* TODO: need convenient way to free nk->values and nk->subkeys deeply 
+       *       in all cases. 
+       */
       return NULL;
+    }
+
+    off = nk->sk_off + REGF_BLOCKSIZE;
+    max_length = sub_hbin->block_size + sub_hbin->file_off - off;
+    nk->sec_desc = regfi_parse_sk(file, off, max_length, true);
+    if(strict && nk->sec_desc == NULL)
+    {
+      free(nk);
+      /* TODO: need convenient way to free nk->values and nk->subkeys deeply 
+       *       in all cases. 
+       */
+      return NULL;
+    }
     nk->sec_desc->sk_off = nk->sk_off;
-			
+    
     /* add to the list of security descriptors (ref_count has been read from the files) */
     /* XXX: this kind of caching needs to be re-evaluated */
     DLIST_ADD( file->sec_desc_list, nk->sec_desc );
@@ -975,11 +985,7 @@ REGF_NK_REC* regfi_rootkey(REGF_FILE *file)
     if(regfi_find_root_nk(file, hbin->file_off+HBIN_HEADER_REC_SIZE, 
 			  hbin->block_size-HBIN_HEADER_REC_SIZE, &root_offset))
     {
-      if(!prs_set_offset(&hbin->ps, root_offset + 4 
-			 - hbin->first_hbin_off - REGF_BLOCKSIZE))
-	return NULL;
-      
-      nk = hbin_prs_key(file, hbin);
+      nk = regfi_load_key(file, root_offset, true);
       break;
     }
 
@@ -1222,8 +1228,6 @@ const REGF_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
 {
-  REGF_NK_REC* subkey;
-  REGF_HBIN* hbin;
   uint32 nk_offset;
 
   /* see if there is anything left to report */
@@ -1232,25 +1236,8 @@ const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
     return NULL;
 
   nk_offset = i->cur_key->subkeys->hashes[i->cur_subkey].nk_off;
-
-  /* find the HBIN block which should contain the nk record */
-  hbin = lookup_hbin_block(i->f, nk_offset);
-  if(!hbin)
-  {
-    /* XXX: should print out some kind of error message every time here */
-    /*DEBUG(0,("hbin_prs_key: Failed to find HBIN block containing offset [0x%x]\n", 
-      i->cur_key->subkeys->hashes[i->cur_subkey].nk_off));*/
-    return NULL;
-  }
   
-  if(!prs_set_offset(&hbin->ps, 
-		     HBIN_MAGIC_SIZE + nk_offset - hbin->first_hbin_off))
-    return NULL;
-		
-  if((subkey = hbin_prs_key(i->f, hbin)) == NULL)
-    return NULL;
-
-  return subkey;
+  return regfi_load_key(i->f, nk_offset+REGF_BLOCKSIZE, true);
 }
 
 
@@ -1458,7 +1445,7 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset,
   REGF_HBIN *hbin;
   uint8 hbin_header[HBIN_HEADER_REC_SIZE];
   uint32 length, curr_off;
-  int32 cell_len;
+  uint32 cell_len;
   bool is_unalloc;
   
   if(offset >= file->file_length)
@@ -1505,35 +1492,14 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset,
     return NULL;
   }
 
-  /* TODO: need to get rid of this, but currently lots depends on the 
-   * ps structure. 
-   */
-  if(!prs_init(&hbin->ps, hbin->block_size, file->mem_ctx, UNMARSHALL))
-  {
-    free(hbin);
-    return NULL;
-  }
-  length = hbin->block_size;
-  if((regfi_read(file->fd, (uint8*)hbin->ps.data_p, &length) != 0) 
-     || length != hbin->block_size)
-  {
-    free(hbin);
-    return NULL;
-  }
-
-
   if(save_unalloc)
   {
-    cell_len = 0;
     curr_off = HBIN_HEADER_REC_SIZE;
-    while ( curr_off < hbin->block_size ) 
+    while(curr_off < hbin->block_size)
     {
-      is_unalloc = false;
-      cell_len = IVALS(hbin->ps.data_p, curr_off);
-      if(cell_len > 0)
-	is_unalloc = true;
-      else
-	cell_len = -1*cell_len;
+      if(!regfi_parse_cell(file->fd, hbin->file_off+curr_off, NULL, 0,
+			   &cell_len, &is_unalloc))
+	break;
 
       if((cell_len == 0) || ((cell_len & 0xFFFFFFFC) != cell_len))
 	/* TODO: should report an error here. */
@@ -1553,12 +1519,6 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset,
       curr_off = curr_off+cell_len;
     }
   }
-
-  /* TODO: need to get rid of this, but currently lots depends on the 
-   * ps structure. 
-   */
-  if(!prs_set_offset(&hbin->ps, file->data_offset+HBIN_MAGIC_SIZE))
-    return NULL;
 
   return hbin;
 }
