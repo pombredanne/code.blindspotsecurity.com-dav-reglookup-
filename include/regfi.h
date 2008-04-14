@@ -127,7 +127,6 @@ typedef struct regf_hbin
 			  */
 
   uint8 magic[HBIN_MAGIC_SIZE]; /* "hbin" */
-  prs_struct ps;	 /* data */
 } REGF_HBIN;
 
 
@@ -383,18 +382,21 @@ uint32                regfi_read(int fd, uint8* buf, uint32* length);
 /****************/
 /* Experimental */
 /****************/
+REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict);
+
 REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset, 
-				    uint32 num_keys, bool strict);
+				    uint32 num_keys, uint32 max_size, 
+				    bool strict);
 
 REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
-				   uint32 num_values);
+				   uint32 num_values, uint32 max_size, 
+				   bool strict);
 
 REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset, 
 			    uint32 max_size, bool strict);
 
 uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
 			uint32 length, bool strict);
-
 
 
 #endif	/* _REGFI_H */
