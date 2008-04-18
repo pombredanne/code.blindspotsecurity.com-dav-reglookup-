@@ -70,6 +70,8 @@
 /* Not a real type in the registry */
 #define REG_KEY                        0x7FFFFFFF
 
+#define REGFI_FLAG_NONE         0x0
+#define REGFI_FLAG_SAVE_UNALLOC 0x1
 
 #define REGF_BLOCKSIZE		0x1000
 #define REGF_ALLOC_BLOCK	0x1000  /* Minimum allocation unit for hbins */
@@ -321,7 +323,7 @@ char*                 regfi_get_dacl(SEC_DESC* sec_desc);
 char*                 regfi_get_owner(SEC_DESC* sec_desc);
 char*                 regfi_get_group(SEC_DESC* sec_desc);
 
-REGF_FILE*            regfi_open(const char* filename);
+REGF_FILE*            regfi_open(const char* filename, uint32 flags);
 int                   regfi_close(REGF_FILE* r);
 
 REGFI_ITERATOR*       regfi_iterator_new(REGF_FILE* fh);

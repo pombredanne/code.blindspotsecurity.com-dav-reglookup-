@@ -898,7 +898,7 @@ int main(int argc, char** argv)
   if((registry_file = strdup(argv[argi])) == NULL)
     bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
 
-  f = regfi_open(registry_file);
+  f = regfi_open(registry_file, 0);
   if(f == NULL)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);

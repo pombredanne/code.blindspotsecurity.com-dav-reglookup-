@@ -882,17 +882,19 @@ static bool regfi_find_root_nk(REGF_FILE* file, uint32 offset, uint32 hbin_size,
  * Open the registry file and then read in the REGF block to get the
  * first hbin offset.
  *******************************************************************/
-REGF_FILE* regfi_open(const char* filename)
+REGF_FILE* regfi_open(const char* filename, uint32 flags)
 {
   REGF_FILE* rb;
   REGF_HBIN* hbin = NULL;
   uint32 hbin_off;
   int fd;
-  int flags = O_RDONLY;
-  bool rla;
+  bool rla, save_unalloc = false;
+
+  if(flags & REGFI_FLAG_SAVE_UNALLOC)
+    save_unalloc = true;
 
   /* open an existing file */
-  if ((fd = open(filename, flags)) == -1) 
+  if ((fd = open(filename, O_RDONLY)) == -1) 
   {
     /* DEBUG(0,("regfi_open: failure to open %s (%s)\n", filename, strerror(errno)));*/
     return NULL;
@@ -919,12 +921,12 @@ REGF_FILE* regfi_open(const char* filename)
 
   rla = true;
   hbin_off = REGF_BLOCKSIZE;
-  hbin = regfi_parse_hbin(rb, hbin_off, true, false);
+  hbin = regfi_parse_hbin(rb, hbin_off, true, save_unalloc);
   while(hbin && rla)
   {
     hbin_off = hbin->file_off + hbin->block_size;
     rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
-    hbin = regfi_parse_hbin(rb, hbin_off, true, false); 
+    hbin = regfi_parse_hbin(rb, hbin_off, true, save_unalloc);
   }
 
   /* success */
@@ -967,8 +969,7 @@ REGF_NK_REC* regfi_rootkey(REGF_FILE *file)
 {
   REGF_NK_REC* nk = NULL;
   REGF_HBIN*   hbin;
-  uint32       offset = REGF_BLOCKSIZE;
-  uint32       root_offset;
+  uint32       root_offset, i, num_hbins;
   
   if(!file)
     return NULL;
@@ -978,16 +979,16 @@ REGF_NK_REC* regfi_rootkey(REGF_FILE *file)
      Normally this is the first nk record in the first hbin 
      block (but I'm not assuming that for now) */
 
-  while((hbin = regfi_parse_hbin(file, offset, true, false))) 
+  num_hbins = range_list_size(file->hbins);
+  for(i=0; i < num_hbins; i++)
   {
+    hbin = (REGF_HBIN*)range_list_get(file->hbins, i)->data;
     if(regfi_find_root_nk(file, hbin->file_off+HBIN_HEADER_REC_SIZE, 
 			  hbin->block_size-HBIN_HEADER_REC_SIZE, &root_offset))
     {
       nk = regfi_load_key(file, root_offset, true);
       break;
     }
-
-    offset += hbin->block_size;
   }
 
   return nk;
