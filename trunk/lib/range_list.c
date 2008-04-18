@@ -147,6 +147,10 @@ range_list* range_list_new()
 void range_list_free(range_list* rl)
 {
   uint32_t i;
+
+  if(rl == NULL)
+    return;
+
   for(i=0; i < rl->size; i++)
     free(rl->elements[i]);
 

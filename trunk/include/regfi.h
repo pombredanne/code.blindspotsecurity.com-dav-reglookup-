@@ -108,11 +108,8 @@
 
 
 /* HBIN block */
-struct regf_hbin;
 typedef struct regf_hbin 
 {
-  struct regf_hbin* prev;
-  struct regf_hbin* next;
   uint32 file_off;       /* my offset in the registry file */
   uint32 ref_count;      /* how many active records are pointing to this
                           * block (not used currently) 
@@ -259,7 +256,6 @@ typedef struct
   /* For sanity checking (not part of the registry header) */
   uint32 file_length;
   void* mem_ctx;  /* memory context for run-time file access information */
-  REGF_HBIN* block_list; /* list of open hbin blocks */
 
   /* Experimental hbin lists */
   range_list* hbins;

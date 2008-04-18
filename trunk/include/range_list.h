@@ -53,7 +53,8 @@ range_list* range_list_new();
 
 /* range_list_free(): 
  *  Frees the memory associated with a range_list, including the elements, but
- *  not any data parameters referenced by those elements.
+ *  not any data parameters referenced by those elements.  If rl is NULL, does
+ *  nothing.
  *
  * Arguments:
  *  rl -- the range_list to be free()d.
@@ -81,7 +82,7 @@ uint32_t range_list_size(const range_list* rl);
  * Arguments:
  *  rl     -- the range list to update
  *  offset -- the starting point for the range
- *  length -- the lenght of the range
+ *  length -- the length of the range
  *  data   -- misc data associated with this range element
  * Returns:
  *  true on success, false on failure.

@@ -412,56 +412,30 @@ static bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
 
 
 /*******************************************************************
- Input a random offset and receive the correpsonding HBIN 
- block for it
-*******************************************************************/
-static bool hbin_contains_offset( REGF_HBIN *hbin, uint32 offset )
+ * Given an offset and an hbin, is the offset within that hbin?
+ * The offset is a virtual file offset.
+ *******************************************************************/
+static bool regfi_offset_in_hbin(REGF_HBIN* hbin, uint32 offset)
 {
-  if ( !hbin )
+  if(!hbin)
     return false;
-	
-  if ( (offset > hbin->first_hbin_off) && (offset < (hbin->first_hbin_off+hbin->block_size)) )
+
+  if((offset > hbin->first_hbin_off) 
+     && (offset < (hbin->first_hbin_off + hbin->block_size)))
     return true;
 		
   return false;
 }
 
 
+
 /*******************************************************************
- Input a random offset and receive the correpsonding HBIN 
- block for it
-*******************************************************************/
-static REGF_HBIN* lookup_hbin_block( REGF_FILE *file, uint32 offset )
+ * Given a virtual offset, and receive the correpsonding HBIN 
+ * block for it.  NULL if one doesn't exist.
+ *******************************************************************/
+static REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset)
 {
-  REGF_HBIN *hbin = NULL;
-  uint32 block_off;
-
-  /* start with the open list */
-
-  for ( hbin=file->block_list; hbin; hbin=hbin->next ) {
-    /* DEBUG(10,("lookup_hbin_block: address = 0x%x [0x%x]\n", hbin->file_off, (uint32)hbin ));*/
-    if ( hbin_contains_offset( hbin, offset ) )
-      return hbin;
-  }
-	
-  if ( !hbin ) {
-    /* start at the beginning */
-
-    block_off = REGF_BLOCKSIZE;
-    do {
-      hbin = regfi_parse_hbin(file, block_off, true, false);
-
-      if ( hbin ) 
-	block_off = hbin->file_off + hbin->block_size;
-
-    } while ( hbin && !hbin_contains_offset( hbin, offset ) );
-  }
-
-  if ( hbin )
-    /* XXX: this kind of caching needs to be re-evaluated */
-    DLIST_ADD( file->block_list, hbin );
-
-  return hbin;
+  return (REGF_HBIN*)range_list_find_data(file->hbins, offset+REGF_BLOCKSIZE);
 }
 
 
@@ -682,7 +656,7 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
   {
     vk_raw_offset = IVAL(buf, i*4);
     
-    sub_hbin = lookup_hbin_block(file, vk_raw_offset);
+    sub_hbin = regfi_lookup_hbin(file, vk_raw_offset);
     if (!sub_hbin)
     {
       free(buf);
@@ -739,6 +713,8 @@ static REGF_SK_REC* find_sk_record_by_sec_desc( REGF_FILE *file, SEC_DESC *sd )
 
 
 /*******************************************************************
+ * TODO: Need to add full key and SK record caching using a 
+ *       custom cache structure.
  *******************************************************************/
 REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
 {
@@ -747,7 +723,7 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
   REGF_NK_REC* nk;
   uint32 max_length, off;
 
-  hbin = lookup_hbin_block(file, offset-REGF_BLOCKSIZE);
+  hbin = regfi_lookup_hbin(file, offset-REGF_BLOCKSIZE);
   if (hbin == NULL) 
     return NULL;
 
@@ -760,8 +736,8 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
   if(nk->num_values && (nk->values_off!=REGF_OFFSET_NONE)) 
   {
     sub_hbin = hbin;
-    if(!hbin_contains_offset(hbin, nk->values_off)) 
-      sub_hbin = lookup_hbin_block(file, nk->values_off);
+    if(!regfi_offset_in_hbin(hbin, nk->values_off)) 
+      sub_hbin = regfi_lookup_hbin(file, nk->values_off);
     
     if(sub_hbin == NULL)
     {
@@ -791,8 +767,8 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
   if(nk->num_subkeys && (nk->subkeys_off != REGF_OFFSET_NONE)) 
   {
     sub_hbin = hbin;
-    if(!hbin_contains_offset(hbin, nk->subkeys_off))
-      sub_hbin = lookup_hbin_block(file, nk->subkeys_off);
+    if(!regfi_offset_in_hbin(hbin, nk->subkeys_off))
+      sub_hbin = regfi_lookup_hbin(file, nk->subkeys_off);
 
     if (sub_hbin == NULL) 
     {
@@ -824,8 +800,8 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
      && !(nk->sec_desc = find_sk_record_by_offset( file, nk->sk_off )))
   {
     sub_hbin = hbin;
-    if(!hbin_contains_offset(hbin, nk->sk_off))
-      sub_hbin = lookup_hbin_block(file, nk->sk_off);
+    if(!regfi_offset_in_hbin(hbin, nk->sk_off))
+      sub_hbin = regfi_lookup_hbin(file, nk->sk_off);
 
     if(sub_hbin == NULL)
     {
@@ -909,8 +885,11 @@ static bool regfi_find_root_nk(REGF_FILE* file, uint32 offset, uint32 hbin_size,
 REGF_FILE* regfi_open(const char* filename)
 {
   REGF_FILE* rb;
+  REGF_HBIN* hbin = NULL;
+  uint32 hbin_off;
   int fd;
   int flags = O_RDONLY;
+  bool rla;
 
   /* open an existing file */
   if ((fd = open(filename, flags)) == -1) 
@@ -931,9 +910,21 @@ REGF_FILE* regfi_open(const char* filename)
   rb->unalloc_cells = range_list_new();
   if((rb->hbins == NULL) || (rb->unalloc_cells == NULL))
   {
+    range_list_free(rb->hbins);
+    range_list_free(rb->unalloc_cells);
     close(fd);
     free(rb);
     return NULL;
+  }
+
+  rla = true;
+  hbin_off = REGF_BLOCKSIZE;
+  hbin = regfi_parse_hbin(rb, hbin_off, true, false);
+  while(hbin && rla)
+  {
+    hbin_off = hbin->file_off + hbin->block_size;
+    rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
+    hbin = regfi_parse_hbin(rb, hbin_off, true, false); 
   }
 
   /* success */
@@ -946,6 +937,7 @@ REGF_FILE* regfi_open(const char* filename)
 int regfi_close( REGF_FILE *file )
 {
   int fd;
+  uint32 i;
 
   /* nothing to do if there is no open file */
   if ((file == NULL) || (file->fd == -1))
@@ -953,11 +945,17 @@ int regfi_close( REGF_FILE *file )
 
   fd = file->fd;
   file->fd = -1;
+  for(i=0; i < range_list_size(file->hbins); i++)
+    free(range_list_get(file->hbins, i)->data);
   range_list_free(file->hbins);
+
+  for(i=0; i < range_list_size(file->unalloc_cells); i++)
+    free(range_list_get(file->unalloc_cells, i)->data);
   range_list_free(file->unalloc_cells);
+
   free(file);
 
-  return close( fd );
+  return close(fd);
 }
 
 
@@ -1320,22 +1318,6 @@ const REGF_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
   return ret_val;
 }
 
-
-
-/****************/
-/* Experimental */
-/****************/
-/*
-typedef struct {
-  uint32 offset;
-  uint32 size;
-} REGFI_CELL_INFO;
-
-typedef struct {
-  uint32 count
-  REGFI_CELL_INFO** cells;
-} REGFI_CELL_LIST;
-*/
 
 
 /*******************************************************************
