@@ -71,9 +71,6 @@
 /* Not a real type in the registry */
 #define REG_KEY                        0x7FFFFFFF
 
-#define REGFI_FLAG_NONE         0x0
-#define REGFI_FLAG_SAVE_UNALLOC 0x1
-
 #define REGF_BLOCKSIZE		0x1000
 #define REGF_ALLOC_BLOCK	0x1000  /* Minimum allocation unit for hbins */
 #define REGF_MAX_DEPTH		512
@@ -259,7 +256,6 @@ typedef struct
 
   /* Experimental hbin lists */
   range_list* hbins;
-  range_list* unalloc_cells;
 
   /* file format information */  
   uint8  magic[REGF_MAGIC_SIZE];/* "regf" */
@@ -318,7 +314,7 @@ char*                 regfi_get_dacl(SEC_DESC* sec_desc);
 char*                 regfi_get_owner(SEC_DESC* sec_desc);
 char*                 regfi_get_group(SEC_DESC* sec_desc);
 
-REGF_FILE*            regfi_open(const char* filename, uint32 flags);
+REGF_FILE*            regfi_open(const char* filename);
 int                   regfi_close(REGF_FILE* r);
 
 REGFI_ITERATOR*       regfi_iterator_new(REGF_FILE* fh);
@@ -348,7 +344,7 @@ const REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
 /************************************/
 REGF_FILE*            regfi_parse_regf(int fd, bool strict);
 REGF_HBIN*            regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
-				       bool strict, bool save_unalloc);
+				       bool strict);
 
 
 /* regfi_parse_nk: Parses an NK record.
@@ -392,5 +388,6 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
 			uint32 length, bool strict);
 
+range_list* regfi_parse_unalloc_cells(REGF_FILE* file);
 
 #endif	/* _REGFI_H */
