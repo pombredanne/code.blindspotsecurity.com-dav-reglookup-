@@ -816,16 +816,13 @@ static bool regfi_find_root_nk(REGF_FILE* file, uint32 offset, uint32 hbin_size,
  * Open the registry file and then read in the REGF block to get the
  * first hbin offset.
  *******************************************************************/
-REGF_FILE* regfi_open(const char* filename, uint32 flags)
+REGF_FILE* regfi_open(const char* filename)
 {
   REGF_FILE* rb;
   REGF_HBIN* hbin = NULL;
   uint32 hbin_off;
   int fd;
-  bool rla, save_unalloc = false;
-
-  if(flags & REGFI_FLAG_SAVE_UNALLOC)
-    save_unalloc = true;
+  bool rla;
 
   /* open an existing file */
   if ((fd = open(filename, O_RDONLY)) == -1) 
@@ -843,11 +840,9 @@ REGF_FILE* regfi_open(const char* filename, uint32 flags)
   }
   
   rb->hbins = range_list_new();
-  rb->unalloc_cells = range_list_new();
-  if((rb->hbins == NULL) || (rb->unalloc_cells == NULL))
+  if(rb->hbins == NULL)
   {
     range_list_free(rb->hbins);
-    range_list_free(rb->unalloc_cells);
     close(fd);
     free(rb);
     return NULL;
@@ -855,12 +850,12 @@ REGF_FILE* regfi_open(const char* filename, uint32 flags)
   
   rla = true;
   hbin_off = REGF_BLOCKSIZE;
-  hbin = regfi_parse_hbin(rb, hbin_off, true, save_unalloc);
+  hbin = regfi_parse_hbin(rb, hbin_off, true);
   while(hbin && rla)
   {
     hbin_off = hbin->file_off + hbin->block_size;
     rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
-    hbin = regfi_parse_hbin(rb, hbin_off, true, save_unalloc);
+    hbin = regfi_parse_hbin(rb, hbin_off, true);
   }
 
   /* success */
@@ -884,10 +879,6 @@ int regfi_close( REGF_FILE *file )
   for(i=0; i < range_list_size(file->hbins); i++)
     free(range_list_get(file->hbins, i)->data);
   range_list_free(file->hbins);
-
-  for(i=0; i < range_list_size(file->unalloc_cells); i++)
-    free(range_list_get(file->unalloc_cells, i)->data);
-  range_list_free(file->unalloc_cells);
 
   free(file);
 
@@ -1391,20 +1382,16 @@ REGF_FILE* regfi_parse_regf(int fd, bool strict)
 
 /*******************************************************************
  * Given real file offset, read and parse the hbin at that location
- * along with it's associated cells.  If save_unalloc is true, a list
- * of unallocated cell offsets will be stored in TODO.
+ * along with it's associated cells.
  *******************************************************************/
 /* TODO: Need a way to return types of errors.  Also need to free 
  *       the hbin/ps when an error occurs.
  */
-REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
-			    bool strict, bool save_unalloc)
+REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, bool strict)
 {
   REGF_HBIN *hbin;
   uint8 hbin_header[HBIN_HEADER_REC_SIZE];
-  uint32 length, curr_off;
-  uint32 cell_len;
-  bool is_unalloc;
+  uint32 length;
   
   if(offset >= file->file_length)
     return NULL;
@@ -1448,34 +1435,6 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset,
   {
     free(hbin);
     return NULL;
-  }
-
-  if(save_unalloc)
-  {
-    curr_off = HBIN_HEADER_REC_SIZE;
-    while(curr_off < hbin->block_size)
-    {
-      if(!regfi_parse_cell(file->fd, hbin->file_off+curr_off, NULL, 0,
-			   &cell_len, &is_unalloc))
-	break;
-
-      if((cell_len == 0) || ((cell_len & 0xFFFFFFFC) != cell_len))
-	/* TODO: should report an error here. */
-	break;
-
-      /* for some reason the record_size of the last record in
-	 an hbin block can extend past the end of the block
-	 even though the record fits within the remaining 
-	 space....aaarrrgggghhhhhh */  
-      if(curr_off + cell_len >= hbin->block_size)
-	cell_len = hbin->block_size - curr_off;
-
-      if(is_unalloc)
-	range_list_add(file->unalloc_cells, hbin->file_off+curr_off, 
-	  cell_len, NULL);
-
-      curr_off = curr_off+cell_len;
-    }
   }
 
   return hbin;
@@ -1762,6 +1721,56 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
     {
       free(ret_val);
       return NULL;
+    }
+  }
+
+  return ret_val;
+}
+
+
+range_list* regfi_parse_unalloc_cells(REGF_FILE* file)
+{
+  range_list* ret_val;
+  REGF_HBIN* hbin;
+  const range_list_element* hbins_elem;
+  uint32 i, num_hbins, curr_off, cell_len;
+  bool is_unalloc;
+
+  ret_val = range_list_new();
+  if(ret_val == NULL)
+    return NULL;
+
+  num_hbins = range_list_size(file->hbins);
+  for(i=0; i<num_hbins; i++)
+  {
+    hbins_elem = range_list_get(file->hbins, i);
+    if(hbins_elem == NULL)
+      break;
+    hbin = (REGF_HBIN*)hbins_elem->data;
+
+    curr_off = HBIN_HEADER_REC_SIZE;
+    while(curr_off < hbin->block_size)
+    {
+      if(!regfi_parse_cell(file->fd, hbin->file_off+curr_off, NULL, 0,
+			   &cell_len, &is_unalloc))
+	break;
+      
+      if((cell_len == 0) || ((cell_len & 0xFFFFFFFC) != cell_len))
+	/* TODO: should report an error here. */
+	break;
+      
+      /* for some reason the record_size of the last record in
+	 an hbin block can extend past the end of the block
+	 even though the record fits within the remaining 
+	 space....aaarrrgggghhhhhh */  
+      if(curr_off + cell_len >= hbin->block_size)
+	cell_len = hbin->block_size - curr_off;
+      
+      if(is_unalloc)
+	range_list_add(ret_val, hbin->file_off+curr_off, 
+		       cell_len, NULL);
+      
+      curr_off = curr_off+cell_len;
     }
   }
 
