@@ -48,6 +48,7 @@
 #include "smb_deps.h"
 #include "void_stack.h"
 #include "range_list.h"
+#include "lru_cache.h"
 
 /******************************************************************************/
 /* Macros */
@@ -262,12 +263,9 @@ typedef struct
   /* Experimental hbin lists */
   range_list* hbins;
   range_list* unalloc_cells;
+  lru_cache* sk_recs;
 
-  /* file format information */
-  REGF_SK_REC* sec_desc_list;	/* list of security descriptors referenced 
-				 * by NK records 
-				 */
-  
+  /* file format information */  
   uint8  magic[REGF_MAGIC_SIZE];/* "regf" */
   NTTIME mtime;
   uint32 data_offset;		/* offset to record in the first (or any?) 
