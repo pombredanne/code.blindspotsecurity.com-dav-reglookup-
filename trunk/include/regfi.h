@@ -181,8 +181,6 @@ struct _regf_sk_rec;
 
 typedef struct _regf_sk_rec 
 {
-  struct _regf_sk_rec* next;
-  struct _regf_sk_rec* prev;
   REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
 			 */
@@ -214,7 +212,6 @@ typedef struct
 
   /* link in the other records here */
   REGF_VK_REC** values;
-  REGF_SK_REC* sec_desc;
   REGF_HASH_LIST* subkeys;
   
   /* header information */
@@ -263,7 +260,6 @@ typedef struct
   /* Experimental hbin lists */
   range_list* hbins;
   range_list* unalloc_cells;
-  lru_cache* sk_recs;
 
   /* file format information */  
   uint8  magic[REGF_MAGIC_SIZE];/* "regf" */
@@ -294,6 +290,7 @@ typedef struct
 {
   REGF_FILE* f;
   void_stack* key_positions;
+  lru_cache* sk_recs;
   REGF_NK_REC* cur_key;
   uint32 cur_subkey;
   uint32 cur_value;
@@ -335,6 +332,7 @@ bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i,
 bool                  regfi_iterator_walk_path(REGFI_ITERATOR* i, 
 					       const char** path);
 const REGF_NK_REC*    regfi_iterator_cur_key(REGFI_ITERATOR* i);
+const REGF_SK_REC*    regfi_iterator_cur_sk(REGFI_ITERATOR* i);
 const REGF_NK_REC*    regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 const REGF_NK_REC*    regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
 const REGF_NK_REC*    regfi_iterator_next_subkey(REGFI_ITERATOR* i);

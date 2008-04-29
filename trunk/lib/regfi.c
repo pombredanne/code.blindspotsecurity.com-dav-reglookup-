@@ -680,27 +680,12 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
 }
 
 
-/*******************************************************************
-
-static REGF_SK_REC* find_sk_record_by_sec_desc( REGF_FILE *file, SEC_DESC *sd )
-{
-  REGF_SK_REC *p;
-
-  for ( p=file->sec_desc_list; p; p=p->next ) {
-    if ( sec_desc_equal( p->sec_desc, sd ) )
-      return p;
-  }
-
-
-  return NULL;
-}
- *******************************************************************/
 
 /*******************************************************************
- * TODO: Need to add full key and SK record caching using a 
+ * TODO: Need to add full key caching using a 
  *       custom cache structure.
  *******************************************************************/
-REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
+REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
 {
   REGF_HBIN* hbin;
   REGF_HBIN* sub_hbin;
@@ -779,40 +764,6 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
     }
   }
 
-  /* get the security descriptor.  First look if we have already parsed it */
-  if((nk->sk_off!=REGF_OFFSET_NONE)
-     && !(nk->sec_desc = (REGF_SK_REC*)lru_cache_find(file->sk_recs, 
-						      &nk->sk_off, 4)))
-  {
-    sub_hbin = hbin;
-    if(!regfi_offset_in_hbin(hbin, nk->sk_off))
-      sub_hbin = regfi_lookup_hbin(file, nk->sk_off);
-
-    if(sub_hbin == NULL)
-    {
-      free(nk);
-      /* TODO: need convenient way to free nk->values and nk->subkeys deeply 
-       *       in all cases. 
-       */
-      return NULL;
-    }
-
-    off = nk->sk_off + REGF_BLOCKSIZE;
-    max_length = sub_hbin->block_size + sub_hbin->file_off - off;
-    nk->sec_desc = regfi_parse_sk(file, off, max_length, true);
-    if(strict && nk->sec_desc == NULL)
-    {
-      free(nk);
-      /* TODO: need convenient way to free nk->values and nk->subkeys deeply 
-       *       in all cases. 
-       */
-      return NULL;
-    }
-    nk->sec_desc->sk_off = nk->sk_off;
-    
-    lru_cache_update(file->sk_recs, &nk->sk_off, 4, nk->sec_desc);
-  }
-  
   return nk;
 }
 
@@ -902,9 +853,6 @@ REGF_FILE* regfi_open(const char* filename, uint32 flags)
     return NULL;
   }
   
-  /* TODO: come up with a better secret. */
-  rb->sk_recs = lru_cache_create(127, 0xDEADBEEF, true);
-
   rla = true;
   hbin_off = REGF_BLOCKSIZE;
   hbin = regfi_parse_hbin(rb, hbin_off, true, save_unalloc);
@@ -940,8 +888,6 @@ int regfi_close( REGF_FILE *file )
   for(i=0; i < range_list_size(file->unalloc_cells); i++)
     free(range_list_get(file->unalloc_cells, i)->data);
   range_list_free(file->unalloc_cells);
-
-  lru_cache_destroy(file->sk_recs);
 
   free(file);
 
@@ -1037,6 +983,9 @@ REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh)
     return NULL;
   }
 
+  /* TODO: come up with a better secret. */
+  ret_val->sk_recs = lru_cache_create(127, 0xDEADBEEF, true);
+
   ret_val->f = fh;
   ret_val->cur_key = root;
   ret_val->cur_subkey = 0;
@@ -1061,6 +1010,8 @@ void regfi_iterator_free(REGFI_ITERATOR* i)
     free(cur);
   }
   
+  lru_cache_destroy(i->sk_recs);
+
   free(i);
 }
 
@@ -1200,6 +1151,42 @@ const REGF_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
   return i->cur_key;
 }
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGF_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i)
+{
+  REGF_SK_REC* ret_val;
+  REGF_HBIN* hbin;
+  uint32 max_length, off;
+
+  if(i->cur_key == NULL)
+    return NULL;
+  
+  /* First look if we have already parsed it */
+  if((i->cur_key->sk_off!=REGF_OFFSET_NONE)
+     && !(ret_val =(REGF_SK_REC*)lru_cache_find(i->sk_recs, 
+						&i->cur_key->sk_off, 4)))
+  {
+    hbin = regfi_lookup_hbin(i->f, i->cur_key->sk_off);
+
+    if(hbin == NULL)
+      return NULL;
+
+    off = i->cur_key->sk_off + REGF_BLOCKSIZE;
+    max_length = hbin->block_size + hbin->file_off - off;
+    ret_val = regfi_parse_sk(i->f, off, max_length, true);
+    if(ret_val == NULL)
+      return NULL;
+
+    ret_val->sk_off = i->cur_key->sk_off;
+    lru_cache_update(i->sk_recs, &i->cur_key->sk_off, 4, ret_val);
+  }
+
+  return ret_val;
+}
+
 
 
 /******************************************************************************
