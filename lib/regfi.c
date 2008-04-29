@@ -681,22 +681,7 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
 
 
 /*******************************************************************
- *******************************************************************/
-static REGF_SK_REC* find_sk_record_by_offset( REGF_FILE *file, uint32 offset )
-{
-  REGF_SK_REC *p_sk;
-  
-  for ( p_sk=file->sec_desc_list; p_sk; p_sk=p_sk->next ) {
-    if ( p_sk->sk_off == offset ) 
-      return p_sk;
-  }
-  
-  return NULL;
-}
 
-
-/*******************************************************************
- *******************************************************************/
 static REGF_SK_REC* find_sk_record_by_sec_desc( REGF_FILE *file, SEC_DESC *sd )
 {
   REGF_SK_REC *p;
@@ -706,11 +691,10 @@ static REGF_SK_REC* find_sk_record_by_sec_desc( REGF_FILE *file, SEC_DESC *sd )
       return p;
   }
 
-  /* failure */
 
   return NULL;
 }
-
+ *******************************************************************/
 
 /*******************************************************************
  * TODO: Need to add full key and SK record caching using a 
@@ -797,7 +781,8 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
 
   /* get the security descriptor.  First look if we have already parsed it */
   if((nk->sk_off!=REGF_OFFSET_NONE)
-     && !(nk->sec_desc = find_sk_record_by_offset( file, nk->sk_off )))
+     && !(nk->sec_desc = (REGF_SK_REC*)lru_cache_find(file->sk_recs, 
+						      &nk->sk_off, 4)))
   {
     sub_hbin = hbin;
     if(!regfi_offset_in_hbin(hbin, nk->sk_off))
@@ -825,9 +810,7 @@ REGF_NK_REC* regfi_load_key(REGF_FILE *file, uint32 offset, bool strict)
     }
     nk->sec_desc->sk_off = nk->sk_off;
     
-    /* add to the list of security descriptors (ref_count has been read from the files) */
-    /* XXX: this kind of caching needs to be re-evaluated */
-    DLIST_ADD( file->sec_desc_list, nk->sec_desc );
+    lru_cache_update(file->sk_recs, &nk->sk_off, 4, nk->sec_desc);
   }
   
   return nk;
@@ -918,6 +901,9 @@ REGF_FILE* regfi_open(const char* filename, uint32 flags)
     free(rb);
     return NULL;
   }
+  
+  /* TODO: come up with a better secret. */
+  rb->sk_recs = lru_cache_create(127, 0xDEADBEEF, true);
 
   rla = true;
   hbin_off = REGF_BLOCKSIZE;
@@ -954,6 +940,8 @@ int regfi_close( REGF_FILE *file )
   for(i=0; i < range_list_size(file->unalloc_cells); i++)
     free(range_list_get(file->unalloc_cells, i)->data);
   range_list_free(file->unalloc_cells);
+
+  lru_cache_destroy(file->sk_recs);
 
   free(file);
 
