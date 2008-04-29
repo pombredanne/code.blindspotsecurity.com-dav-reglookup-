@@ -43,6 +43,7 @@ int type_filter;
 char* registry_file = NULL;
 
 /* Other globals */
+REGF_FILE* f;
 const char* key_special_chars = ",\"\\/";
 const char* subfield_special_chars = ",\"\\|";
 const char* common_special_chars = ",\"\\";
@@ -620,7 +621,7 @@ void printValueList(REGFI_ITERATOR* i, char* prefix)
 }
 
 
-void printKey(const REGF_NK_REC* k, char* full_path)
+void printKey(REGFI_ITERATOR* i, char* full_path)
 {
   static char empty_str[1] = "";
   char* owner = NULL;
@@ -630,17 +631,19 @@ void printKey(const REGF_NK_REC* k, char* full_path)
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
+  const REGF_SK_REC* sk;
+  const REGF_NK_REC* k = regfi_iterator_cur_key(i);
 
   *tmp_time = nt_time_to_unix(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
 
-  if(print_security)
+  if(print_security && (sk=regfi_iterator_cur_sk(i)))
   {
-    owner = regfi_get_owner(k->sec_desc->sec_desc);
-    group = regfi_get_group(k->sec_desc->sec_desc);
-    sacl = regfi_get_sacl(k->sec_desc->sec_desc);
-    dacl = regfi_get_dacl(k->sec_desc->sec_desc);
+    owner = regfi_get_owner(sk->sec_desc);
+    group = regfi_get_group(sk->sec_desc);
+    sacl = regfi_get_sacl(sk->sec_desc);
+    dacl = regfi_get_dacl(sk->sec_desc);
     if(owner == NULL)
       owner = empty_str;
     if(group == NULL)
@@ -691,7 +694,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
 	bailOut(EX_OSERR, "ERROR: Could not construct iterator's path.\n");
       
       if(!type_filter_enabled || (key_type == type_filter))
-	printKey(cur, path);
+	printKey(iter, path);
       if(!type_filter_enabled || (key_type != type_filter))
 	printValueList(iter, path);
       
@@ -837,7 +840,6 @@ static void usage(void)
 int main(int argc, char** argv)
 {
   char** path = NULL;
-  REGF_FILE* f;
   REGFI_ITERATOR* iter;
   int retr_path_ret;
   uint32 argi, arge;
