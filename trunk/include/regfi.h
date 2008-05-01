@@ -170,6 +170,7 @@ typedef struct
   uint8  magic[REC_HDR_SIZE];
   uint16 flag;
   uint16 unknown1;
+  bool data_in_offset;
 } REGF_VK_REC;
 
 
@@ -178,13 +179,11 @@ struct _regf_sk_rec;
 
 typedef struct _regf_sk_rec 
 {
-  REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
-			 * this nk record 
-			 */
+  uint32 offset;        /* Real file offset of this record */
+  uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
+
   SEC_DESC* sec_desc;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
-  uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
-  uint32 offset;        /* Real file offset of this record */
   
   uint32 sk_off;	/* offset parsed from NK record used as a key
 			 * to lookup reference to this SK record 
@@ -388,6 +387,13 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
 			uint32 length, bool strict);
 
+REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, bool strict);
+
 range_list* regfi_parse_unalloc_cells(REGF_FILE* file);
+
+REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset);
+
+bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
+		      uint32* cell_length, bool* unalloc);
 
 #endif	/* _REGFI_H */

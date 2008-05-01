@@ -27,7 +27,7 @@
 /*******************/
 #define RANGE_LIST_ALLOC_SIZE 256
 
-
+#if 0
 static void range_list_print(const range_list* rl)
 {
   uint32_t i;
@@ -37,7 +37,7 @@ static void range_list_print(const range_list* rl)
 	    rl->elements[i]->data);
   fprintf(stderr, "\n");
 }
-
+#endif
 
 /*
  * Inserts elem into rl at the specified index and updates rl->size. 
