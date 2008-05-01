@@ -10,7 +10,7 @@
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 of the License.
+ * the Free Software Foundation; version 3 of the License.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -371,8 +371,8 @@ uint32 regfi_read(int fd, uint8* buf, uint32* length)
 /*****************************************************************************
  *
  *****************************************************************************/
-static bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
-			     uint32* cell_length, bool* unalloc)
+bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
+		      uint32* cell_length, bool* unalloc)
 {
   uint32 length;
   int32 raw_length;
@@ -433,7 +433,7 @@ static bool regfi_offset_in_hbin(REGF_HBIN* hbin, uint32 offset)
  * Given a virtual offset, and receive the correpsonding HBIN 
  * block for it.  NULL if one doesn't exist.
  *******************************************************************/
-static REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset)
+REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset)
 {
   return (REGF_HBIN*)range_list_find_data(file->hbins, offset+REGF_BLOCKSIZE);
 }
@@ -564,6 +564,9 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
     return NULL;
 
   ret_val->offset = offset;
+  /* TODO: is there a way to be more conservative (shorter) with 
+   *       cell length when cell is unallocated?
+   */
   ret_val->cell_size = cell_length;
 
   if(ret_val->cell_size > max_size)
@@ -575,10 +578,10 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
     return NULL;
   }
 
-
   ret_val->magic[0] = sk_header[0];
   ret_val->magic[1] = sk_header[1];
 
+  /* TODO: can additional validation be added here? */
   ret_val->unknown_tag = SVAL(sk_header, 0x2);
   ret_val->prev_sk_off = IVAL(sk_header, 0x4);
   ret_val->next_sk_off = IVAL(sk_header, 0x8);
@@ -620,62 +623,115 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
 }
 
 
+uint32* regfi_parse_valuelist(REGF_FILE* file, uint32 offset, 
+			      uint32 num_values, bool strict)
+{
+  uint32* ret_val;
+  uint32 i, cell_length, length, read_len;
+  bool unalloc;
+
+  if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
+    return NULL;
+
+  if(cell_length != (cell_length & 0xFFFFFFF8))
+  {
+    if(strict)
+      return NULL;
+    cell_length = cell_length & 0xFFFFFFF8;
+  }
+  if((num_values * sizeof(uint32)) > cell_length-sizeof(uint32))
+    return NULL;
+
+  read_len = num_values*sizeof(uint32);
+  ret_val = (uint32*)malloc(read_len);
+  if(ret_val == NULL)
+    return NULL;
+
+  length = read_len;
+  if((regfi_read(file->fd, (uint8*)ret_val, &length) != 0) || length != read_len)
+  {
+    free(ret_val);
+    return NULL;
+  }
+  
+  for(i=0; i < num_values; i++)
+  {
+    /* Fix endianness */
+    ret_val[i] = IVAL(&ret_val[i], 0);
+
+    /* Validate the first num_values values to ensure they make sense */
+    if(strict)
+    {
+      if((ret_val[i] + REGF_BLOCKSIZE > file->file_length)
+	 || ((ret_val[i] & 0xFFFFFFF8) != ret_val[i]))
+      {
+	free(ret_val);
+	return NULL;
+      }
+    }
+  }
+
+  return ret_val;
+}
+
+
 
 /******************************************************************************
- TODO: not currently validating against max_size.
+ * If !strict, the list may contain NULLs and VK records may point to NULL data.
  ******************************************************************************/
 REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
 				   uint32 num_values, uint32 max_size, 
 				   bool strict)
 {
   REGF_VK_REC** ret_val;
-  REGF_HBIN* sub_hbin;
-  uint8* buf;
-  uint32 i, cell_length, vk_raw_offset, vk_offset, vk_max_length, buf_len;
-  bool unalloc;
+  REGF_HBIN* hbin;
+  uint32 i, vk_offset, vk_max_length;
+  uint32* voffsets;
 
-  buf_len = sizeof(uint8) * 4 * num_values;
-  buf = (uint8*)zalloc(buf_len);
-  if(buf == NULL)
-    return NULL; 
-
-  if(!regfi_parse_cell(file->fd, offset, buf, buf_len, &cell_length, &unalloc))
-  {
-    free(buf);
+  if((num_values+1) * sizeof(uint32) > max_size)
     return NULL;
-  }
+
+  /* TODO: For now, everything strict seems to make sense on this call.
+   *       Maybe remove the parameter or use it for other things.
+   */
+  voffsets = regfi_parse_valuelist(file, offset, num_values, true);
+  if(voffsets == NULL)
+    return NULL;
 
   ret_val = (REGF_VK_REC**)zalloc(sizeof(REGF_VK_REC*) * num_values);
   if(ret_val == NULL)
   {
-    free(buf);
+    free(voffsets);
     return NULL;
   }
   
-  for (i=0; i < num_values; i++) 
+  for(i=0; i < num_values; i++)
   {
-    vk_raw_offset = IVAL(buf, i*4);
-    
-    sub_hbin = regfi_lookup_hbin(file, vk_raw_offset);
-    if (!sub_hbin)
+    hbin = regfi_lookup_hbin(file, voffsets[i]);
+    if(!hbin)
     {
-      free(buf);
+      free(voffsets);
       free(ret_val);
       return NULL;
     }
     
-    vk_offset =  vk_raw_offset + REGF_BLOCKSIZE;
-    vk_max_length = sub_hbin->block_size - vk_offset + sizeof(uint32);
-    ret_val[i] = regfi_parse_vk(file, vk_offset, vk_max_length, true);
+    vk_offset =  voffsets[i] + REGF_BLOCKSIZE;
+    vk_max_length = hbin->block_size - vk_offset + sizeof(uint32);
+    ret_val[i] = regfi_parse_vk(file, vk_offset, vk_max_length, strict);
     if(ret_val[i] == NULL)
-    {
-      free(buf);
-      free(ret_val);
-      return NULL;     
+    { /* If we're being strict, throw out the whole list.
+       * Otherwise, let it be NULL.
+       */
+      if(strict)
+      {
+	free(voffsets);
+	free(ret_val);
+	return NULL;
+      }
     }
   }
 
-  free(buf);
+  free(voffsets);
   return ret_val;
 }
 
@@ -1459,7 +1515,6 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   if((nk_header[0x0] != 'n') || (nk_header[0x1] != 'k'))
   {
     /* TODO: deal with subkey-lists that reference other subkey-lists. */
-printf("DEBUG: magic check failed! \"%c%c\"\n", nk_header[0x0], nk_header[0x1]);
     return NULL;
   }
 
@@ -1573,7 +1628,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
   if(!regfi_parse_cell(file->fd, offset, vk_header, REGFI_VK_MIN_LENGTH,
 		       &cell_length, &unalloc))
     return NULL;
-   
+
   ret_val = (REGF_VK_REC*)zalloc(sizeof(REGF_VK_REC));
   if(ret_val == NULL)
     return NULL;
@@ -1584,7 +1639,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
   if(ret_val->cell_size > max_size)
     ret_val->cell_size = max_size & 0xFFFFFFF8;
   if((ret_val->cell_size < REGFI_VK_MIN_LENGTH) 
-     || (strict && ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8)))
+     || ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8))
   {
     free(ret_val);
     return NULL;
@@ -1601,6 +1656,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
   ret_val->name_length = SVAL(vk_header, 0x2);
   raw_data_size = IVAL(vk_header, 0x4);
   ret_val->data_size = raw_data_size & ~VK_DATA_IN_OFFSET;
+  ret_val->data_in_offset = (bool)(raw_data_size & VK_DATA_IN_OFFSET);
   ret_val->data_off = IVAL(vk_header, 0x8);
   ret_val->type = IVAL(vk_header, 0xC);
   ret_val->flag = SVAL(vk_header, 0x10);
@@ -1696,12 +1752,16 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
     if(!regfi_parse_cell(file->fd, offset, NULL, 0,
 			 &cell_length, &unalloc))
       return NULL;
-    
-    if(cell_length < 8 || ((cell_length & 0xFFFFFFF8) != cell_length))
+
+    if((cell_length & 0xFFFFFFF8) != cell_length)
       return NULL;
 
     if(cell_length - 4 < length)
     {
+      /* TODO: This strict condition has been triggered in multiple registries.
+       *       Not sure the cause, but the data length values are very large,
+       *       such as 53392.
+       */
       if(strict)
 	return NULL;
       else

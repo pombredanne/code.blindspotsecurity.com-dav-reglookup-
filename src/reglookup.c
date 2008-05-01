@@ -2,12 +2,12 @@
  * A utility to read a Windows NT/2K/XP/2K3 registry file, using 
  * Gerald Carter''s regfio interface.
  *
- * Copyright (C) 2005-2007 Timothy D. Morgan
+ * Copyright (C) 2005-2008 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 of the License.
+ * the Free Software Foundation; version 3 of the License.
  * 
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -28,7 +28,6 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
-#include <iconv.h>
 #include "../include/regfi.h"
 #include "../include/void_stack.h"
 
@@ -44,344 +43,92 @@ char* registry_file = NULL;
 
 /* Other globals */
 REGF_FILE* f;
-const char* key_special_chars = ",\"\\/";
-const char* subfield_special_chars = ",\"\\|";
-const char* common_special_chars = ",\"\\";
-
-iconv_t conv_desc;
 
 
-void bailOut(int code, char* message)
-{
-  fprintf(stderr, message);
-  exit(code);
-}
-
-
-/* Returns a newly malloc()ed string which contains original buffer,
- * except for non-printable or special characters are quoted in hex
- * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
- * character.  A null terminator is added, since only ascii, not binary,
- * is returned.
+/* TODO: a hack to share some functions with reglookup-recover.c.
+ *       Should move these into a properly library at some point.
  */
-static char* quote_buffer(const unsigned char* str, 
-			  unsigned int len, const char* special)
+#include "common.c"
+
+
+void printValue(const REGF_VK_REC* vk, char* prefix)
 {
-  unsigned int i, added_len;
-  unsigned int num_written = 0;
+  char* quoted_value = NULL;
+  char* quoted_name = NULL;
+  char* conv_error = NULL;
+  const char* str_type = NULL;
+  uint32 size = vk->data_size;
 
-  unsigned int buf_len = sizeof(char)*(len+1);
-  char* ret_val = malloc(buf_len);
-  char* tmp_buf;
-
-  if(ret_val == NULL)
-    return NULL;
-
-  for(i=0; i<len; i++)
-  {
-    if(buf_len <= (num_written+5))
-    {
-      /* Expand the buffer by the memory consumption rate seen so far 
-       * times the amount of input left to process.  The expansion is bounded 
-       * below by a minimum safety increase, and above by the maximum possible 
-       * output string length.  This should minimize both the number of 
-       * reallocs() and the amount of wasted memory.
-       */
-      added_len = (len-i)*num_written/(i+1);
-      if((buf_len+added_len) > (len*4+1))
-	buf_len = len*4+1;
-      else
-      {
-	if (added_len < 5)
-	  buf_len += 5;
-	else
-	  buf_len += added_len;
-      }
-
-      tmp_buf = realloc(ret_val, buf_len);
-      if(tmp_buf == NULL)
-      {
-	free(ret_val);
-	return NULL;
-      }
-      ret_val = tmp_buf;
-    }
-    
-    if(str[i] < 32 || str[i] > 126 || strchr(special, str[i]) != NULL)
-    {
-      num_written += snprintf(ret_val + num_written, buf_len - num_written,
-			      "\\x%.2X", str[i]);
-    }
-    else
-      ret_val[num_written++] = str[i];
-  }
-  ret_val[num_written] = '\0';
-
-  return ret_val;
-}
-
-
-/* Returns a newly malloc()ed string which contains original string, 
- * except for non-printable or special characters are quoted in hex
- * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
- * character.
- */
-static char* quote_string(const char* str, const char* special)
-{
-  unsigned int len;
-
-  if(str == NULL)
-    return NULL;
-
-  len = strlen(str);
-  return quote_buffer((const unsigned char*)str, len, special);
-}
-
-
-/*
- * Convert from UTF-16LE to ASCII.  Accepts a Unicode buffer, uni, and
- * it's length, uni_max.  Writes ASCII to the buffer ascii, whose size
- * is ascii_max.  Writes at most (ascii_max-1) bytes to ascii, and null
- * terminates the string.  Returns the length of the string stored in
- * ascii.  On error, returns a negative errno code.
- */
-static int uni_to_ascii(unsigned char* uni, char* ascii, 
-			unsigned int uni_max, unsigned int ascii_max)
-{
-  char* inbuf = (char*)uni;
-  char* outbuf = ascii;
-  size_t in_len = (size_t)uni_max;
-  size_t out_len = (size_t)(ascii_max-1);
-  int ret;
-
-  /* Set up conversion descriptor. */
-  conv_desc = iconv_open("US-ASCII", "UTF-16LE");
-
-  ret = iconv(conv_desc, &inbuf, &in_len, &outbuf, &out_len);
-  if(ret == -1)
-  {
-    iconv_close(conv_desc);
-    return -errno;
-  }
-  *outbuf = '\0';
-
-  iconv_close(conv_desc);  
-  return strlen(ascii);
-}
-
-
-/*
- * Convert a data value to a string for display.  Returns NULL on error,
- * and the string to display if there is no error, or a non-fatal
- * error.  On any error (fatal or non-fatal) occurs, (*error_msg) will
- * be set to a newly allocated string, containing an error message.  If
- * a memory allocation failure occurs while generating the error
- * message, both the return value and (*error_msg) will be NULL.  It
- * is the responsibility of the caller to free both a non-NULL return
- * value, and a non-NULL (*error_msg).
- */
-static char* data_to_ascii(unsigned char *datap, uint32 len, uint32 type, 
-			   char** error_msg)
-{
-  char* asciip;
-  char* ascii;
-  unsigned char* cur_str;
-  char* cur_ascii;
-  char* cur_quoted;
-  char* tmp_err;
-  const char* str_type;
-  uint32 i;
-  uint32 cur_str_len;
-  uint32 ascii_max, cur_str_max;
-  uint32 str_rem, cur_str_rem, alen;
-  int ret_err;
-  unsigned short num_nulls;
-
-  *error_msg = NULL;
-
-  switch (type) 
-  {
-  case REG_SZ:
-  case REG_EXPAND_SZ:
-    /* REG_LINK is a symbolic link, stored as a unicode string. */
-  case REG_LINK:
-    ascii_max = sizeof(char)*(len+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
-      return NULL;
-    
-    /* Sometimes values have binary stored in them.  If the unicode
-     * conversion fails, just quote it raw.
-     */
-    ret_err = uni_to_ascii(datap, ascii, len, ascii_max);
-    if(ret_err < 0)
-    {
-      tmp_err = strerror(-ret_err);
-      str_type = regfi_type_val2str(type);
-      *error_msg = (char*)malloc(65+strlen(str_type)+strlen(tmp_err)+1);
-      if(*error_msg == NULL)
-      {
-	free(ascii);
-	return NULL;
-      }
-      sprintf(*error_msg, "Unicode conversion failed on %s field; "
-	       "printing as binary.  Error: %s", str_type, tmp_err);
-      
-      cur_quoted = quote_buffer(datap, len, common_special_chars);
-    }
-    else
-      cur_quoted = quote_string(ascii, common_special_chars);
-    free(ascii);
-    if(cur_quoted == NULL)
-    {
-      *error_msg = (char*)malloc(27+1);
-      if(*error_msg != NULL)
-	strcpy(*error_msg, "Buffer could not be quoted.");
-    }
-    return cur_quoted;
-    break;
-
-  case REG_DWORD:
-    ascii_max = sizeof(char)*(8+2+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
-      return NULL;
-
-    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
-	     datap[3], datap[2], datap[1], datap[0]);
-    return ascii;
-    break;
-
-  case REG_DWORD_BE:
-    ascii_max = sizeof(char)*(8+2+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
-      return NULL;
-
-    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
-	     datap[0], datap[1], datap[2], datap[3]);
-    return ascii;
-    break;
-
-  case REG_QWORD:
-    ascii_max = sizeof(char)*(16+2+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
-      return NULL;
-
-    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X%.2X%.2X%.2X%.2X",
-	     datap[7], datap[6], datap[5], datap[4],
-	     datap[3], datap[2], datap[1], datap[0]);
-    return ascii;
-    break;
-    
-
-  /* XXX: this MULTI_SZ parser is pretty inefficient.  Should be
-   *      redone with fewer malloc calls and better string concatenation.
-   *      Also, gives lame output when "\0\0" is the string.
+  /* Microsoft's documentation indicates that "available memory" is 
+   * the limit on value sizes.  Annoying.  We limit it to 1M which 
+   * should rarely be exceeded, unless the file is corrupt or 
+   * malicious. For more info, see:
+   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
    */
-  case REG_MULTI_SZ:
-    ascii_max = sizeof(char)*(len*4+1);
-    cur_str_max = sizeof(char)*(len+1);
-    cur_str = malloc(cur_str_max);
-    cur_ascii = malloc(cur_str_max);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL || cur_str == NULL || cur_ascii == NULL)
-      return NULL;
-
-    /* Reads until it reaches 4 consecutive NULLs, 
-     * which is two nulls in unicode, or until it reaches len, or until we
-     * run out of buffer.  The latter should never happen, but we shouldn't
-     * trust our file to have the right lengths/delimiters.
+  if(size > VK_MAX_DATA_LENGTH)
+  {
+    fprintf(stderr, "WARNING: value data size %d larger than "
+	    "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
+    size = VK_MAX_DATA_LENGTH;
+  }
+  
+  quoted_name = quote_string(vk->valuename, key_special_chars);
+  if (quoted_name == NULL)
+  { /* Value names are NULL when we're looking at the "(default)" value.
+     * Currently we just return a 0-length string to try an eliminate 
+     * ambiguity with a literal "(default)" value.  The data type of a line
+     * in the output allows one to differentiate between the parent key and
+     * this value.
      */
-    asciip = ascii;
-    num_nulls = 0;
-    str_rem = ascii_max;
-    cur_str_rem = cur_str_max;
-    cur_str_len = 0;
-
-    for(i=0; (i < len) && str_rem > 0; i++)
-    {
-      *(cur_str+cur_str_len) = *(datap+i);
-      if(*(cur_str+cur_str_len) == 0)
-	num_nulls++;
-      else
-	num_nulls = 0;
-      cur_str_len++;
-
-      if(num_nulls == 2)
-      {
-	ret_err = uni_to_ascii(cur_str, cur_ascii, cur_str_len-1, cur_str_max);
-	if(ret_err < 0)
-	{
-	  /* XXX: should every sub-field error be enumerated? */
-	  if(*error_msg == NULL)
-	  {
-	    tmp_err = strerror(-ret_err);
-	    *error_msg = (char*)malloc(90+strlen(tmp_err)+1);
-	    if(*error_msg == NULL)
-	    {
-	      free(cur_str);
-	      free(cur_ascii);
-	      free(ascii);
-	      return NULL;
-	    }
-	    sprintf(*error_msg, "Unicode conversion failed on at least one "
-		    "MULTI_SZ sub-field; printing as binary.  Error: %s",
-		    tmp_err);
-	  }
-	  cur_quoted = quote_buffer(cur_str, cur_str_len-1, 
-				    subfield_special_chars);
-	}
-	else
-	  cur_quoted = quote_string(cur_ascii, subfield_special_chars);
-
-	alen = snprintf(asciip, str_rem, "%s", cur_quoted);
-	asciip += alen;
-	str_rem -= alen;
-	free(cur_quoted);
-
-	if(*(datap+i+1) == 0 && *(datap+i+2) == 0)
-	  break;
-	else
-	{
-	  if(str_rem > 0)
-	  {
-	    asciip[0] = '|';
-	    asciip[1] = '\0';
-	    asciip++;
-	    str_rem--;
-	  }
-	  memset(cur_str, 0, cur_str_max);
-	  cur_str_len = 0;
-	  num_nulls = 0;
-	  /* To eliminate leading nulls in subsequent strings. */
-	  i++;
-	}
-      }
-    }
-    *asciip = 0;
-    free(cur_str);
-    free(cur_ascii);
-    return ascii;
-    break;
-
-  /* XXX: Dont know what to do with these yet, just print as binary... */
-  default:
-    fprintf(stderr, "WARNING: Unrecognized registry data type (0x%.8X); quoting as binary.\n", type);
-    
-  case REG_NONE:
-  case REG_RESOURCE_LIST:
-  case REG_FULL_RESOURCE_DESCRIPTOR:
-  case REG_RESOURCE_REQUIREMENTS_LIST:
-
-  case REG_BINARY:
-    return quote_buffer(datap, len, common_special_chars);
-    break;
+    quoted_name = malloc(1*sizeof(char));
+    if(quoted_name == NULL)
+      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+    quoted_name[0] = '\0';
   }
 
-  return NULL;
+  quoted_value = data_to_ascii(vk->data, size, vk->type, &conv_error);
+  if(quoted_value == NULL)
+  {
+    if(conv_error == NULL)
+      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
+	      "Memory allocation failure likely.\n", prefix, quoted_name);
+    else if(print_verbose)
+      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
+	      "Returned error: %s\n", prefix, quoted_name, conv_error);
+  }
+  /* XXX: should these always be printed? */
+  else if(conv_error != NULL && print_verbose)
+    fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
+	    "warning returned: %s\n", prefix, quoted_name, conv_error);
+
+  str_type = regfi_type_val2str(vk->type);
+  if(print_security)
+  {
+    if(str_type == NULL)
+      printf("%s/%s,0x%.8X,%s,,,,,\n", prefix, quoted_name,
+	     vk->type, quoted_value);
+    else
+      printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
+	     str_type, quoted_value);
+  }
+  else
+  {
+    if(str_type == NULL)
+      printf("%s/%s,0x%.8X,%s,\n", prefix, quoted_name,
+	     vk->type, quoted_value);
+    else
+      printf("%s/%s,%s,%s,\n", prefix, quoted_name,
+	     str_type, quoted_value);
+  }
+
+  if(quoted_value != NULL)
+    free(quoted_value);
+  if(quoted_name != NULL)
+    free(quoted_name);
+  if(conv_error != NULL)
+    free(conv_error);
 }
+
 
 
 /* XXX: Each chunk must be unquoted after it is split out. 
@@ -523,87 +270,6 @@ char* iter2Path(REGFI_ITERATOR* i)
   } while(cur != NULL);
 
   return buf;
-}
-
-
-void printValue(const REGF_VK_REC* vk, char* prefix)
-{
-  char* quoted_value = NULL;
-  char* quoted_name = NULL;
-  char* conv_error = NULL;
-  const char* str_type = NULL;
-  uint32 size;
-
-  /* Microsoft's documentation indicates that "available memory" is 
-   * the limit on value sizes.  Annoying.  We limit it to 1M which 
-   * should rarely be exceeded, unless the file is corrupt or 
-   * malicious. For more info, see:
-   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
-   */
-  if(size > VK_MAX_DATA_LENGTH)
-  {
-    fprintf(stderr, "WARNING: value data size %d larger than "
-	    "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
-    size = VK_MAX_DATA_LENGTH;
-  }
-  
-  quoted_value = data_to_ascii(vk->data, vk->data_size, 
-			       vk->type, &conv_error);
-
-  
-  /* XXX: Sometimes value names can be NULL in registry.  Need to
-   *      figure out why and when, and generate the appropriate output
-   *      for that condition.
-   */
-  quoted_name = quote_string(vk->valuename, common_special_chars);
-  if (quoted_name == NULL)
-  {
-    quoted_name = malloc(1*sizeof(char));
-    if(quoted_name == NULL)
-      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
-    quoted_name[0] = '\0';
-  }
-
-  if(quoted_value == NULL)
-  {
-    if(conv_error == NULL)
-      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
-	      "Memory allocation failure likely.\n", prefix, quoted_name);
-    else
-      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
-	      "Returned error: %s\n", prefix, quoted_name, conv_error);
-  }
-  /* XXX: should these always be printed? */
-  else if(conv_error != NULL && print_verbose)
-      fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
-	      "warning returned: %s\n", prefix, quoted_name, conv_error);
-
-  str_type = regfi_type_val2str(vk->type);
-  if(print_security)
-  {
-    if(str_type == NULL)
-      printf("%s/%s,0x%.8X,%s,,,,,\n", prefix, quoted_name,
-	     vk->type, quoted_value);
-    else
-      printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
-	     str_type, quoted_value);
-  }
-  else
-  {
-    if(str_type == NULL)
-      printf("%s/%s,0x%.8X,%s,\n", prefix, quoted_name,
-	     vk->type, quoted_value);
-    else
-      printf("%s/%s,%s,%s,\n", prefix, quoted_name,
-	     str_type, quoted_value);
-  }
-
-  if(quoted_value != NULL)
-    free(quoted_value);
-  if(quoted_name != NULL)
-    free(quoted_name);
-  if(conv_error != NULL)
-    free(conv_error);
 }
 
 
@@ -824,7 +490,7 @@ static void usage(void)
   fprintf(stderr, "Usage: reglookup [-v] [-s]"
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
-  fprintf(stderr, "Version: 0.4.0\n");
+  fprintf(stderr, "Version: %s\n", REGLOOKUP_VERSION);
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");

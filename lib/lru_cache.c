@@ -100,17 +100,19 @@ lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
 {
   lru_cache* ret_val;
 
-  if(max_keys < 2)
-    return NULL;
-
   ret_val = (lru_cache*)malloc(sizeof(lru_cache));
   if(ret_val == NULL)
     return NULL;
 
-  ret_val->num_buckets = max_keys/lru_cache_floor_log2(max_keys);
-  if(ret_val->num_buckets < 1)
-    ret_val->num_buckets = 1;
-  
+  if(max_keys == 0)
+    ret_val->num_buckets = 2048;
+  else
+  {
+    ret_val->num_buckets = max_keys/lru_cache_floor_log2(max_keys);
+    if(ret_val->num_buckets < 1)
+      ret_val->num_buckets = 1;
+  }
+
   ret_val->table 
     = (lru_cache_element**)malloc(sizeof(lru_cache_element*) 
 				  * ret_val->num_buckets);
@@ -192,7 +194,7 @@ bool lru_cache_update(lru_cache* ht, const void* index,
   else
   { /* We didn't find an identical index. */
     
-    if(ht->num_keys >= ht->max_keys)
+    if((ht->max_keys != 0) && (ht->num_keys >= ht->max_keys))
     { /* Eliminate the least recently used item, but reuse the element
        * structure to minimize reallocation. 
        */
