@@ -55,7 +55,7 @@ static uint32_t lru_cache_floor_log2(uint32_t n)
   return 0;
 }
 
-
+#if 0
 static void lru_cache_print(lru_cache* ht)
 {
   uint32_t i;
@@ -94,7 +94,7 @@ static void lru_cache_print(lru_cache* ht)
     printf("\n");
   }
 }
-
+#endif
 
 lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
 {
