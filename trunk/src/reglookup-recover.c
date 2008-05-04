@@ -417,10 +417,16 @@ static void usage(void)
 }
 
 
-bool removeRange(range_list* rl, uint32 rm_idx, uint32 offset, uint32 length)
+bool removeRange(range_list* rl, uint32 offset, uint32 length)
 {
-  const range_list_element* cur_elem = range_list_get(rl, rm_idx);
+  int32 rm_idx;
+  const range_list_element* cur_elem;
   
+  rm_idx = range_list_find(rl, offset);
+  if(rm_idx < 0)
+    return false;
+
+  cur_elem = range_list_get(rl, rm_idx);
   if(cur_elem == NULL)
   {
     printf("removeRange: cur_elem == NULL.  rm_idx=%d\n", rm_idx);
@@ -480,7 +486,7 @@ int extractKeys(REGF_FILE* f,
 	  return 20;
 	}
 	
-	if(!removeRange(unalloc_cells, i, key->offset, key->cell_size))
+	if(!removeRange(unalloc_cells, key->offset, key->cell_size))
 	  return 30;
       }
     }
@@ -498,7 +504,6 @@ int extractValueLists(REGF_FILE* f,
   REGF_HBIN* hbin;
   const range_list_element* cur_elem;
   uint32 i, j, num_keys, off, values_length, max_length;
-  int32 idx;
 
   num_keys=range_list_size(unalloc_keys);
   for(i=0; i<num_keys; i++)
@@ -528,8 +533,7 @@ int extractValueLists(REGF_FILE* f,
 
 	if(nk->values != NULL)
 	{
-	  idx = range_list_find(unalloc_cells, off);
-	  if(idx < 0)
+	  if(!range_list_has_range(unalloc_cells, off, nk->cell_size))
 	  { /* We've parsed a values-list which isn't in the unallocated list,
 	     * so prune it. 
 	     */
@@ -552,15 +556,16 @@ int extractValueLists(REGF_FILE* f,
 	    values_length = (nk->num_values+1)*sizeof(uint32);
 	    if(values_length != (values_length & 0xFFFFFFF8))
 	      values_length = (values_length & 0xFFFFFFF8) + 8;
-	    if(!removeRange(unalloc_cells, idx, off, values_length))
+
+	    if(!removeRange(unalloc_cells, off, values_length))
 	      return 20;
 
 	    for(j=0; j < nk->num_values; j++)
 	    {
 	      if(nk->values[j] != NULL)
 	      {
-		idx = range_list_find(unalloc_cells, nk->values[j]->offset);
-		if(idx < 0)
+		if(!range_list_has_range(unalloc_cells, nk->values[j]->offset, 
+					 nk->values[j]->cell_size))
 		{ /* We've parsed a value which isn't in the unallocated list,
 		   * so prune it.
 		   */
@@ -574,18 +579,18 @@ int extractValueLists(REGF_FILE* f,
 		  /* A VK record was recovered.  Remove from unalloc_cells
 		   * and inspect data.
 		   */
-		  if(!removeRange(unalloc_cells, idx, nk->values[j]->offset,
+		  if(!removeRange(unalloc_cells, nk->values[j]->offset,
 				  nk->values[j]->cell_size))
 		    return 21;
 
 		  /* Don't bother pruning or removing from unalloc_cells if 
-		   * there is no data, if it is stored the offset.
+		   * there is no data, or it is stored in the offset.
 		   */
 		  if(nk->values[j]->data != NULL && !nk->values[j]->data_in_offset)
 		  {
 		    off = nk->values[j]->data_off+REGF_BLOCKSIZE;
-		    idx = range_list_find(unalloc_cells, off);
-		    if(idx < 0)
+		    if(!range_list_has_range(unalloc_cells, off, 
+					     nk->values[j]->data_size))
 		    { /* We've parsed a data cell which isn't in the unallocated 
 		       * list, so prune it.
 		       */
@@ -594,7 +599,7 @@ int extractValueLists(REGF_FILE* f,
 		    }
 		    else
 		    { /*A data record was recovered. Remove from unalloc_cells.*/
-		      if(!removeRange(unalloc_cells, idx, off,
+		      if(!removeRange(unalloc_cells, off, 
 				      nk->values[j]->data_size))
 			return 22;
 		    }
@@ -637,7 +642,7 @@ int extractValues(REGF_FILE* f,
 	  return 20;
 	}
 	
-	if(!removeRange(unalloc_cells, i, vk->offset, vk->cell_size))
+	if(!removeRange(unalloc_cells, vk->offset, vk->cell_size))
 	  return 30;
       }
     }
@@ -671,7 +676,7 @@ int extractSKs(REGF_FILE* f,
 	  return 20;
 	}
 	
-	if(!removeRange(unalloc_cells, i, sk->offset, sk->cell_size))
+	if(!removeRange(unalloc_cells, sk->offset, sk->cell_size))
 	  return 30;
       }
     }

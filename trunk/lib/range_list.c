@@ -319,3 +319,30 @@ bool range_list_split_element(range_list* rl, uint32_t index, uint32_t offset)
 
   return true;
 }
+
+
+bool range_list_has_range(range_list* rl, uint32_t start, uint32_t length)
+{
+  int32_t idx1, idx2;
+
+  idx1 = range_list_find(rl, start);
+  if(idx1 < 0)
+    return false;
+
+  idx2 = range_list_find(rl, start+length);
+  if(idx2 < 0)
+    return false;
+
+  if(idx1 == idx2)
+    return true;
+
+  while(idx1 != idx2)
+  {
+    if(rl->elements[idx1]->offset + rl->elements[idx1]->length 
+       != rl->elements[idx1+1]->offset)
+      return false;
+    idx1++;
+  }
+
+  return true;
+}

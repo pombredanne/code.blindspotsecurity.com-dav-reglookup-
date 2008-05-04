@@ -175,4 +175,19 @@ void* range_list_find_data(const range_list* rl, uint32_t offset);
  */
 bool range_list_split_element(range_list* rl, uint32_t index, uint32_t offset);
 
+
+/* range_list_has_range():
+ *  Determines whether or not a specified range exists contiguously within the
+ *  range_list.
+ *
+ * Arguments:
+ *  rl     -- the range_list to search
+ *  start  -- the offset at the beginning of the range
+ *  length -- the length of the range
+ *
+ * Returns:
+ *  true if the specified range exists and is complete, false otherwise.
+ */
+bool range_list_has_range(range_list* rl, uint32_t start, uint32_t length);
+
 #endif
