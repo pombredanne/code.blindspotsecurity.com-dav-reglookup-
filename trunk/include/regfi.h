@@ -212,7 +212,7 @@ typedef struct
   
   /* header information */
   /* XXX: should we be looking for types other than the root key type? */
-  uint16 key_type;      
+  uint16 key_type;
   uint8  magic[REC_HDR_SIZE];
   NTTIME mtime;
   uint16 name_length;

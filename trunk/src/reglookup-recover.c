@@ -272,6 +272,101 @@ int printCell(REGF_FILE* f, uint32 offset)
 }
 
 
+/* This function returns a properly quoted parent path or partial parent 
+ * path for a given key.  Returns NULL on error, "" if no path was available.
+ * Paths returned must be free()d.
+ */
+/* TODO: This is not terribly efficient, as it may reparse many keys 
+ *       repeatedly.  Should try to add caching.  Also, piecing the path 
+ *       together is slow and redundant.
+ */
+char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
+{
+  void_stack* path_stack = void_stack_new(REGF_MAX_DEPTH);
+  REGF_HBIN* hbin;
+  REGF_NK_REC* cur_ancestor;
+  char* ret_val;
+  char* path_element;
+  char* tmp_str;
+  uint32 virt_offset, i, stack_size, ret_val_size, ret_val_left, element_size;
+  uint32 max_length;
+
+  virt_offset = nk->parent_off;
+  while(virt_offset != REGF_OFFSET_NONE)
+  {  
+    /* TODO: Need to add checks for infinite loops and/or add depth limit */
+    hbin = regfi_lookup_hbin(f, virt_offset);
+    if(hbin == NULL)
+      virt_offset = REGF_OFFSET_NONE;
+    else
+    {
+      max_length = hbin->block_size + hbin->file_off 
+	- (virt_offset+REGF_BLOCKSIZE);
+      cur_ancestor = regfi_parse_nk(f, virt_offset+REGF_BLOCKSIZE, 
+				    max_length, true);
+      if(cur_ancestor == NULL)
+	virt_offset = REGF_OFFSET_NONE;
+      else
+      {
+	if(cur_ancestor->key_type == NK_TYPE_ROOTKEY)
+	  virt_offset = REGF_OFFSET_NONE;
+	else
+	  virt_offset = cur_ancestor->parent_off;
+	
+	path_element = quote_string(cur_ancestor->keyname, key_special_chars);
+	if(path_element == NULL || !void_stack_push(path_stack, path_element))
+	{
+	  free(cur_ancestor->keyname);
+	  free(cur_ancestor);
+	  void_stack_free_deep(path_stack);
+	  return NULL;
+	}
+
+	regfi_key_free(cur_ancestor);
+      }
+    }
+  }
+  
+  stack_size = void_stack_size(path_stack);
+  ret_val_size = 16*stack_size;
+  if(ret_val_size == 0)
+    ret_val_size = 1;
+  ret_val_left = ret_val_size;
+  ret_val = malloc(ret_val_size);
+  if(ret_val == NULL)
+  {
+    void_stack_free_deep(path_stack);
+    return NULL;
+  }
+  ret_val[0] = '\0';
+
+  for(i=0; i<stack_size; i++)
+  {
+    path_element = void_stack_pop(path_stack);
+    element_size = strlen(path_element);
+    if(ret_val_left < element_size+2)
+    {
+      ret_val_size += element_size+16;
+      ret_val_left += element_size+16;
+      tmp_str = (char*)realloc(ret_val, ret_val_size);
+      if(tmp_str == NULL)
+      {
+	free(ret_val);
+	void_stack_free_deep(path_stack);
+	return NULL;
+      }
+      ret_val = tmp_str;
+    }
+
+    ret_val_left -= snprintf(ret_val+ret_val_size-ret_val_left,ret_val_left, "/%s", path_element);
+    free(path_element);
+  }
+  void_stack_free(path_stack);
+
+  return ret_val;
+}
+
+
 /*
 void dump_cell(int fd, uint32 offset)
 {
@@ -594,9 +689,12 @@ int main(int argc, char** argv)
   range_list* unalloc_keys;
   range_list* unalloc_values;
   range_list* unalloc_sks;
+  char** parent_paths;
+  char* tmp_name;
+  char* tmp_path;
   REGF_NK_REC* tmp_key;
   REGF_VK_REC* tmp_value;
-  uint32 argi, arge, i, j, ret;
+  uint32 argi, arge, i, j, ret, num_unalloc_keys;
   /* uint32 test_offset;*/
   
   /* Process command line arguments */
@@ -646,29 +744,6 @@ int main(int argc, char** argv)
     printf("OFFSET,REC_LENGTH,REC_TYPE,PATH,NAME,"
 	   "NK_MTIME,NK_NVAL,VK_TYPE,VK_VALUE,VK_DATA_LEN,"
 	   "SK_OWNER,SK_GROUP,SK_SACL,SK_DACL,RAW_CELL\n");
-  
-/*
- * 1. Build a set of all empty cells.  May need to keep these in a
- *    sorted list based on offset.  May also need to have them in a hash
- *    table. 
- *
- * 2. Scour all cells for NK records (regardless of signature offset),
- *    caching those records separately when they successfully parsed.
- *
- * 3. Follow each NK record's parent pointers up until a non-deleted key
- *    is found.  Associate this full path with the NK records somehow.
- *
- * 4. Follow each NK record's pointers to Value-Lists and attempt to
- *    recover VK/data records from remaining cells.  Associate good VK
- *    records with their full paths.
- *
- * 5. For each remaining cell or partial cell, attempt to identify the
- *    record type and parse it.
- *
- * At each step, claimed cells are removed from the global cell
- * list/hash.  If only part of a cell is claimed, it is removed from
- * the list and the remaining fragments are re-added.
- */
 
   unalloc_cells = regfi_parse_unalloc_cells(f);
   if(unalloc_cells == NULL)
@@ -711,7 +786,6 @@ int main(int argc, char** argv)
     return ret;
   }
 
-  /* TODO: Carve SKs */
   /* Carve any SK records */
   ret = extractSKs(f, unalloc_cells, unalloc_sks);
   if(ret != 0)
@@ -720,21 +794,54 @@ int main(int argc, char** argv)
     return ret;
   }
 
+  /* Now that we're done carving, associate recovered keys with parents, 
+   * if at all possible.
+   */
+  num_unalloc_keys = range_list_size(unalloc_keys);
+  parent_paths = (char**)malloc(sizeof(char*)*num_unalloc_keys);
+  if(parent_paths == NULL)
+    return 10;
 
-  for(i=0; i < range_list_size(unalloc_keys); i++)
+  for(i=0; i < num_unalloc_keys; i++)
   {
     cur_elem = range_list_get(unalloc_keys, i);
     tmp_key = (REGF_NK_REC*)cur_elem->data;
 
-    printKey(f, tmp_key, "");
+    if(tmp_key == NULL)
+      return 20;
+    
+    parent_paths[i] = getParentPath(f, tmp_key);
+    if(parent_paths[i] == NULL)
+      return 20;
+  }
+  
+  /* Now start the output */
 
-    for(j=0; j < tmp_key->num_values; j++)
+  for(i=0; i < num_unalloc_keys; i++)
+  {
+    cur_elem = range_list_get(unalloc_keys, i);
+    tmp_key = (REGF_NK_REC*)cur_elem->data;
+
+    printKey(f, tmp_key, parent_paths[i]);
+    if(tmp_key->num_values > 0)
     {
-      tmp_value = tmp_key->values[j];
-      if(tmp_value != NULL)
-	printValue(f, tmp_value, tmp_key->keyname);
+      tmp_name = quote_string(tmp_key->keyname, key_special_chars);
+      tmp_path = (char*)malloc(strlen(parent_paths[i])+strlen(tmp_name)+2);
+      if(tmp_path == NULL)
+	return 10;
+      sprintf(tmp_path, "%s/%s", parent_paths[i], tmp_name);
+      for(j=0; j < tmp_key->num_values; j++)
+      {
+	tmp_value = tmp_key->values[j];
+	if(tmp_value != NULL)
+	  printValue(f, tmp_value, tmp_path);
+      }
+      free(tmp_path);
+      free(tmp_name);
+      free(parent_paths[i]);
     }
   }
+  free(parent_paths);
 
   /* Print out orphaned values */
   for(i=0; i < range_list_size(unalloc_values); i++)
