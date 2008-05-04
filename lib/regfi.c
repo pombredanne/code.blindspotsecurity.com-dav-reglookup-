@@ -1664,7 +1664,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 
   if(ret_val->flag & VK_FLAG_NAME_PRESENT)
   {
-    if(ret_val->name_length + REGFI_VK_MIN_LENGTH > ret_val->cell_size)
+    if(ret_val->name_length + REGFI_VK_MIN_LENGTH + 4 > ret_val->cell_size)
     {
       if(strict)
       {
@@ -1672,13 +1672,13 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 	return NULL;
       }
       else
-	ret_val->name_length = ret_val->cell_size - REGFI_VK_MIN_LENGTH;
+	ret_val->name_length = ret_val->cell_size - REGFI_VK_MIN_LENGTH - 4;
     }
 
     /* Round up to the next multiple of 8 */
-    length = (ret_val->name_length + REGFI_NK_MIN_LENGTH) & 0xFFFFFFF8;
-    if(length < ret_val->name_length + REGFI_NK_MIN_LENGTH)
-      length+=8;
+    cell_length = (ret_val->name_length + REGFI_VK_MIN_LENGTH + 4) & 0xFFFFFFF8;
+    if(cell_length < ret_val->name_length + REGFI_VK_MIN_LENGTH + 4)
+      cell_length+=8;
 
     ret_val->valuename = (char*)zalloc(sizeof(char)*(ret_val->name_length+1));
     if(ret_val->valuename == NULL)
@@ -1686,8 +1686,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
       free(ret_val);
       return NULL;
     }
-    
-    /* Don't need to seek, should be at the right offset */
+
     length = ret_val->name_length;
     if((regfi_read(file->fd, (uint8*)ret_val->valuename, &length) != 0)
        || length != ret_val->name_length)
@@ -1699,13 +1698,13 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
     ret_val->valuename[ret_val->name_length] = '\0';
   }
   else
-    length = REGFI_VK_MIN_LENGTH;
+    cell_length = REGFI_VK_MIN_LENGTH + 4;
 
   if(unalloc)
   {
     /* If cell_size is still greater, truncate. */
-    if(length < ret_val->cell_size)
-      ret_val->cell_size = length;
+    if(cell_length < ret_val->cell_size)
+      ret_val->cell_size = cell_length;
   }
 
   if(ret_val->data_size == 0)
@@ -1815,7 +1814,7 @@ range_list* regfi_parse_unalloc_cells(REGF_FILE* file)
 			   &cell_len, &is_unalloc))
 	break;
       
-      if((cell_len == 0) || ((cell_len & 0xFFFFFFFC) != cell_len))
+      if((cell_len == 0) || ((cell_len & 0xFFFFFFF8) != cell_len))
 	/* TODO: should report an error here. */
 	break;
       
