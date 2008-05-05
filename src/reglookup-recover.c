@@ -828,7 +828,7 @@ int main(int argc, char** argv)
     tmp_key = (REGF_NK_REC*)cur_elem->data;
 
     printKey(f, tmp_key, parent_paths[i]);
-    if(tmp_key->num_values > 0)
+    if(tmp_key->num_values > 0 && tmp_key->values != NULL)
     {
       tmp_name = quote_string(tmp_key->keyname, key_special_chars);
       tmp_path = (char*)malloc(strlen(parent_paths[i])+strlen(tmp_name)+2);
