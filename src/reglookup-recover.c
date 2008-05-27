@@ -421,7 +421,7 @@ bool removeRange(range_list* rl, uint32 offset, uint32 length)
 {
   int32 rm_idx;
   const range_list_element* cur_elem;
-  
+
   rm_idx = range_list_find(rl, offset);
   if(rm_idx < 0)
     return false;
@@ -473,10 +473,11 @@ int extractKeys(REGF_FILE* f,
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
     cur_elem = range_list_get(unalloc_cells, i);
-    for(j=0; j <= cur_elem->length; j+=8)
+    for(j=0; cur_elem->length > REGFI_NK_MIN_LENGTH 
+	  && j <= cur_elem->length-REGFI_NK_MIN_LENGTH; j+=8)
     {
-      key = regfi_parse_nk(f, cur_elem->offset+j, 
-			       cur_elem->length-j, false);
+      key = regfi_parse_nk(f, cur_elem->offset+j,
+			   cur_elem->length-j, false);
       if(key != NULL)
       {
 	if(!range_list_add(unalloc_keys, key->offset, 
@@ -486,7 +487,16 @@ int extractKeys(REGF_FILE* f,
 	  return 20;
 	}
 	
-	if(!removeRange(unalloc_cells, key->offset, key->cell_size))
+	if(removeRange(unalloc_cells, key->offset, key->cell_size))
+	{
+	  /* TODO: This ugly hack is needed because unalloc_cells is changing
+	   *       underneath us when we find things.  Need a better approach
+	   *       so we can parse things single-pass.
+	   */
+	  i=0;
+	  break;
+	}
+	else
 	  return 30;
       }
     }
@@ -530,10 +540,13 @@ int extractValueLists(REGF_FILE* f,
 	 */
 	nk->values = regfi_load_valuelist(f, off, nk->num_values, max_length,
 					  false);
+	values_length = (nk->num_values+1)*sizeof(uint32);
+	if(values_length != (values_length & 0xFFFFFFF8))
+	  values_length = (values_length & 0xFFFFFFF8) + 8;
 
 	if(nk->values != NULL)
 	{
-	  if(!range_list_has_range(unalloc_cells, off, nk->cell_size))
+	  if(!range_list_has_range(unalloc_cells, off, values_length))
 	  { /* We've parsed a values-list which isn't in the unallocated list,
 	     * so prune it. 
 	     */
@@ -544,19 +557,15 @@ int extractValueLists(REGF_FILE* f,
 		if(nk->values[j]->data != NULL)
 		  free(nk->values[j]->data);
 		free(nk->values[j]);
-		free(nk->values);
-		nk->values = NULL;
 	      }
 	    }
+	    free(nk->values);
+	    nk->values = NULL;
 	  }
 	  else
 	  { /* Values-list was recovered.  Remove from unalloc_cells and 
 	     * inspect values. 
 	     */
-	    values_length = (nk->num_values+1)*sizeof(uint32);
-	    if(values_length != (values_length & 0xFFFFFFF8))
-	      values_length = (values_length & 0xFFFFFFF8) + 8;
-
 	    if(!removeRange(unalloc_cells, off, values_length))
 	      return 20;
 
@@ -624,7 +633,7 @@ int extractValues(REGF_FILE* f,
 {
   const range_list_element* cur_elem;
   REGF_VK_REC* vk;
-  uint32 i, j;
+  uint32 i, j, off;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
@@ -644,6 +653,31 @@ int extractValues(REGF_FILE* f,
 	
 	if(!removeRange(unalloc_cells, vk->offset, vk->cell_size))
 	  return 30;
+
+	if(vk->data != NULL && !vk->data_in_offset)
+	{
+	  off = vk->data_off+REGF_BLOCKSIZE;
+	  if(!range_list_has_range(unalloc_cells, off, 
+				   vk->data_size))
+	  { /* We've parsed a data cell which isn't in the unallocated 
+	     * list, so prune it.
+	     */
+	    free(vk->data);
+	    vk->data = NULL;
+	  }
+	  else
+	  { /*A data record was recovered. Remove from unalloc_cells.*/
+	    if(!removeRange(unalloc_cells, off, vk->data_size))
+	      return 40;
+	  }
+	}
+
+	/* TODO: This ugly hack is needed because unalloc_cells is changing
+	 *       underneath us when we find things.  Need a better approach
+	 *       so we can parse things single-pass.
+	 */
+	i=0;
+	break;
       }
     }
   }
@@ -676,7 +710,16 @@ int extractSKs(REGF_FILE* f,
 	  return 20;
 	}
 	
-	if(!removeRange(unalloc_cells, sk->offset, sk->cell_size))
+	if(removeRange(unalloc_cells, sk->offset, sk->cell_size))
+	{
+	  /* TODO: This ugly hack is needed because unalloc_cells is changing
+	   *       underneath us when we find things.  Need a better approach
+	   *       so we can parse things single-pass.
+	   */
+	  i = 0;
+	  break;
+	}
+	else
 	  return 30;
       }
     }
@@ -699,7 +742,7 @@ int main(int argc, char** argv)
   char* tmp_path;
   REGF_NK_REC* tmp_key;
   REGF_VK_REC* tmp_value;
-  uint32 argi, arge, i, j, ret, num_unalloc_keys;
+  uint32 argi, arge, i, j, k, ret, num_unalloc_keys;
   /* uint32 test_offset;*/
   
   /* Process command line arguments */
@@ -756,6 +799,16 @@ int main(int argc, char** argv)
     fprintf(stderr, "ERROR: Could not obtain list of unallocated cells.\n");
     return 1;
   }
+
+  /*XXX
+  for(i=0,k=0; i < range_list_size(unalloc_cells); i++)
+  {
+    cur_elem = range_list_get(unalloc_cells, i);
+    k+=cur_elem->length;
+  }
+  printf("UNALLOC=%d\n", k);
+  printf("UNALLOC_CELL_COUNT=%d\n", range_list_size(unalloc_cells));
+  XXX*/
 
   unalloc_keys = range_list_new();
   if(unalloc_keys == NULL)
@@ -857,13 +910,20 @@ int main(int argc, char** argv)
     printValue(f, tmp_value, "");
   }
   
+  /*XXX
+  for(i=0,j=0; i < range_list_size(unalloc_cells); i++)
+  {
+    cur_elem = range_list_get(unalloc_cells, i);
+    j+=cur_elem->length;
+  }
+  printf("PARSED_UNALLOC=%d\n", k-j);
+  XXX*/
+
   if(print_leftover)
   {
     for(i=0; i < range_list_size(unalloc_cells); i++)
     {
       cur_elem = range_list_get(unalloc_cells, i);
-      printf("0x%X,%d,", cur_elem->offset, cur_elem->length);
-      
       printCell(f, cur_elem->offset);
     }
   }
