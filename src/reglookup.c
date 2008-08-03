@@ -45,8 +45,8 @@ char* registry_file = NULL;
 REGF_FILE* f;
 
 
-/* TODO: a hack to share some functions with reglookup-recover.c.
- *       Should move these into a properly library at some point.
+/* XXX: A hack to share some functions with reglookup-recover.c.
+ *      Should move these into a properly library at some point.
  */
 #include "common.c"
 

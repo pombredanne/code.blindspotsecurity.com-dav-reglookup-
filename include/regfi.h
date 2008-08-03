@@ -71,40 +71,44 @@
 /* Not a real type in the registry */
 #define REG_KEY                        0x7FFFFFFF
 
-#define REGF_BLOCKSIZE		0x1000
-#define REGF_ALLOC_BLOCK	0x1000  /* Minimum allocation unit for hbins */
-#define REGF_MAX_DEPTH		512
+#define REGF_BLOCKSIZE		   0x1000
+#define REGF_ALLOC_BLOCK	   0x1000 /* Minimum allocation unit for HBINs */
+#define REGF_MAX_DEPTH		   512
 
 /* header sizes for various records */
+#define REGF_MAGIC_SIZE		   4
+#define HBIN_MAGIC_SIZE		   4
+#define HBIN_HEADER_REC_SIZE	   0x20
+#define REC_HDR_SIZE		   2
 
-#define REGF_MAGIC_SIZE		4
-#define HBIN_MAGIC_SIZE		4
-#define HBIN_HEADER_REC_SIZE	0x20
-#define REC_HDR_SIZE		2
+#define REGF_OFFSET_NONE           0xffffffff
+#define REGFI_NK_MIN_LENGTH        0x4C
+#define REGFI_VK_MIN_LENGTH        0x14
+#define REGFI_SK_MIN_LENGTH        0x14
+#define REGFI_HASH_LIST_MIN_LENGTH 0x4
 
-#define REGF_OFFSET_NONE	0xffffffff
-#define REGFI_NK_MIN_LENGTH     0x4C
-#define REGFI_VK_MIN_LENGTH     0x14
-#define REGFI_SK_MIN_LENGTH     0x14
-#define REGFI_HASH_LIST_MIN_LENGTH     0x4
+/* Constants used for validation */
+ /* Minimum time is Jan 1, 1990 00:00:00 */
+#define REGFI_MTIME_MIN_HIGH       0x01B41E6D
+#define REGFI_MTIME_MIN_LOW        0x26F98000
+ /* Maximum time is Jan 1, 2290 00:00:00
+  * (We hope no one is using Windows by then...) 
+  */
+#define REGFI_MTIME_MAX_HIGH       0x03047543
+#define REGFI_MTIME_MAX_LOW        0xC80A4000
+
 
 /* Flags for the vk records */
+#define VK_FLAG_NAME_PRESENT	   0x0001
+#define VK_DATA_IN_OFFSET	   0x80000000
+#define VK_MAX_DATA_LENGTH         1024*1024
 
-#define VK_FLAG_NAME_PRESENT	0x0001
-#define VK_DATA_IN_OFFSET	0x80000000
-#define VK_MAX_DATA_LENGTH      1024*1024
-
-/* NK record macros */
-
-#define NK_TYPE_LINKKEY		0x0010
-#define NK_TYPE_NORMALKEY	0x0020
-#define NK_TYPE_ROOTKEY		0x002c
-  /* TODO: Unknown type that shows up in Vista registries */
-#define NK_TYPE_UNKNOWN1         0x1020 
-
-#define HBIN_STORE_REF(x, y) { x->hbin = y; y->ref_count++ };
-/* if the count == 0; we can clean up */
-#define HBIN_REMOVE_REF(x, y){ x->hbin = NULL; y->ref_count-- };
+/* NK record types */
+#define NK_TYPE_LINKKEY		   0x0010
+#define NK_TYPE_NORMALKEY	   0x0020
+#define NK_TYPE_ROOTKEY		   0x002c
+ /* TODO: Unknown type that shows up in Vista registries */
+#define NK_TYPE_UNKNOWN1           0x1020 
 
 
 /* HBIN block */

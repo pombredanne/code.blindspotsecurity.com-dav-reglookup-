@@ -441,7 +441,6 @@ REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset)
 
 
 /*******************************************************************
- TODO: not currently validating against max_size
  *******************************************************************/
 REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset, 
 				    uint32 num_keys, uint32 max_size, 
@@ -462,6 +461,12 @@ REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset,
     return NULL;
 
   ret_val->offset = offset;
+  if(cell_length > max_size)
+  {
+    if(strict)
+      return NULL;
+    cell_length = max_size & 0xFFFFFFF8;
+  }
   ret_val->cell_size = cell_length;
 
   if((buf[0] != 'l' || buf[1] != 'f') && (buf[0] != 'l' || buf[1] != 'h')
@@ -490,10 +495,10 @@ REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset,
       free(ret_val);
       return NULL;
     }
-    /* TODO: Not sure which should be authoritative, the number from the 
-     *       NK record, or the number in the hash list.  Go with the larger
-     *       of the two to ensure all keys are found.  Note the length checks
-     *       on the cell later ensure that there won't be any critical errors.
+    /* XXX: Not sure which should be authoritative, the number from the 
+     *      NK record, or the number in the hash list.  Go with the larger
+     *      of the two to ensure all keys are found.  Note the length checks
+     *      on the cell later ensure that there won't be any critical errors.
      */
     if(num_keys < ret_val->num_keys)
       num_keys = ret_val->num_keys;
@@ -564,8 +569,8 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
     return NULL;
 
   ret_val->offset = offset;
-  /* TODO: is there a way to be more conservative (shorter) with 
-   *       cell length when cell is unallocated?
+  /* XXX: Is there a way to be more conservative (shorter) with 
+   *      cell length when cell is unallocated?
    */
   ret_val->cell_size = cell_length;
 
@@ -581,7 +586,7 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
   ret_val->magic[0] = sk_header[0];
   ret_val->magic[1] = sk_header[1];
 
-  /* TODO: can additional validation be added here? */
+  /* XXX: Can additional validation be added here? */
   ret_val->unknown_tag = SVAL(sk_header, 0x2);
   ret_val->prev_sk_off = IVAL(sk_header, 0x4);
   ret_val->next_sk_off = IVAL(sk_header, 0x8);
@@ -594,7 +599,7 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
     return NULL;
   }
 
-  /* TODO: need to get rid of this, but currently the security descriptor
+  /* XXX: need to get rid of this, but currently the security descriptor
    * code depends on the ps structure.
    */
   if(!prs_init(&ps, ret_val->desc_size, NULL, UNMARSHALL))
@@ -677,7 +682,7 @@ uint32* regfi_parse_valuelist(REGF_FILE* file, uint32 offset,
 
 
 /******************************************************************************
- * If !strict, the list may contain NULLs and VK records may point to NULL data.
+ * If !strict, the list may contain NULLs, VK records may point to NULL.
  ******************************************************************************/
 REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
 				   uint32 num_values, uint32 max_size, 
@@ -685,16 +690,19 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
 {
   REGF_VK_REC** ret_val;
   REGF_HBIN* hbin;
-  uint32 i, vk_offset, vk_max_length;
+  uint32 i, vk_offset, vk_max_length, usable_num_values;
   uint32* voffsets;
 
   if((num_values+1) * sizeof(uint32) > max_size)
-    return NULL;
+  {
+    if(strict)
+      return NULL;
+    usable_num_values = max_size/sizeof(uint32) - sizeof(uint32);
+  }
+  else
+    usable_num_values = num_values;
 
-  /* TODO: For now, everything strict seems to make sense on this call.
-   *       Maybe remove the parameter or use it for other things.
-   */
-  voffsets = regfi_parse_valuelist(file, offset, num_values, true);
+  voffsets = regfi_parse_valuelist(file, offset, usable_num_values, strict);
   if(voffsets == NULL)
     return NULL;
 
@@ -705,7 +713,7 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
     return NULL;
   }
   
-  for(i=0; i < num_values; i++)
+  for(i=0; i < usable_num_values; i++)
   {
     hbin = regfi_lookup_hbin(file, voffsets[i]);
     if(!hbin)
@@ -738,8 +746,8 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
 
 
 /*******************************************************************
- * TODO: Need to add full key caching using a 
- *       custom cache structure.
+ * XXX: Need to add full key caching using a 
+ *      custom cache structure.
  *******************************************************************/
 REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
 {
@@ -799,8 +807,7 @@ REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
     {
       if(strict)
       {
-	free(nk);
-	/* TODO: need convenient way to free nk->values deeply in all cases. */
+	regfi_key_free(nk);
 	return NULL;
       }
       else
@@ -814,7 +821,7 @@ REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
 					max_length, true);
       if(nk->subkeys == NULL)
       {
-	/* TODO: temporary hack to get around 'ri' records */
+	/* XXX: Temporary hack to get around 'ri' records */
 	nk->num_subkeys = 0;
       }
     }
@@ -1030,8 +1037,13 @@ REGFI_ITERATOR* regfi_iterator_new(REGF_FILE* fh)
     return NULL;
   }
 
-  /* TODO: come up with a better secret. */
-  ret_val->sk_recs = lru_cache_create(127, 0xDEADBEEF, true);
+  /* This secret isn't very secret, but we don't need a good one.  This 
+   * secret is just designed to prevent someone from trying to blow our
+   * caching and make things slow.
+   */
+  ret_val->sk_recs = lru_cache_create(127, 0x15DEAD05^time(NULL)
+				           ^(getpid()<<16)^(getppid()<<8),
+				      true);
 
   ret_val->f = fh;
   ret_val->cur_key = root;
@@ -1366,7 +1378,7 @@ static uint32 regfi_compute_header_checksum(uint8* buffer)
 
 
 /*******************************************************************
- * TODO: add way to return more detailed error information.
+ * XXX: Add way to return more detailed error information.
  *******************************************************************/
 REGF_FILE* regfi_parse_regf(int fd, bool strict)
 {
@@ -1440,8 +1452,7 @@ REGF_FILE* regfi_parse_regf(int fd, bool strict)
  * Given real file offset, read and parse the hbin at that location
  * along with it's associated cells.
  *******************************************************************/
-/* TODO: Need a way to return types of errors.  Also need to free 
- *       the hbin/ps when an error occurs.
+/* XXX: Need a way to return types of errors.
  */
 REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, bool strict)
 {
@@ -1484,8 +1495,9 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, bool strict)
   /* Ensure the block size is a multiple of 0x1000 and doesn't run off 
    * the end of the file. 
    */
-  /* TODO: This may need to be relaxed for dealing with 
-   *       partial or corrupt files. */
+  /* XXX: This may need to be relaxed for dealing with 
+   *      partial or corrupt files. 
+   */
   if((offset + hbin->block_size > file->file_length)
      || (hbin->block_size & 0xFFFFF000) != hbin->block_size)
   {
@@ -1514,7 +1526,9 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   /* A bit of validation before bothering to allocate memory */
   if((nk_header[0x0] != 'n') || (nk_header[0x1] != 'k'))
   {
-    /* TODO: deal with subkey-lists that reference other subkey-lists. */
+    /* XXX: Deal with subkey-lists that reference other subkey-lists
+     *      (e.g. 'ri' records). 
+     */
     return NULL;
   }
 
@@ -1548,7 +1562,17 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 
   ret_val->mtime.low = IVAL(nk_header, 0x4);
   ret_val->mtime.high = IVAL(nk_header, 0x8);
-  
+  /* If the key is unallocated and the MTIME is earlier than Jan 1, 1990
+   * or later than Jan 1, 2290, we consider this a bad key.  This helps
+   * weed out some false positives during deleted data recovery.
+   */
+  if(unalloc
+     && ((ret_val->mtime.high < REGFI_MTIME_MIN_HIGH 
+	  && ret_val->mtime.low < REGFI_MTIME_MIN_LOW)
+	 || (ret_val->mtime.high > REGFI_MTIME_MAX_HIGH 
+	     && ret_val->mtime.low > REGFI_MTIME_MAX_LOW)))
+    return NULL;
+
   ret_val->unknown1 = IVAL(nk_header, 0xC);
   ret_val->parent_off = IVAL(nk_header, 0x10);
   ret_val->num_subkeys = IVAL(nk_header, 0x14);
@@ -1558,7 +1582,7 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   ret_val->num_values = IVAL(nk_header, 0x24);
   ret_val->values_off = IVAL(nk_header, 0x28);
   ret_val->sk_off = IVAL(nk_header, 0x2C);
-  /* TODO: currently we do nothing with class names.  Need to investigate. */
+  /* XXX: currently we do nothing with class names.  Need to investigate. */
   ret_val->classname_off = IVAL(nk_header, 0x30);
 
   ret_val->max_bytes_subkeyname = IVAL(nk_header, 0x34);
@@ -1757,9 +1781,9 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
 
     if(cell_length - 4 < length)
     {
-      /* TODO: This strict condition has been triggered in multiple registries.
-       *       Not sure the cause, but the data length values are very large,
-       *       such as 53392.
+      /* XXX: This strict condition has been triggered in multiple registries.
+       *      Not sure the cause, but the data length values are very large,
+       *      such as 53392.
        */
       if(strict)
 	return NULL;
@@ -1767,8 +1791,8 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
 	length = cell_length - 4;
     }
 
-    /* TODO: There is currently no check to ensure the data 
-     *       cell doesn't cross HBIN boundary.
+    /* XXX: There is currently no check to ensure the data 
+     *      cell doesn't cross HBIN boundary.
      */
 
     if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
@@ -1815,7 +1839,7 @@ range_list* regfi_parse_unalloc_cells(REGF_FILE* file)
 	break;
       
       if((cell_len == 0) || ((cell_len & 0xFFFFFFF8) != cell_len))
-	/* TODO: should report an error here. */
+	/* XXX: should report an error here. */
 	break;
       
       /* for some reason the record_size of the last record in

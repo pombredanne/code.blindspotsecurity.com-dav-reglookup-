@@ -147,7 +147,11 @@ void printValue(REGF_FILE* f, const REGF_VK_REC* vk, const char* prefix)
    * malicious. For more info, see:
    *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
    */
-  /* TODO: should probably do something different here for this tool.*/
+  /* XXX: Should probably do something different here for this tool.
+   *      Also, It would be really nice if this message somehow included the
+   *      name of the current value we're having trouble with, since
+   *      stderr/stdout don't always sync nicely.
+   */
   if(size > VK_MAX_DATA_LENGTH)
   {
     fprintf(stderr, "WARNING: value data size %d larger than "
@@ -276,9 +280,9 @@ int printCell(REGF_FILE* f, uint32 offset)
  * path for a given key.  Returns NULL on error, "" if no path was available.
  * Paths returned must be free()d.
  */
-/* TODO: This is not terribly efficient, as it may reparse many keys 
- *       repeatedly.  Should try to add caching.  Also, piecing the path 
- *       together is slow and redundant.
+/* XXX: This is not terribly efficient, as it may reparse many keys 
+ *      repeatedly.  Should try to add caching.  Also, piecing the path 
+ *      together is slow and redundant.
  */
 char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
 {
@@ -424,12 +428,15 @@ bool removeRange(range_list* rl, uint32 offset, uint32 length)
 
   rm_idx = range_list_find(rl, offset);
   if(rm_idx < 0)
+  {
+    fprintf(stderr, "DEBUG: removeRange: rm_idx < 0; (%d)\n", rm_idx);
     return false;
+  }
 
   cur_elem = range_list_get(rl, rm_idx);
   if(cur_elem == NULL)
   {
-    printf("removeRange: cur_elem == NULL.  rm_idx=%d\n", rm_idx);
+    fprintf(stderr, "DEBUG: removeRange: cur_elem == NULL.  rm_idx=%d\n", rm_idx);
     return false;
   }
 
@@ -437,24 +444,32 @@ bool removeRange(range_list* rl, uint32 offset, uint32 length)
   {
     if(!range_list_split_element(rl, rm_idx, offset))
     {
-      printf("removeRange: first split failed\n");
+      fprintf(stderr, "DEBUG: removeRange: first split failed\n");
       return false;
     }
     rm_idx++;
+    cur_elem = range_list_get(rl, rm_idx);
+    if(cur_elem == NULL)
+    {
+      fprintf(stderr, 
+	      "DEBUG: removeRange: cur_elem == NULL after first split.  rm_idx=%d\n",
+	      rm_idx);
+      return false;
+    }
   }
   
   if(offset+length < cur_elem->offset+cur_elem->length)
   {
     if(!range_list_split_element(rl, rm_idx, offset+length))
     {
-      printf("removeRange: second split failed\n");
+      fprintf(stderr, "DEBUG: removeRange: second split failed\n");
       return false;
     }
   }
   
   if(!range_list_remove(rl, rm_idx))
   {
-    printf("removeRange: remove failed\n");
+    fprintf(stderr, "DEBUG: removeRange: remove failed\n");
     return false;
   }
 
@@ -486,20 +501,16 @@ int extractKeys(REGF_FILE* f,
 	  fprintf(stderr, "ERROR: Couldn't add key to unalloc_keys.\n");
 	  return 20;
 	}
-	
-	if(removeRange(unalloc_cells, key->offset, key->cell_size))
-	{
-	  /* TODO: This ugly hack is needed because unalloc_cells is changing
-	   *       underneath us when we find things.  Need a better approach
-	   *       so we can parse things single-pass.
-	   */
-	  i=0;
-	  break;
-	}
-	else
-	  return 30;
+	j+=key->cell_size-8;
       }
     }
+  }
+
+  for(i=0; i<range_list_size(unalloc_keys); i++)
+  {
+    cur_elem = range_list_get(unalloc_keys, i);
+    if(!removeRange(unalloc_cells, cur_elem->offset, cur_elem->length))
+      return 30;
   }
 
   return 0;
@@ -742,7 +753,7 @@ int main(int argc, char** argv)
   char* tmp_path;
   REGF_NK_REC* tmp_key;
   REGF_VK_REC* tmp_value;
-  uint32 argi, arge, i, j, k, ret, num_unalloc_keys;
+  uint32 argi, arge, i, j, ret, num_unalloc_keys;
   /* uint32 test_offset;*/
   
   /* Process command line arguments */
