@@ -14,7 +14,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
  *
- * $Id: $
+ * $Id$
  */
 
 #include <stdio.h>
@@ -295,10 +295,10 @@ char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
   uint32 virt_offset, i, stack_size, ret_val_size, ret_val_left, element_size;
   uint32 max_length;
 
+  /* The path_stack size limit should guarantee that we don't recurse forever. */
   virt_offset = nk->parent_off;
   while(virt_offset != REGF_OFFSET_NONE)
   {  
-    /* TODO: Need to add checks for infinite loops and/or add depth limit */
     hbin = regfi_lookup_hbin(f, virt_offset);
     if(hbin == NULL)
       virt_offset = REGF_OFFSET_NONE;
@@ -370,40 +370,6 @@ char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
   return ret_val;
 }
 
-
-/*
-void dump_cell(int fd, uint32 offset)
-{
-  uint8* buf;
-  uint32 length, j;
-  int32 cell_length;
-
-  if((lseek(fd, offset, SEEK_SET)) == -1)
-    exit(8);
-  
-  length = 4;
-  regfi_read(fd, (void*)&cell_length, &length);
-  if(cell_length < 0)
-    cell_length *= -1;
-
-  buf = (uint8*)malloc(cell_length);
-  if(buf == NULL)
-    exit(9);
-  if((lseek(fd, offset, SEEK_SET)) == -1)
-    exit(8);
-
-  length = cell_length;
-  regfi_read(fd, buf, &length);
-  for(j=0; j < length; j++)
-  {
-    printf("%.2X", buf[j]);
-    if(j%4 == 3)
-      printf(" ");
-  }
-  printf("\n");
-  free(buf);
-}
-*/
 
 static void usage(void)
 {
@@ -543,12 +509,12 @@ int extractValueLists(REGF_FILE* f,
       {
 	off = nk->values_off + REGF_BLOCKSIZE;
 	max_length = hbin->block_size + hbin->file_off - off;
-	/* TODO: This is kind of a hack.  We parse all value-lists, VK records, 
-	 *       and data records without regard for current allocation status.  
-	 *       On the off chance that such a record correctly parsed but is 
-	 *       actually a reallocated structure used by something else, we 
-	 *       simply prune it after the fact.  Would be faster to check this
-	 *       up front somehow. 
+	/* XXX: This is a hack.  We parse all value-lists, VK records,
+	 *      and data records without regard for current allocation status.  
+	 *      On the off chance that such a record correctly parsed but is 
+	 *      actually a reallocated structure used by something else, we 
+	 *      simply prune it after the fact.  Would be faster to check this
+	 *      up front somehow.
 	 */
 	nk->values = regfi_load_valuelist(f, off, nk->num_values, max_length,
 					  false);
@@ -705,6 +671,7 @@ int extractValues(REGF_FILE* f,
 }
 
 
+/* NOTE: unalloc_sks should be an empty range_list. */
 int extractSKs(REGF_FILE* f, 
 	       range_list* unalloc_cells,
 	       range_list* unalloc_sks)
@@ -728,20 +695,16 @@ int extractSKs(REGF_FILE* f,
 	  fprintf(stderr, "ERROR: Couldn't add sk to unalloc_sks.\n");
 	  return 20;
 	}
-	
-	if(removeRange(unalloc_cells, sk->offset, sk->cell_size))
-	{
-	  /* TODO: This ugly hack is needed because unalloc_cells is changing
-	   *       underneath us when we find things.  Need a better approach
-	   *       so we can parse things single-pass.
-	   */
-	  i = 0;
-	  break;
-	}
-	else
-	  return 30;
+	j+=sk->cell_size-8;
       }
     }
+  }
+
+  for(i=0; i<range_list_size(unalloc_sks); i++)
+  {
+    cur_elem = range_list_get(unalloc_sks, i);
+    if(!removeRange(unalloc_cells, cur_elem->offset, cur_elem->length))
+      return 30;
   }
 
   return 0;
