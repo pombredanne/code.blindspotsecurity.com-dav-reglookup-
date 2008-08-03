@@ -28,7 +28,7 @@ const char* key_special_chars = ",\"\\/";
 const char* subfield_special_chars = ",\"\\|";
 const char* common_special_chars = ",\"\\";
 
-#define REGLOOKUP_VERSION "1.0.0"
+#define REGLOOKUP_VERSION "0.9.0"
 
 
 void bailOut(int code, char* message)
@@ -356,6 +356,10 @@ static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type,
 
   /* XXX: Dont know what to do with these yet, just print as binary... */
   default:
+    /* XXX: It would be really nice if this message somehow included the
+     *      name of the current value we're having trouble with, since
+     *      stderr/stdout don't always sync nicely.
+     */
     fprintf(stderr, "WARNING: Unrecognized registry data type (0x%.8X); quoting as binary.\n", type);
     
   case REG_NONE:

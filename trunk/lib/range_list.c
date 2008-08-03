@@ -17,7 +17,6 @@
  * $Id: $
  */
 
-#include <stdio.h>
 #include <math.h>
 #include "../include/range_list.h"
 
@@ -28,6 +27,7 @@
 #define RANGE_LIST_ALLOC_SIZE 256
 
 #if 0
+#include <stdio.h>
 static void range_list_print(const range_list* rl)
 {
   uint32_t i;
