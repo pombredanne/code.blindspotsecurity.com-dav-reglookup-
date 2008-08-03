@@ -477,6 +477,7 @@ bool removeRange(range_list* rl, uint32 offset, uint32 length)
 }
 
 
+/* NOTE: unalloc_keys should be an empty range_list. */
 int extractKeys(REGF_FILE* f, 
 		range_list* unalloc_cells, 
 		range_list* unalloc_keys)
@@ -637,9 +638,9 @@ int extractValueLists(REGF_FILE* f,
 }
 
 
-
-int extractValues(REGF_FILE* f, 
-		  range_list* unalloc_cells, 
+/* NOTE: unalloc_values should be an empty range_list. */
+int extractValues(REGF_FILE* f,
+		  range_list* unalloc_cells,
 		  range_list* unalloc_values)
 {
   const range_list_element* cur_elem;
@@ -661,34 +662,41 @@ int extractValues(REGF_FILE* f,
 	  fprintf(stderr, "ERROR: Couldn't add value to unalloc_values.\n");
 	  return 20;
 	}
-	
-	if(!removeRange(unalloc_cells, vk->offset, vk->cell_size))
-	  return 30;
+	j+=vk->cell_size-8;
+      }
+    }
+  }
+  
+  /* Remove value ranges from the unalloc_cells before we continue. */
+  for(i=0; i<range_list_size(unalloc_values); i++)
+  {
+    cur_elem = range_list_get(unalloc_values, i);
+    if(!removeRange(unalloc_cells, cur_elem->offset, cur_elem->length))
+      return 30;
+  }
 
-	if(vk->data != NULL && !vk->data_in_offset)
-	{
-	  off = vk->data_off+REGF_BLOCKSIZE;
-	  if(!range_list_has_range(unalloc_cells, off, 
-				   vk->data_size))
-	  { /* We've parsed a data cell which isn't in the unallocated 
-	     * list, so prune it.
-	     */
-	    free(vk->data);
-	    vk->data = NULL;
-	  }
-	  else
-	  { /*A data record was recovered. Remove from unalloc_cells.*/
-	    if(!removeRange(unalloc_cells, off, vk->data_size))
-	      return 40;
-	  }
-	}
+  /* Now see if the data associated with each value is intact */
+  for(i=0; i<range_list_size(unalloc_values); i++)
+  {
+    cur_elem = range_list_get(unalloc_values, i);
+    vk = (REGF_VK_REC*)cur_elem->data;
+    if(vk == NULL)
+      return 40;
 
-	/* TODO: This ugly hack is needed because unalloc_cells is changing
-	 *       underneath us when we find things.  Need a better approach
-	 *       so we can parse things single-pass.
+    if(vk->data != NULL && !vk->data_in_offset)
+    {
+      off = vk->data_off+REGF_BLOCKSIZE;
+      if(!range_list_has_range(unalloc_cells, off, vk->data_size))
+      { /* We've parsed a data cell which isn't in the unallocated 
+	 * list, so prune it.
 	 */
-	i=0;
-	break;
+	free(vk->data);
+	vk->data = NULL;
+      }
+      else
+      { /*A data record was recovered. Remove from unalloc_cells.*/
+	if(!removeRange(unalloc_cells, off, vk->data_size))
+	  return 50;
       }
     }
   }
