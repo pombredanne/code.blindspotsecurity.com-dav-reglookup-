@@ -8,7 +8,7 @@
   </refmeta>
   <refnamediv id='name'>
     <refname>reglookup-timeline</refname>
-    <refpurpose>windows NT+ registry MTIME timeline generator</refpurpose>
+    <refpurpose>Windows NT+ registry MTIME timeline generator</refpurpose>
   </refnamediv>
 
   <refsect1 id='synopsis'>
@@ -27,7 +27,7 @@
     <para>
       This script is a wrapper for <command>reglookup(1)</command>, and reads
       one or more registry
-      files to produce an MTIME sorted output.  This is helpful when building
+      files to produce an MTIME-sorted output.  This is helpful when building
       timelines for forensic investigations.
     </para>
   </refsect1>
@@ -98,18 +98,18 @@
       Please see the file "LICENSE" included with this software
       distribution.
     </para>
-    <para>      
+    <para>
       This program is distributed in the hope that it will be useful,
       but WITHOUT ANY WARRANTY; without even the implied warranty of
       MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-      GNU General Public License version 2 for more details.
+      GNU General Public License version 3 for more details.
     </para>
   </refsect1>
 
   <refsect1 id='seealso'>
     <title>SEE ALSO</title>
     <para>
-      reglookup(1)
+      reglookup(1) reglookup-recover(1)
     </para>
   </refsect1>
 </refentry>
