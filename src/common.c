@@ -1,6 +1,6 @@
 /*
- * A utility to read a Windows NT/2K/XP/2K3 registry file, using 
- * Gerald Carter''s regfio interface.
+ * This file stores code common to the command line tools.
+ * XXX: This should be converted to a proper library.
  *
  * Copyright (C) 2005-2008 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
@@ -18,7 +18,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
  *
- * $Id: $
+ * $Id$
  */
 
 #include <iconv.h>

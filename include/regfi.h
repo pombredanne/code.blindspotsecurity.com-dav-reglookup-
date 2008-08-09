@@ -108,7 +108,7 @@
 #define NK_TYPE_NORMALKEY	   0x0020
 #define NK_TYPE_ROOTKEY		   0x002c
  /* TODO: Unknown type that shows up in Vista registries */
-#define NK_TYPE_UNKNOWN1           0x1020 
+#define NK_TYPE_UNKNOWN1           0x1020
 
 
 /* HBIN block */
