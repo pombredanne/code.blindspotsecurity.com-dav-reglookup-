@@ -1,4 +1,6 @@
 /*
+ * This program attempts to recover deleted data structures in a registry hive.
+ *
  * Copyright (C) 2008 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
@@ -34,40 +36,7 @@ bool print_leftover = false;
 bool print_parsedraw = false;
 char* registry_file = NULL;
 
-
 #include "common.c"
-
-/* Output format:
- *   real_offset,min_length,record_type,parent_path,name,data_type,mtime,num_values,value,data_length,raw_data
- */
-
-void regfi_print_nk(REGF_NK_REC* nk)
-{
-  printf("Found key at offset 0x%.8X:\n", nk->offset);
-  printf("  keyname: \"%s\"\n", nk->keyname);
-  printf("  parent_off (virtual): 0x%.8X\n", nk->parent_off);
-  printf("  cell_size: %d\n", nk->cell_size);
-  printf("  key_type: 0x%.4X\n", nk->key_type);
-  printf("  magic: %c%c\n", nk->magic[0], nk->magic[1]);
-  printf("  mtime: 0x%.8X 0x%.8X\n", nk->mtime.low, nk->mtime.high);
-  printf("  name_length: %d\n", nk->name_length);
-  printf("  classname_length: %d\n", nk->classname_length);
-  printf("  classname_off (virtual): 0x%.8X\n", nk->classname_off);
-  printf("  max_bytes_subkeyname: %d\n", nk->max_bytes_subkeyname);
-  printf("  max_bytes_subkeyclassname: %d\n", nk->max_bytes_subkeyclassname);
-  printf("  max_bytes_valuename: %d\n", nk->max_bytes_valuename);
-  printf("  max_bytes_value: %d\n", nk->max_bytes_value);
-  printf("  unknown1: 0x%.8X\n", nk->unknown1);
-  printf("  unknown2: 0x%.8X\n", nk->unknown2);
-  printf("  unknown3: 0x%.8X\n", nk->unknown3);
-  printf("  unk_index: 0x%.8X\n", nk->unk_index);
-  printf("  num_subkeys: %d\n", nk->num_subkeys);
-  printf("  subkeys_off (virtual): 0x%.8X\n", nk->subkeys_off);
-  printf("  num_values: %d\n", nk->num_values);
-  printf("  values_off (virtual): 0x%.8X\n", nk->values_off);
-  printf("  sk_off (virtual): 0x%.8X\n", nk->sk_off);
-  printf("\n");
-}
 
 
 char* getQuotedData(int fd, uint32 offset, uint32 length)
@@ -782,16 +751,6 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  /*XXX
-  for(i=0,k=0; i < range_list_size(unalloc_cells); i++)
-  {
-    cur_elem = range_list_get(unalloc_cells, i);
-    k+=cur_elem->length;
-  }
-  printf("UNALLOC=%d\n", k);
-  printf("UNALLOC_CELL_COUNT=%d\n", range_list_size(unalloc_cells));
-  XXX*/
-
   unalloc_keys = range_list_new();
   if(unalloc_keys == NULL)
     return 10;
@@ -892,15 +851,6 @@ int main(int argc, char** argv)
     printValue(f, tmp_value, "");
   }
   
-  /*XXX
-  for(i=0,j=0; i < range_list_size(unalloc_cells); i++)
-  {
-    cur_elem = range_list_get(unalloc_cells, i);
-    j+=cur_elem->length;
-  }
-  printf("PARSED_UNALLOC=%d\n", k-j);
-  XXX*/
-
   if(print_leftover)
   {
     for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -909,14 +859,6 @@ int main(int argc, char** argv)
       printCell(f, cur_elem->offset);
     }
   }
-
-  /*
-  printf("Analyzing test_offset...\n");
-  if((tmp_key = regfi_parse_nk(f, test_offset, 4096, false)) != NULL)
-    regfi_print_nk(tmp_key);
-  else
-    dump_cell(f->fd, test_offset);
-  */
 
   return 0;
 }

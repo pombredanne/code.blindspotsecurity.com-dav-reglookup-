@@ -461,7 +461,8 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     if((value == NULL) || (tmp_path_joined == NULL))
       bailOut(EX_OSERR, "ERROR: Unexpected error before printValue.\n");
 
-    printValue(value, tmp_path_joined);
+    if(!type_filter_enabled || (value->type == type_filter))
+      printValue(value, tmp_path_joined);
 
     free(tmp_path);
     free(tmp_path_joined);
