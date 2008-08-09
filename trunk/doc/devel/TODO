@@ -3,6 +3,14 @@ $Id$
 If you are interested in contributing to this project, here's a few
 things you could look into:
 
+ - Currently there is no way on the command line to search for exotic 
+   paths/types.  For instance, if reglookup encounters an unknown VK
+   type, it just prints it out in Hex.  However, if you wanted to search
+   specifically for that type, there is no way to do it.  Similarly, it
+   isn't possible to specify certain binary or weird characters in
+   paths.  Reglookup should take the user path and unquote each path
+   component using the \xQQ syntax prior to searching.
+
  - Testing, testing, and more testing.  reglookup needs to be tested on 
    NT/XP/2k3/Vista.  A regression test suite would be nice too.  Some 
    thoughts on this include a script which randomly fuzzes an existing
@@ -32,7 +40,7 @@ things you could look into:
    I think this will speed things up greatly.
 
  - It might be nice to have a way to filter results by security 
-   descriptor information.
+   descriptor information.  Maybe by MTIME as well.
 
  - Documentation.  The security descriptor output format needs to be 
    documented.  Also, function contracts should be added to the 
