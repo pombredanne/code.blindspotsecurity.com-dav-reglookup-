@@ -14,7 +14,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
  *
- * $Id: $
+ * $Id$
  */
 
 #include <math.h>
@@ -124,7 +124,7 @@ range_list* range_list_new()
 {
   range_list* rl;
 
-  rl = (range_list*)malloc(sizeof(range_list*));
+  rl = (range_list*)malloc(sizeof(range_list));
   if(rl == NULL)
     return NULL;
 
