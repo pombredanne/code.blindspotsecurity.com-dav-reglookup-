@@ -1,3 +1,10 @@
+- The Windows NT Registry File Format
+  (A work in progress to support this tool.)
+  http://sentinelchicken.com/research/registry_format/
+
+- Recovering Deleted Data From the Windows Registry
+  (The research that is implemented as a PoC in reglookup-recover.)
+  http://sentinelchicken.com/research/registry_recovery/
 
 - Petter Nordahl-Hagen.  Windows NT registry file format description.
   (The file 'winntreg.txt' included in this distribution is derived from this.)
