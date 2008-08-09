@@ -1,16 +1,22 @@
 # $Id$
 
-BUILD_FILES=$(BUILD_DOC)/man/man1/reglookup.1.gz $(BUILD_DOC)/man/man1/reglookup-timeline.1.gz
+BUILD_FILES=$(BUILD_DOC)/man/man1/reglookup.1.gz\
+	$(BUILD_DOC)/man/man1/reglookup-timeline.1.gz\
+	$(BUILD_DOC)/man/man1/reglookup-recover.1.gz
 
 default: $(BUILD_FILES)
 
-$(BUILD_DOC)/man/man1/reglookup.1.gz: man/man1/reglookup.1.gz
+$(BUILD_DOC)/man/man1:
 	mkdir -p $(BUILD_DOC)/man/man1
+
+$(BUILD_DOC)/man/man1/reglookup.1.gz: man/man1/reglookup.1.gz $(BUILD_DOC)/man/man1
 	cp man/man1/reglookup.1.gz $@
 
-$(BUILD_DOC)/man/man1/reglookup-timeline.1.gz: man/man1/reglookup-timeline.1.gz
-	mkdir -p $(BUILD_DOC)/man/man1
+$(BUILD_DOC)/man/man1/reglookup-timeline.1.gz: man/man1/reglookup-timeline.1.gz $(BUILD_DOC)/man/man1
 	cp man/man1/reglookup-timeline.1.gz $@
+
+$(BUILD_DOC)/man/man1/reglookup-recover.1.gz: man/man1/reglookup-recover.1.gz $(BUILD_DOC)/man/man1
+	cp man/man1/reglookup-recover.1.gz $@
 
 install:
 	cp -r $(BUILD_DOC)/* $(DOC_PREFIX)
@@ -21,5 +27,7 @@ install:
 release:
 	docbook2x-man --to-stdout reglookup.1.docbook > man/man1/reglookup.1
 	docbook2x-man --to-stdout reglookup-timeline.1.docbook > man/man1/reglookup-timeline.1
+	docbook2x-man --to-stdout reglookup-recover.1.docbook > man/man1/reglookup-recover.1
 	cd man/man1 && gzip -9 -f reglookup.1
 	cd man/man1 && gzip -9 -f reglookup-timeline.1
+	cd man/man1 && gzip -9 -f reglookup-recover.1
