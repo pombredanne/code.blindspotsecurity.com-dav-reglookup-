@@ -3,7 +3,7 @@
  *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/registry/regfio.c?rev=7470&view=auto
  *
  * Unix SMB/CIFS implementation.
- * Windows NT registry I/O library
+ * Windows NT registry parsing library
  *
  * Copyright (C) 2005-2008 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
@@ -1673,6 +1673,10 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
   ret_val->magic[1] = vk_header[0x1];
   if((ret_val->magic[0] != 'v') || (ret_val->magic[1] != 'k'))
   {
+    /* XXX: This does not account for deleted keys under Win2K which
+     *      often have this (and the name length) overwritten with
+     *      0xFFFF. 
+     */
     free(ret_val);
     return NULL;
   }
