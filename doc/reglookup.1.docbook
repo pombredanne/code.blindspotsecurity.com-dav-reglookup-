@@ -26,8 +26,7 @@
         reglookup is designed to read windows registry elements and
         print them out to stdout in a CSV-like format.  It has filtering
         options to narrow the focus of the output.  This tool is
-        designed to work with on Windows NT/2K/XP/2K3/Vista registries, 
-        though your mileage may vary.
+        designed to work with on Windows NT-based registries.
     </para>
   </refsect1>
 
@@ -107,9 +106,9 @@
         </term>
         <listitem>
 	  <para>
-	    Adds four additional columns to output containing 
-	    information from key security descriptors.  The columns 
-	    are: owner, group, sacl, dacl.
+	    Adds five additional columns to output containing 
+	    information from key security descriptors and rarely used
+            fields.  The columns are: owner, group, sacl, dacl, class.
 	    (This feature's output has not been extensively tested.)
 	  </para>
         </listitem>
