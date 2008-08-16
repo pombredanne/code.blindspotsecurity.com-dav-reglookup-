@@ -88,6 +88,12 @@
 #define REGFI_HASH_LIST_MIN_LENGTH 0x4
 
 /* Constants used for validation */
+/* XXX: Can we add clock resolution validation as well as range?  It has
+ *      been reported that Windows timestamps are never more than a
+ *      certain granularity (250ms?), which could be used to help
+ *      eliminate false positives.  Would need to validate this and
+ *      perhaps conservatively implement a check.
+ */
  /* Minimum time is Jan 1, 1990 00:00:00 */
 #define REGFI_MTIME_MIN_HIGH       0x01B41E6D
 #define REGFI_MTIME_MIN_LOW        0x26F98000
@@ -107,7 +113,7 @@
 #define NK_TYPE_LINKKEY		   0x0010
 #define NK_TYPE_NORMALKEY	   0x0020
 #define NK_TYPE_ROOTKEY		   0x002c
- /* TODO: Unknown type that shows up in Vista registries */
+ /* XXX: Unknown type that shows up in Vista registries */
 #define NK_TYPE_UNKNOWN1           0x1020
 
 
@@ -215,7 +221,6 @@ typedef struct
   REGF_HASH_LIST* subkeys;
   
   /* header information */
-  /* XXX: should we be looking for types other than the root key type? */
   uint16 key_type;
   uint8  magic[REC_HDR_SIZE];
   NTTIME mtime;
@@ -223,8 +228,8 @@ typedef struct
   uint16 classname_length;
   char* classname;
   char* keyname;
-  uint32 parent_off;	/* back pointer in registry hive */
-  uint32 classname_off;	
+  uint32 parent_off;	            /* pointer to parent key */
+  uint32 classname_off;
   
   /* max lengths */
   uint32 max_bytes_subkeyname;	    /* max subkey name * 2 */

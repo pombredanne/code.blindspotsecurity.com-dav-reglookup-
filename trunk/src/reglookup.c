@@ -46,7 +46,7 @@ REGF_FILE* f;
 
 
 /* XXX: A hack to share some functions with reglookup-recover.c.
- *      Should move these into a properly library at some point.
+ *      Should move these into a proper library at some point.
  */
 #include "common.c"
 
@@ -294,6 +294,7 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
   char* group = NULL;
   char* sacl = NULL;
   char* dacl = NULL;
+  char* quoted_classname;
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
@@ -319,8 +320,13 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
     if(dacl == NULL)
       dacl = empty_str;
 
-    printf("%s,KEY,,%s,%s,%s,%s,%s\n", full_path, mtime, 
-	   owner, group, sacl, dacl);
+    if(k->classname != NULL)
+      quoted_classname = quote_string(k->classname, key_special_chars);
+    else
+      quoted_classname = empty_str;
+
+    printf("%s,KEY,,%s,%s,%s,%s,%s,%s\n", full_path, mtime, 
+	   owner, group, sacl, dacl, quoted_classname);
 
     if(owner != empty_str)
       free(owner);
@@ -330,6 +336,8 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
       free(sacl);
     if(dacl != empty_str)
       free(dacl);
+    if(quoted_classname != empty_str)
+      free(quoted_classname);
   }
   else
     printf("%s,KEY,,%s\n", full_path, mtime);
@@ -581,7 +589,7 @@ int main(int argc, char** argv)
   if(print_header)
   {
     if(print_security)
-      printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL\n");
+      printf("PATH,TYPE,VALUE,MTIME,OWNER,GROUP,SACL,DACL,CLASS\n");
     else
       printf("PATH,TYPE,VALUE,MTIME\n");
   }

@@ -1582,7 +1582,6 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   ret_val->num_values = IVAL(nk_header, 0x24);
   ret_val->values_off = IVAL(nk_header, 0x28);
   ret_val->sk_off = IVAL(nk_header, 0x2C);
-  /* XXX: currently we do nothing with class names.  Need to investigate. */
   ret_val->classname_off = IVAL(nk_header, 0x30);
 
   ret_val->max_bytes_subkeyname = IVAL(nk_header, 0x34);
@@ -1593,6 +1592,7 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 
   ret_val->name_length = SVAL(nk_header, 0x48);
   ret_val->classname_length = SVAL(nk_header, 0x4A);
+
 
   if(ret_val->name_length + REGFI_NK_MIN_LENGTH > ret_val->cell_size)
   {
@@ -1633,6 +1633,38 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
     return NULL;
   }
   ret_val->keyname[ret_val->name_length] = '\0';
+
+
+  /***/
+  
+  if(ret_val->classname_length > 0 
+     && ret_val->classname_off != REGF_OFFSET_NONE 
+     && ret_val->classname_off == (ret_val->classname_off & 0xFFFFFFF8))
+  {
+    ret_val->classname = (char*)zalloc(ret_val->classname_length+1);
+    if(ret_val->classname != NULL)
+    {
+      if(!regfi_parse_cell(file->fd, ret_val->classname_off+REGF_BLOCKSIZE, 
+			   (uint8*)ret_val->classname, ret_val->classname_length,
+			   &cell_length, &unalloc) 
+	 || (cell_length < ret_val->classname_length)
+	 || (strict && unalloc))
+      {
+	/* Being careful not to reject the whole key here even when
+	 * strict and things are obviously wrong, since it appears
+	 * they're commonly obviously wrong. 
+	 */
+	free(ret_val->classname);
+	ret_val->classname = NULL;
+	return ret_val;
+      }
+
+      ret_val->classname[ret_val->classname_length] = '\0';
+      /*printf("==> cell_length=%d, classname_length=%d, max_bytes_subkeyclassname=%d\n", cell_length, ret_val->classname_length, ret_val->max_bytes_subkeyclassname);*/
+    }
+  }
+  /***/
+
 
   return ret_val;
 }
