@@ -122,11 +122,11 @@ static char* quote_string(const char* str, const char* special)
  * Convert from UTF-16LE to ASCII.  Accepts a Unicode buffer, uni, and
  * it's length, uni_max.  Writes ASCII to the buffer ascii, whose size
  * is ascii_max.  Writes at most (ascii_max-1) bytes to ascii, and null
- * terminates the string.  Returns the length of the string stored in
+ * terminates the string.  Returns the length of the data written to
  * ascii.  On error, returns a negative errno code.
  */
 static int uni_to_ascii(unsigned char* uni, char* ascii, 
-			unsigned int uni_max, unsigned int ascii_max)
+			uint32 uni_max, uint32 ascii_max)
 {
   char* inbuf = (char*)uni;
   char* outbuf = ascii;
@@ -135,7 +135,7 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
   int ret;
 
   /* Set up conversion descriptor. */
-  conv_desc = iconv_open("US-ASCII", "UTF-16LE");
+  conv_desc = iconv_open("US-ASCII//TRANSLIT", "UTF-16LE");
 
   ret = iconv(conv_desc, &inbuf, &in_len, &outbuf, &out_len);
   if(ret == -1)
@@ -146,7 +146,52 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
   *outbuf = '\0';
 
   iconv_close(conv_desc);  
-  return strlen(ascii);
+  return ascii_max-out_len-1;
+}
+
+
+static char* quote_unicode(unsigned char* uni, uint32 length, 
+			   const char* special, char** error_msg)
+{
+  char* ret_val;
+  char* ascii;
+  char* tmp_err;
+  int ret_err;
+  *error_msg = NULL;
+
+  ascii = malloc(length+1);
+  if(ascii == NULL)
+  {
+    *error_msg = (char*)malloc(27);
+    if(*error_msg == NULL)
+      return NULL;
+    strcpy(*error_msg, "Memory allocation failure.");
+    return NULL;
+  }
+  
+  ret_err = uni_to_ascii(uni, ascii, length, length+1);
+  if(ret_err < 0)
+  {
+    free(ascii);
+    tmp_err = strerror(-ret_err);
+    *error_msg = (char*)malloc(54+strlen(tmp_err));
+    if(*error_msg == NULL)
+    {
+      free(ascii);
+      return NULL;
+    }
+
+    sprintf(*error_msg, 
+	    "Unicode conversion failed with '%s'. Quoting as binary.", tmp_err);
+    ret_val = quote_buffer(uni, length, special);
+  }
+  else
+  {
+    ret_val = quote_string(ascii, special);
+    free(ascii);
+  }
+  
+  return ret_val;
 }
 
 
@@ -165,17 +210,15 @@ static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type,
 {
   char* asciip;
   char* ascii;
-  unsigned char* cur_str;
-  char* cur_ascii;
+  char* ascii_tmp;
   char* cur_quoted;
-  char* tmp_err;
-  const char* str_type;
+  char* tmp_err = NULL;
+  const char* delim;
   uint32 i;
   uint32 cur_str_len;
-  uint32 ascii_max, cur_str_max;
-  uint32 str_rem, cur_str_rem, alen;
+  uint32 ascii_max;
+  uint32 str_rem, alen;
   int ret_err;
-  unsigned short num_nulls;
 
   if(datap == NULL)
   {
@@ -193,39 +236,23 @@ static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type,
   case REG_EXPAND_SZ:
     /* REG_LINK is a symbolic link, stored as a unicode string. */
   case REG_LINK:
-    ascii_max = sizeof(char)*(len+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
-      return NULL;
-    
     /* Sometimes values have binary stored in them.  If the unicode
      * conversion fails, just quote it raw.
      */
-    ret_err = uni_to_ascii(datap, ascii, len, ascii_max);
-    if(ret_err < 0)
-    {
-      tmp_err = strerror(-ret_err);
-      str_type = regfi_type_val2str(type);
-      *error_msg = (char*)malloc(65+strlen(str_type)+strlen(tmp_err)+1);
-      if(*error_msg == NULL)
-      {
-	free(ascii);
-	return NULL;
-      }
-      sprintf(*error_msg, "Unicode conversion failed on %s field; "
-	       "printing as binary.  Error: %s", str_type, tmp_err);
-      
-      cur_quoted = quote_buffer(datap, len, common_special_chars);
-    }
-    else
-      cur_quoted = quote_string(ascii, common_special_chars);
-    free(ascii);
+    cur_quoted = quote_unicode(datap, len, common_special_chars, &tmp_err);
     if(cur_quoted == NULL)
     {
-      *error_msg = (char*)malloc(27+1);
-      if(*error_msg != NULL)
-	strcpy(*error_msg, "Buffer could not be quoted.");
+      if(tmp_err == NULL && (*error_msg = (char*)malloc(49)) != NULL)
+	strcpy(*error_msg, "Buffer could not be quoted due to unknown error.");
+      else if((*error_msg = (char*)malloc(42+strlen(tmp_err))) != NULL)
+      {
+	sprintf(*error_msg, "Buffer could not be quoted due to error: %s", 
+		tmp_err);
+	free(tmp_err);
+      }
     }
+    else if (tmp_err != NULL)
+      *error_msg = tmp_err;
     return cur_quoted;
     break;
 
@@ -263,104 +290,69 @@ static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type,
     return ascii;
     break;
     
-
-  /* XXX: this MULTI_SZ parser is pretty inefficient.  Should be
-   *      redone with fewer malloc calls and better string concatenation.
-   *      Also, gives lame output when "\0\0" is the string.
-   */
   case REG_MULTI_SZ:
     ascii_max = sizeof(char)*(len*4+1);
-    cur_str_max = sizeof(char)*(len+1);
-    cur_str = malloc(cur_str_max);
-    cur_ascii = malloc(cur_str_max);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL || cur_str == NULL || cur_ascii == NULL)
+    ascii_tmp = malloc(ascii_max);
+    if(ascii_tmp == NULL)
       return NULL;
 
-    /* Reads until it reaches 4 consecutive NULLs, 
-     * which is two nulls in unicode, or until it reaches len, or until we
-     * run out of buffer.  The latter should never happen, but we shouldn't
-     * trust our file to have the right lengths/delimiters.
+    /* Attempt to convert entire string from UTF-16LE to ASCII, 
+     * then parse and quote fields individually.
+     * If this fails, simply quote entire buffer as binary. 
      */
-    asciip = ascii;
-    num_nulls = 0;
-    str_rem = ascii_max;
-    cur_str_rem = cur_str_max;
-    cur_str_len = 0;
-
-    for(i=0; (i < len) && str_rem > 0; i++)
+    ret_err = uni_to_ascii(datap, ascii_tmp, len, ascii_max);
+    if(ret_err < 0)
     {
-      *(cur_str+cur_str_len) = *(datap+i);
-      if(*(cur_str+cur_str_len) == 0)
-	num_nulls++;
-      else
-	num_nulls = 0;
-      cur_str_len++;
-
-      if(num_nulls == 2)
+      tmp_err = strerror(-ret_err);
+      *error_msg = (char*)malloc(54+strlen(tmp_err));
+      if(*error_msg == NULL)
+	return NULL;
+      sprintf(*error_msg, "MULTI_SZ unicode conversion"
+	      " failed with '%s'. Quoting as binary.", tmp_err);
+      ascii = quote_buffer(datap, len, subfield_special_chars);
+    }
+    else
+    {
+      ascii = malloc(ascii_max);
+      if(ascii == NULL)
       {
-	ret_err = uni_to_ascii(cur_str, cur_ascii, cur_str_len-1, cur_str_max);
-	if(ret_err < 0)
+	free(ascii_tmp);
+	return NULL;
+      }
+      asciip = ascii;
+      asciip[0] = '\0';
+      str_rem = ascii_max;
+      delim = "";
+      for(i=0; i<ret_err; i+=cur_str_len+1)
+      {
+	cur_str_len = strlen(ascii_tmp+i);
+	if(ascii_tmp[i] != '\0')
 	{
-	  /* XXX: should every sub-field error be enumerated? */
-	  if(*error_msg == NULL)
+	  cur_quoted = quote_string(ascii_tmp+i, subfield_special_chars);
+	  if(cur_quoted != NULL)
 	  {
-	    tmp_err = strerror(-ret_err);
-	    *error_msg = (char*)malloc(90+strlen(tmp_err)+1);
-	    if(*error_msg == NULL)
-	    {
-	      free(cur_str);
-	      free(cur_ascii);
-	      free(ascii);
-	      return NULL;
-	    }
-	    sprintf(*error_msg, "Unicode conversion failed on at least one "
-		    "MULTI_SZ sub-field; printing as binary.  Error: %s",
-		    tmp_err);
+	    alen = snprintf(asciip, str_rem, "%s%s", delim, cur_quoted);
+	    asciip += alen;
+	    str_rem -= alen;
+	    free(cur_quoted);
 	  }
-	  cur_quoted = quote_buffer(cur_str, cur_str_len-1, 
-				    subfield_special_chars);
 	}
-	else
-	  cur_quoted = quote_string(cur_ascii, subfield_special_chars);
-
-	alen = snprintf(asciip, str_rem, "%s", cur_quoted);
-	asciip += alen;
-	str_rem -= alen;
-	free(cur_quoted);
-
-	if(*(datap+i+1) == 0 && *(datap+i+2) == 0)
-	  break;
-	else
-	{
-	  if(str_rem > 0)
-	  {
-	    asciip[0] = '|';
-	    asciip[1] = '\0';
-	    asciip++;
-	    str_rem--;
-	  }
-	  memset(cur_str, 0, cur_str_max);
-	  cur_str_len = 0;
-	  num_nulls = 0;
-	  /* To eliminate leading nulls in subsequent strings. */
-	  i++;
-	}
+	delim = "|";
       }
     }
-    *asciip = 0;
-    free(cur_str);
-    free(cur_ascii);
+
+    free(ascii_tmp);
     return ascii;
     break;
 
   /* XXX: Dont know what to do with these yet, just print as binary... */
   default:
-    /* XXX: It would be really nice if this message somehow included the
-     *      name of the current value we're having trouble with, since
-     *      stderr/stdout don't always sync nicely.
-     */
-    fprintf(stderr, "WARNING: Unrecognized registry data type (0x%.8X); quoting as binary.\n", type);
+    *error_msg = (char*)malloc(65);
+    if(*error_msg == NULL)
+      return NULL;
+    sprintf(*error_msg,
+	    "Unrecognized registry data type (0x%.8X); quoting as binary.",
+	    type);
     
   case REG_NONE:
   case REG_RESOURCE_LIST:

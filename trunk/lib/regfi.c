@@ -1509,7 +1509,8 @@ REGF_HBIN* regfi_parse_hbin(REGF_FILE* file, uint32 offset, bool strict)
 }
 
 
-
+/*******************************************************************
+ *******************************************************************/
 REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset, 
 			    uint32 max_size, bool strict)
 {
@@ -1634,41 +1635,62 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   }
   ret_val->keyname[ret_val->name_length] = '\0';
 
-
-  /***/
-  
-  if(ret_val->classname_length > 0 
-     && ret_val->classname_off != REGF_OFFSET_NONE 
-     && ret_val->classname_off == (ret_val->classname_off & 0xFFFFFFF8))
+  if(ret_val->classname_off != REGF_OFFSET_NONE)
   {
-    ret_val->classname = (char*)zalloc(ret_val->classname_length+1);
-    if(ret_val->classname != NULL)
-    {
-      if(!regfi_parse_cell(file->fd, ret_val->classname_off+REGF_BLOCKSIZE, 
-			   (uint8*)ret_val->classname, ret_val->classname_length,
-			   &cell_length, &unalloc) 
-	 || (cell_length < ret_val->classname_length)
-	 || (strict && unalloc))
-      {
-	/* Being careful not to reject the whole key here even when
-	 * strict and things are obviously wrong, since it appears
-	 * they're commonly obviously wrong. 
-	 */
-	free(ret_val->classname);
-	ret_val->classname = NULL;
-	return ret_val;
-      }
-
-      ret_val->classname[ret_val->classname_length] = '\0';
-      /*printf("==> cell_length=%d, classname_length=%d, max_bytes_subkeyclassname=%d\n", cell_length, ret_val->classname_length, ret_val->max_bytes_subkeyclassname);*/
-    }
+    ret_val->classname 
+      = regfi_parse_classname(file, ret_val->classname_off+REGF_BLOCKSIZE,
+			      &ret_val->classname_length, strict);
+    /*
+    if(strict && ret_val->classname == NULL)
+	return NULL;
+    */
   }
-  /***/
-
 
   return ret_val;
 }
 
+
+/*******************************************************************/
+/* XXX: Not currently validating against hbin length.              */
+/*******************************************************************/
+char* regfi_parse_classname(REGF_FILE* file, uint32 offset, 
+			    uint16* name_length, bool strict)
+{
+  char* ret_val = NULL;
+  uint32 length;
+  uint32 cell_length;
+  bool unalloc = false;
+
+  if(*name_length > 0 && offset != REGF_OFFSET_NONE 
+     && offset == (offset & 0xFFFFFFF8))
+  {    
+    if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
+	return NULL;
+
+    if(cell_length < *name_length)
+    {
+      if(strict)
+	return NULL;
+      *name_length = cell_length & 0xFFFFFFF8;
+    }
+    
+    ret_val = (char*)zalloc(*name_length);
+    if(ret_val != NULL)
+    {
+      length = *name_length;
+      if((regfi_read(file->fd, (uint8*)ret_val, &length) != 0)
+	 || length != *name_length)
+      {
+	free(ret_val);
+	return NULL;
+      }
+
+      /*printf("==> cell_length=%d, classname_length=%d, max_bytes_subkeyclassname=%d\n", cell_length, ret_val->classname_length, ret_val->max_bytes_subkeyclassname);*/
+    }
+  }
+
+  return ret_val;
+}
 
 
 /*******************************************************************

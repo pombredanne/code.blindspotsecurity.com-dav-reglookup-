@@ -405,4 +405,7 @@ REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset);
 bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
 		      uint32* cell_length, bool* unalloc);
 
+char* regfi_parse_classname(REGF_FILE* file, uint32 offset,
+			    uint16* name_length, bool strict);
+
 #endif	/* _REGFI_H */
