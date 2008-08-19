@@ -96,7 +96,6 @@ void printValue(const REGF_VK_REC* vk, char* prefix)
       fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
 	      "Returned error: %s\n", prefix, quoted_name, conv_error);
   }
-  /* XXX: should these always be printed? */
   else if(conv_error != NULL && print_verbose)
     fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
 	    "warning returned: %s\n", prefix, quoted_name, conv_error);
@@ -295,6 +294,7 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
   char* sacl = NULL;
   char* dacl = NULL;
   char* quoted_classname;
+  char* error_msg = NULL;
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
@@ -321,7 +321,29 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
       dacl = empty_str;
 
     if(k->classname != NULL)
-      quoted_classname = quote_string(k->classname, key_special_chars);
+    {
+      quoted_classname = quote_unicode((uint8*)k->classname, k->classname_length,
+				       key_special_chars, &error_msg);
+      if(quoted_classname == NULL)
+      {
+	if(error_msg == NULL)
+	  fprintf(stderr, "ERROR: Could not quote classname"
+		  " for key '%s' due to unknown error.\n", full_path);
+	else
+	{
+	  fprintf(stderr, "ERROR: Could not quote classname"
+		  " for key '%s' due to error: %s\n", full_path, error_msg);
+	  free(error_msg);
+	}
+      }
+      else if (error_msg != NULL)
+      {
+	if(print_verbose)
+	  fprintf(stderr, "WARNING: While converting classname"
+		  " for key '%s': %s.\n", full_path, error_msg);
+	free(error_msg);
+      }
+    }
     else
       quoted_classname = empty_str;
 
