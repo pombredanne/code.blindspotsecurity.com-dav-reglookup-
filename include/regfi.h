@@ -85,7 +85,7 @@
 #define REGFI_NK_MIN_LENGTH        0x4C
 #define REGFI_VK_MIN_LENGTH        0x14
 #define REGFI_SK_MIN_LENGTH        0x14
-#define REGFI_HASH_LIST_MIN_LENGTH 0x4
+#define REGFI_SUBKEY_LIST_MIN_LEN  0x4
 
 /* Constants used for validation */
 /* XXX: Can we add clock resolution validation as well as range?  It has
@@ -137,27 +137,23 @@ typedef struct regf_hbin
 } REGF_HBIN;
 
 
-/* Hash List -- list of key offsets and hashed names for consistency */
+/* Subkey List -- list of key offsets and hashed names for consistency */
 typedef struct 
 {
   uint32 nk_off;
   uint32 hash;
-} REGF_HASH_LIST_ELEM;
+} REGF_SUBKEY_LIST_ELEM;
 
 
 typedef struct 
 {
   uint32 offset;	/* Real offset of this record's cell in the file */
   uint32 cell_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
-  REGF_HBIN* hbin;       /* pointer to HBIN record (in memory) containing 
-			  * this nk record 
-			  */
-  uint32 hbin_off;	 /* offset from beginning of this hbin block */
-  REGF_HASH_LIST_ELEM* hashes;
+  uint32 num_keys;
+  REGF_SUBKEY_LIST_ELEM* elements;
   
   uint8 magic[REC_HDR_SIZE];
-  uint16 num_keys;
-} REGF_HASH_LIST;
+} REGF_SUBKEY_LIST;
 
 
 /* Key Value */
@@ -218,7 +214,7 @@ typedef struct
 
   /* link in the other records here */
   REGF_VK_REC** values;
-  REGF_HASH_LIST* subkeys;
+  REGF_SUBKEY_LIST* subkeys;
   
   /* header information */
   uint16 key_type;
@@ -245,10 +241,10 @@ typedef struct
   
   /* children */
   uint32 num_subkeys;
-  uint32 subkeys_off;	/* hash records that point to NK records */	
+  uint32 subkeys_off;	/* offset of subkey list that points to NK records */
   uint32 num_values;
   uint32 values_off;	/* value lists which point to VK records */
-  uint32 sk_off;	/* offset to SK record */  
+  uint32 sk_off;	/* offset to SK record */
 } REGF_NK_REC;
 
 
@@ -347,6 +343,26 @@ const REGF_VK_REC*    regfi_iterator_first_value(REGFI_ITERATOR* i);
 const REGF_VK_REC*    regfi_iterator_cur_value(REGFI_ITERATOR* i);
 const REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
 
+
+/********************************************************/
+/* Middle-layer structure caching, loading, and linking */
+/********************************************************/
+REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset);
+
+REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict);
+
+REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset, 
+					uint32 num_keys, uint32 max_size, 
+					bool strict);
+
+REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
+				   uint32 num_values, uint32 max_size, 
+				   bool strict);
+
+REGF_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists, 
+					  REGF_SUBKEY_LIST** lists,
+					  bool strict);
+
 /************************************/
 /*  Low-layer data structure access */
 /************************************/
@@ -369,27 +385,6 @@ REGF_HBIN*            regfi_parse_hbin(REGF_FILE* file, uint32 offset,
 REGF_NK_REC*          regfi_parse_nk(REGF_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
-
-/* Private Functions */
-REGF_NK_REC*          regfi_rootkey(REGF_FILE* file);
-void                  regfi_key_free(REGF_NK_REC* nk);
-uint32                regfi_read(int fd, uint8* buf, uint32* length);
-
-
-
-/****************/
-/* Experimental */
-/****************/
-REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict);
-
-REGF_HASH_LIST* regfi_load_hashlist(REGF_FILE* file, uint32 offset, 
-				    uint32 num_keys, uint32 max_size, 
-				    bool strict);
-
-REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
-				   uint32 num_values, uint32 max_size, 
-				   bool strict);
-
 REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset, 
 			    uint32 max_size, bool strict);
 
@@ -400,12 +395,18 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
 
 range_list* regfi_parse_unalloc_cells(REGF_FILE* file);
 
-REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset);
-
 bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
 		      uint32* cell_length, bool* unalloc);
 
 char* regfi_parse_classname(REGF_FILE* file, uint32 offset,
 			    uint16* name_length, bool strict);
+
+
+/* Private Functions */
+REGF_NK_REC*          regfi_rootkey(REGF_FILE* file);
+void                  regfi_key_free(REGF_NK_REC* nk);
+void                  regfi_subkeylist_free(REGF_SUBKEY_LIST* list);
+uint32                regfi_read(int fd, uint8* buf, uint32* length);
+
 
 #endif	/* _REGFI_H */
