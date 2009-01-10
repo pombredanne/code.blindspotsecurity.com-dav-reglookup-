@@ -1636,7 +1636,8 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
   ret_val->magic[1] = nk_header[0x1];
   ret_val->key_type = SVAL(nk_header, 0x2);
   if((ret_val->key_type != NK_TYPE_NORMALKEY)
-     && (ret_val->key_type != NK_TYPE_ROOTKEY) 
+     && (ret_val->key_type != NK_TYPE_ROOTKEY1) 
+     && (ret_val->key_type != NK_TYPE_ROOTKEY2)
      && (ret_val->key_type != NK_TYPE_LINKKEY)
      && (ret_val->key_type != NK_TYPE_UNKNOWN1))
   {
