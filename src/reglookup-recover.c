@@ -281,7 +281,8 @@ char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
 	virt_offset = REGF_OFFSET_NONE;
       else
       {
-	if(cur_ancestor->key_type == NK_TYPE_ROOTKEY)
+	if((cur_ancestor->key_type == NK_TYPE_ROOTKEY1) 
+	   || (cur_ancestor->key_type == NK_TYPE_ROOTKEY2))
 	  virt_offset = REGF_OFFSET_NONE;
 	else
 	  virt_offset = cur_ancestor->parent_off;
