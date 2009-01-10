@@ -112,7 +112,8 @@
 /* NK record types */
 #define NK_TYPE_LINKKEY		   0x0010
 #define NK_TYPE_NORMALKEY	   0x0020
-#define NK_TYPE_ROOTKEY		   0x002c
+#define NK_TYPE_ROOTKEY1	   0x002c
+#define NK_TYPE_ROOTKEY2	   0x00ac
  /* XXX: Unknown type that shows up in Vista registries */
 #define NK_TYPE_UNKNOWN1           0x1020
 

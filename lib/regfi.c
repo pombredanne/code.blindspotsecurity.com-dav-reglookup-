@@ -540,7 +540,7 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
       /* XXX: Need to add a recursion depth limit of some kind. */
       sublists[i] = regfi_load_subkeylist(file, off, 0, max_length, strict);
     }
-
+    
     return regfi_merge_subkeylists(num_sublists, sublists, strict);
   }
 
@@ -892,7 +892,9 @@ REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
 					  max_length, true);
       if(nk->subkeys == NULL)
       {
-	/* XXX: Temporary hack to get around 'ri' records */
+	/* XXX: Should we free the key and bail out here instead?  
+	 *      During nonstrict? 
+	 */
 	nk->num_subkeys = 0;
       }
     }
@@ -930,7 +932,8 @@ static bool regfi_find_root_nk(REGF_FILE* file, uint32 offset, uint32 hbin_size,
       nk = regfi_parse_nk(file, offset+hbin_offset, hbin_size-hbin_offset, true);
       if(nk != NULL)
       {
-	if(nk->key_type == NK_TYPE_ROOTKEY)
+	if((nk->key_type == NK_TYPE_ROOTKEY1)
+	   || (nk->key_type == NK_TYPE_ROOTKEY2))
 	{
 	  found = true;
 	  *root_offset = nk->offset;
@@ -1611,12 +1614,7 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
  
   /* A bit of validation before bothering to allocate memory */
   if((nk_header[0x0] != 'n') || (nk_header[0x1] != 'k'))
-  {
-    /* XXX: Deal with subkey-lists that reference other subkey-lists
-     *      (e.g. 'ri' records). 
-     */
     return NULL;
-  }
 
   ret_val = (REGF_NK_REC*)zalloc(sizeof(REGF_NK_REC));
   if(ret_val == NULL)
