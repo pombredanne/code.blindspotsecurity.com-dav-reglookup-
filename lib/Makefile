@@ -2,7 +2,7 @@
 
 ################################################################################
 
-FILES=regfi.o smb_deps.o void_stack.o range_list.o lru_cache.o
+FILES=regfi.o smb_deps.o winsec.o void_stack.o range_list.o lru_cache.o
 
 all: $(FILES)
 
@@ -11,6 +11,9 @@ regfi.o: regfi.c
 
 smb_deps.o: smb_deps.c
 	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ smb_deps.c
+
+winsec.o: winsec.c
+	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ winsec.c
 
 void_stack.o: void_stack.c
 	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ void_stack.c
