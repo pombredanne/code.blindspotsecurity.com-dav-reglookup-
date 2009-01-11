@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry I/O library
  *
- * Copyright (C) 2005-2008 Timothy D. Morgan
+ * Copyright (C) 2005-2009 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -46,6 +46,7 @@
 #include <assert.h>
 
 #include "smb_deps.h"
+#include "winsec.h"
 #include "void_stack.h"
 #include "range_list.h"
 #include "lru_cache.h"

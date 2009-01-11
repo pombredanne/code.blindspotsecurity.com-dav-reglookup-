@@ -5,7 +5,7 @@
  * Unix SMB/CIFS implementation.
  * Windows NT registry parsing library
  *
- * Copyright (C) 2005-2008 Timothy D. Morgan
+ * Copyright (C) 2005-2009 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
