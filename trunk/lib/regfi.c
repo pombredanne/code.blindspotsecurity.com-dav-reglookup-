@@ -795,7 +795,7 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
     }
     
     vk_offset =  voffsets[i] + REGF_BLOCKSIZE;
-    vk_max_length = hbin->block_size - vk_offset + sizeof(uint32);
+    vk_max_length = hbin->block_size + hbin->file_off - vk_offset;
     ret_val[i] = regfi_parse_vk(file, vk_offset, vk_max_length, strict);
     if(ret_val[i] == NULL)
     { /* If we're being strict, throw out the whole list.
@@ -1603,9 +1603,10 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 			    uint32 max_size, bool strict)
 {
   uint8 nk_header[REGFI_NK_MIN_LENGTH];
+  REGF_HBIN *hbin;
   REGF_NK_REC* ret_val;
-  uint32 length;
-  uint32 cell_length;
+  uint32 length,cell_length;
+  uint32 class_offset, class_maxsize;
   bool unalloc = false;
 
   if(!regfi_parse_cell(file->fd, offset, nk_header, REGFI_NK_MIN_LENGTH,
@@ -1721,9 +1722,17 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 
   if(ret_val->classname_off != REGF_OFFSET_NONE)
   {
-    ret_val->classname 
-      = regfi_parse_classname(file, ret_val->classname_off+REGF_BLOCKSIZE,
-			      &ret_val->classname_length, strict);
+    hbin = regfi_lookup_hbin(file, ret_val->classname_off);
+    if(hbin)
+    {
+      class_offset = ret_val->classname_off+REGF_BLOCKSIZE;
+      class_maxsize = hbin->block_size + hbin->file_off - class_offset;
+      ret_val->classname
+	= regfi_parse_classname(file, class_offset, &ret_val->classname_length, 
+				class_maxsize, strict);
+    }
+    else
+      ret_val->classname = NULL;
     /*
     if(strict && ret_val->classname == NULL)
 	return NULL;
@@ -1734,11 +1743,8 @@ REGF_NK_REC* regfi_parse_nk(REGF_FILE* file, uint32 offset,
 }
 
 
-/*******************************************************************/
-/* XXX: Not currently validating against hbin length.              */
-/*******************************************************************/
 char* regfi_parse_classname(REGF_FILE* file, uint32 offset, 
-			    uint16* name_length, bool strict)
+			    uint16* name_length, uint32 max_size, bool strict)
 {
   char* ret_val = NULL;
   uint32 length;
@@ -1747,15 +1753,25 @@ char* regfi_parse_classname(REGF_FILE* file, uint32 offset,
 
   if(*name_length > 0 && offset != REGF_OFFSET_NONE 
      && offset == (offset & 0xFFFFFFF8))
-  {    
+  {
     if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
 	return NULL;
 
-    if(cell_length < *name_length)
+    if((cell_length & 0xFFFFFFF8) != cell_length)
+      return NULL;
+    
+    if(cell_length > max_size)
     {
       if(strict)
 	return NULL;
-      *name_length = cell_length & 0xFFFFFFF8;
+      cell_length = max_size;
+    }
+
+    if((cell_length - 4) < *name_length)
+    {
+      if(strict)
+	return NULL;
+      *name_length = cell_length - 4;
     }
     
     ret_val = (char*)zalloc(*name_length);
@@ -1783,8 +1799,10 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 			    uint32 max_size, bool strict)
 {
   REGF_VK_REC* ret_val;
+  REGF_HBIN *hbin;
   uint8 vk_header[REGFI_VK_MIN_LENGTH];
   uint32 raw_data_size, length, cell_length;
+  uint32 data_offset, data_maxsize;
   bool unalloc = false;
 
   if(!regfi_parse_cell(file->fd, offset, vk_header, REGFI_VK_MIN_LENGTH,
@@ -1877,8 +1895,17 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
     ret_val->data = NULL;
   else
   {
-    ret_val->data = regfi_parse_data(file, ret_val->data_off+REGF_BLOCKSIZE,
-				     raw_data_size, strict);
+    hbin = regfi_lookup_hbin(file, ret_val->data_off);
+    if(hbin)
+    {
+      data_offset = ret_val->data_off+REGF_BLOCKSIZE;
+      data_maxsize = hbin->block_size + hbin->file_off - data_offset;
+      ret_val->data = regfi_parse_data(file, data_offset, raw_data_size,
+				       data_maxsize, strict);
+    }
+    else
+      ret_val->data = NULL;
+
     if(strict && (ret_val->data == NULL))
     {
       free(ret_val->valuename);
@@ -1891,7 +1918,8 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 }
 
 
-uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool strict)
+uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length,
+			uint32 max_size, bool strict)
 {
   uint8* ret_val;
   uint32 read_length, cell_length;
@@ -1921,6 +1949,14 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
     if((cell_length & 0xFFFFFFF8) != cell_length)
       return NULL;
 
+    if(cell_length > max_size)
+    {
+      if(strict)
+	return NULL;
+      else
+	cell_length = max_size;
+    }
+
     if(cell_length - 4 < length)
     {
       /* XXX: This strict condition has been triggered in multiple registries.
@@ -1932,10 +1968,6 @@ uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, uint32 length, bool stri
       else
 	length = cell_length - 4;
     }
-
-    /* XXX: There is currently no check to ensure the data 
-     *      cell doesn't cross HBIN boundary.
-     */
 
     if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
       return NULL;

@@ -390,7 +390,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
 			    uint32 max_size, bool strict);
 
 uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
-			uint32 length, bool strict);
+			uint32 length, uint32 max_size, bool strict);
 
 REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, bool strict);
 
@@ -400,7 +400,7 @@ bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
 		      uint32* cell_length, bool* unalloc);
 
 char* regfi_parse_classname(REGF_FILE* file, uint32 offset,
-			    uint16* name_length, bool strict);
+			    uint16* name_length, uint32 max_size, bool strict);
 
 
 /* Private Functions */
