@@ -687,6 +687,8 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
     return NULL;
   }
 
+  /* XXX: call should look more like: */
+  /*if (!(ret_val->sec_desc = winsec_parse_desc(sec_desc_buf, ret_val->desc_size)))*/
   if (!sec_io_desc("sec_desc", &ret_val->sec_desc, &ps, 0))
   {
     free(ret_val);
@@ -793,7 +795,7 @@ REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset,
       free(ret_val);
       return NULL;
     }
-    
+
     vk_offset =  voffsets[i] + REGF_BLOCKSIZE;
     vk_max_length = hbin->block_size + hbin->file_off - vk_offset;
     ret_val[i] = regfi_parse_vk(file, vk_offset, vk_max_length, strict);
@@ -852,6 +854,7 @@ REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
       }
       else
 	nk->values = NULL;
+
     }
     else
     {
@@ -864,6 +867,7 @@ REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
 	free(nk);
 	return NULL;
       }
+
     }
   }
 
@@ -1238,7 +1242,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
   REGF_NK_REC* subkey;
   bool found = false;
   uint32 old_subkey = i->cur_subkey;
-  
+
   if(subkey_name == NULL)
     return false;
 
@@ -1357,7 +1361,7 @@ const REGF_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
     return NULL;
 
   nk_offset = i->cur_key->subkeys->elements[i->cur_subkey].nk_off;
-  
+
   return regfi_load_key(i->f, nk_offset+REGF_BLOCKSIZE, true);
 }
 
@@ -1880,6 +1884,7 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
       return NULL;
     }
     ret_val->valuename[ret_val->name_length] = '\0';
+
   }
   else
     cell_length = REGFI_VK_MIN_LENGTH + 4;
@@ -1895,16 +1900,25 @@ REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset,
     ret_val->data = NULL;
   else
   {
-    hbin = regfi_lookup_hbin(file, ret_val->data_off);
-    if(hbin)
+    if(ret_val->data_in_offset)
     {
-      data_offset = ret_val->data_off+REGF_BLOCKSIZE;
-      data_maxsize = hbin->block_size + hbin->file_off - data_offset;
-      ret_val->data = regfi_parse_data(file, data_offset, raw_data_size,
-				       data_maxsize, strict);
+      ret_val->data = regfi_parse_data(file, data_offset, 
+				       raw_data_size, 4, strict);
     }
     else
-      ret_val->data = NULL;
+    {
+      hbin = regfi_lookup_hbin(file, ret_val->data_off);
+      if(hbin)
+      {
+	data_offset = ret_val->data_off+REGF_BLOCKSIZE;
+	data_maxsize = hbin->block_size + hbin->file_off - data_offset;
+	ret_val->data = regfi_parse_data(file, data_offset, raw_data_size,
+					 data_maxsize, strict);
+	
+      }
+      else
+	ret_val->data = NULL;
+    }
 
     if(strict && (ret_val->data == NULL))
     {
