@@ -1,16 +1,15 @@
 /*
- * Branched from Samba project, Subversion repository version #6903:
+ * Branched from Samba project Subversion repository, version #6903:
  *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/include/regfio.h?rev=6903&view=auto
  *
- * Unix SMB/CIFS implementation.
- * Windows NT registry I/O library
+ * Windows NT (and later) registry parsing library
  *
  * Copyright (C) 2005-2009 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 of the License.
+ * the Free Software Foundation; version 3 of the License.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -190,7 +189,7 @@ typedef struct _regf_sk_rec
   uint32 offset;        /* Real file offset of this record */
   uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
 
-  SEC_DESC* sec_desc;
+  WINSEC_DESC* sec_desc;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   
   uint32 sk_off;	/* offset parsed from NK record used as a key
@@ -315,10 +314,10 @@ typedef struct
 const char*           regfi_type_val2str(unsigned int val);
 int                   regfi_type_str2val(const char* str);
 
-char*                 regfi_get_sacl(SEC_DESC* sec_desc);
-char*                 regfi_get_dacl(SEC_DESC* sec_desc);
-char*                 regfi_get_owner(SEC_DESC* sec_desc);
-char*                 regfi_get_group(SEC_DESC* sec_desc);
+char*                 regfi_get_sacl(WINSEC_DESC* sec_desc);
+char*                 regfi_get_dacl(WINSEC_DESC* sec_desc);
+char*                 regfi_get_owner(WINSEC_DESC* sec_desc);
+char*                 regfi_get_group(WINSEC_DESC* sec_desc);
 
 REGF_FILE*            regfi_open(const char* filename);
 int                   regfi_close(REGF_FILE* r);

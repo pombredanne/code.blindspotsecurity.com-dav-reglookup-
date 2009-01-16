@@ -2,8 +2,7 @@
  * Branched from Samba project Subversion repository, version #7470:
  *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/registry/regfio.c?rev=7470&view=auto
  *
- * Unix SMB/CIFS implementation.
- * Windows NT registry parsing library
+ * Windows NT (and later) registry parsing library
  *
  * Copyright (C) 2005-2009 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
@@ -225,9 +224,9 @@ char* regfi_ace_perms2str(uint32 perms)
 }
 
 
-char* regfi_sid2str(DOM_SID* sid)
+char* regfi_sid2str(WINSEC_DOM_SID* sid)
 {
-  uint32 i, size = MAXSUBAUTHS*11 + 24;
+  uint32 i, size = WINSEC_MAX_SUBAUTHS*11 + 24;
   uint32 left = size;
   uint8 comps = sid->num_auths;
   char* ret_val = malloc(size);
@@ -235,8 +234,8 @@ char* regfi_sid2str(DOM_SID* sid)
   if(ret_val == NULL)
     return NULL;
 
-  if(comps > MAXSUBAUTHS)
-    comps = MAXSUBAUTHS;
+  if(comps > WINSEC_MAX_SUBAUTHS)
+    comps = WINSEC_MAX_SUBAUTHS;
 
   left -= sprintf(ret_val, "S-%u-%u", sid->sid_rev_num, sid->id_auth[5]);
 
@@ -247,7 +246,7 @@ char* regfi_sid2str(DOM_SID* sid)
 }
 
 
-char* regfi_get_acl(SEC_ACL* acl)
+char* regfi_get_acl(WINSEC_ACL* acl)
 {
   uint32 i, extra, size = 0;
   const char* type_str;
@@ -262,10 +261,10 @@ char* regfi_get_acl(SEC_ACL* acl)
 
   for (i = 0; i < acl->num_aces && !failed; i++)
   {
-    sid_str = regfi_sid2str(&acl->ace[i].trustee);
-    type_str = regfi_ace_type2str(acl->ace[i].type);
-    perms_str = regfi_ace_perms2str(acl->ace[i].info.mask);
-    flags_str = regfi_ace_flags2str(acl->ace[i].flags);
+    sid_str = regfi_sid2str(acl->aces[i]->trustee);
+    type_str = regfi_ace_type2str(acl->aces[i]->type);
+    perms_str = regfi_ace_perms2str(acl->aces[i]->access_mask);
+    flags_str = regfi_ace_flags2str(acl->aces[i]->flags);
     
     if(flags_str != NULL && perms_str != NULL 
        && type_str != NULL && sid_str != NULL)
@@ -306,7 +305,7 @@ char* regfi_get_acl(SEC_ACL* acl)
 }
 
 
-char* regfi_get_sacl(SEC_DESC *sec_desc)
+char* regfi_get_sacl(WINSEC_DESC *sec_desc)
 {
   if (sec_desc->sacl)
     return regfi_get_acl(sec_desc->sacl);
@@ -315,7 +314,7 @@ char* regfi_get_sacl(SEC_DESC *sec_desc)
 }
 
 
-char* regfi_get_dacl(SEC_DESC *sec_desc)
+char* regfi_get_dacl(WINSEC_DESC *sec_desc)
 {
   if (sec_desc->dacl)
     return regfi_get_acl(sec_desc->dacl);
@@ -324,13 +323,13 @@ char* regfi_get_dacl(SEC_DESC *sec_desc)
 }
 
 
-char* regfi_get_owner(SEC_DESC *sec_desc)
+char* regfi_get_owner(WINSEC_DESC *sec_desc)
 {
   return regfi_sid2str(sec_desc->owner_sid);
 }
 
 
-char* regfi_get_group(SEC_DESC *sec_desc)
+char* regfi_get_group(WINSEC_DESC *sec_desc)
 {
   return regfi_sid2str(sec_desc->grp_sid);
 }
@@ -446,8 +445,13 @@ REGF_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
 					  bool strict)
 {
   uint32 i,j,k;
-  REGF_SUBKEY_LIST* ret_val = (REGF_SUBKEY_LIST*)zalloc(sizeof(REGF_SUBKEY_LIST));
-  if(ret_val == NULL || lists == NULL)
+  REGF_SUBKEY_LIST* ret_val;
+
+  if(lists == NULL)
+    return NULL;
+  ret_val = (REGF_SUBKEY_LIST*)zalloc(sizeof(REGF_SUBKEY_LIST));
+
+  if(ret_val == NULL)
     return NULL;
   
   /* Obtain total number of elements */
@@ -456,8 +460,9 @@ REGF_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
   {
     if(lists[i] == NULL)
     {
-      ret_val->num_keys = 0;
-      break;
+      free(ret_val);
+      free(lists);
+      return NULL;
     }
     ret_val->num_keys += lists[i]->num_keys;
   }
@@ -468,6 +473,7 @@ REGF_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
       (REGF_SUBKEY_LIST_ELEM*)zalloc(sizeof(REGF_SUBKEY_LIST_ELEM)
 				     * ret_val->num_keys);
     k=0;
+
     if(ret_val->elements != NULL)
     {
       for(i=0; i<num_lists; i++)
@@ -497,7 +503,7 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
   REGF_SUBKEY_LIST* ret_val;
   REGF_SUBKEY_LIST** sublists;
   REGF_HBIN* sublist_hbin;
-  uint32 i, cell_length, length, num_sublists, off, max_length;
+  uint32 i, cell_length, length, num_sublists, off, max_length, elem_size;
   uint8* hashes;
   uint8 buf[REGFI_SUBKEY_LIST_MIN_LEN];
   bool unalloc;
@@ -540,8 +546,19 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
       /* XXX: Need to add a recursion depth limit of some kind. */
       sublists[i] = regfi_load_subkeylist(file, off, 0, max_length, strict);
     }
-    
+    free(hashes);
+
     return regfi_merge_subkeylists(num_sublists, sublists, strict);
+  }
+
+  if(buf[0] == 'l' && buf[1] == 'i')
+    elem_size = sizeof(uint32);
+  else if((buf[0] == 'l') && (buf[1] == 'f' || buf[1] == 'h'))
+    elem_size = sizeof(REGF_SUBKEY_LIST_ELEM);
+  else
+  {
+    /* fprintf(stderr, "DEBUG: lf->header=%c%c\n", buf[0], buf[1]);*/
+    return NULL;
   }
 
   ret_val = (REGF_SUBKEY_LIST*)zalloc(sizeof(REGF_SUBKEY_LIST));
@@ -550,14 +567,6 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
 
   ret_val->offset = offset;
   ret_val->cell_size = cell_length;
-
-  if((buf[0] != 'l' || buf[1] != 'f') && (buf[0] != 'l' || buf[1] != 'h'))
-  {
-    /*printf("DEBUG: lf->header=%c%c\n", buf[0], buf[1]);*/
-    free(ret_val);
-    return NULL;
-  }
-
   ret_val->magic[0] = buf[0];
   ret_val->magic[1] = buf[1];
 
@@ -578,11 +587,16 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
   }
 
   if(cell_length - REGFI_SUBKEY_LIST_MIN_LEN - sizeof(uint32) 
-     < ret_val->num_keys*sizeof(REGF_SUBKEY_LIST_ELEM))
+     < ret_val->num_keys*elem_size)
+  {
+    free(ret_val);
     return NULL;
+  }
 
-  length = sizeof(REGF_SUBKEY_LIST_ELEM)*ret_val->num_keys;
-  ret_val->elements = (REGF_SUBKEY_LIST_ELEM*)zalloc(length);
+  length = elem_size*ret_val->num_keys;
+  ret_val->elements 
+    = (REGF_SUBKEY_LIST_ELEM*)zalloc(ret_val->num_keys 
+				     * sizeof(REGF_SUBKEY_LIST_ELEM));
   if(ret_val->elements == NULL)
   {
     free(ret_val);
@@ -598,17 +612,28 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
   }
 
   if(regfi_read(file->fd, hashes, &length) != 0
-     || length != sizeof(REGF_SUBKEY_LIST_ELEM)*ret_val->num_keys)
+     || length != elem_size*ret_val->num_keys)
   {
     free(ret_val->elements);
     free(ret_val);
     return NULL;
   }
 
-  for (i=0; i < ret_val->num_keys; i++)
+  if(buf[0] == 'l' && buf[1] == 'i')
   {
-    ret_val->elements[i].nk_off = IVAL(hashes, i*sizeof(REGF_SUBKEY_LIST_ELEM));
-    ret_val->elements[i].hash = IVAL(hashes, i*sizeof(REGF_SUBKEY_LIST_ELEM)+4);
+    for (i=0; i < ret_val->num_keys; i++)
+    {
+      ret_val->elements[i].nk_off = IVAL(hashes, i*elem_size);
+      ret_val->elements[i].hash = 0;
+    }
+  }
+  else
+  {
+    for (i=0; i < ret_val->num_keys; i++)
+    {
+      ret_val->elements[i].nk_off = IVAL(hashes, i*elem_size);
+      ret_val->elements[i].hash = IVAL(hashes, i*elem_size+4);
+    }
   }
   free(hashes);
 
@@ -622,11 +647,11 @@ REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset,
 REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, bool strict)
 {
   REGF_SK_REC* ret_val;
+  uint8* sec_desc_buf;
   uint32 cell_length, length;
-  prs_struct ps;
+  /*prs_struct ps;*/
   uint8 sk_header[REGFI_SK_MIN_LENGTH];
   bool unalloc = false;
-
 
   if(!regfi_parse_cell(file->fd, offset, sk_header, REGFI_SK_MIN_LENGTH,
 		       &cell_length, &unalloc))
@@ -673,6 +698,7 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
   /* XXX: need to get rid of this, but currently the security descriptor
    * code depends on the ps structure.
    */
+  /*
   if(!prs_init(&ps, ret_val->desc_size, NULL, UNMARSHALL))
   {
     free(ret_val);
@@ -686,16 +712,32 @@ REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, boo
     free(ret_val);
     return NULL;
   }
+  */
 
-  /* XXX: call should look more like: */
-  /*if (!(ret_val->sec_desc = winsec_parse_desc(sec_desc_buf, ret_val->desc_size)))*/
-  if (!sec_io_desc("sec_desc", &ret_val->sec_desc, &ps, 0))
+  sec_desc_buf = (uint8*)zalloc(ret_val->desc_size);
+  if(ret_val == NULL)
   {
     free(ret_val);
     return NULL;
   }
 
-  free(ps.data_p);
+  length = ret_val->desc_size;
+  if(regfi_read(file->fd, sec_desc_buf, &length) != 0 
+     || length != ret_val->desc_size)
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  if(!(ret_val->sec_desc = winsec_parse_desc(sec_desc_buf, ret_val->desc_size)))
+  {
+    free(sec_desc_buf);
+    free(ret_val);
+    return NULL;
+  }
+  free(sec_desc_buf);
+
+  /*  free(ps.data_p);*/
 
   return ret_val;
 }
@@ -892,8 +934,9 @@ REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict)
     {
       off = nk->subkeys_off + REGF_BLOCKSIZE;
       max_length = sub_hbin->block_size + sub_hbin->file_off - off;
-      nk->subkeys = regfi_load_subkeylist(file, off, nk->num_subkeys, 
+      nk->subkeys = regfi_load_subkeylist(file, off, nk->num_subkeys,
 					  max_length, true);
+
       if(nk->subkeys == NULL)
       {
 	/* XXX: Should we free the key and bail out here instead?  

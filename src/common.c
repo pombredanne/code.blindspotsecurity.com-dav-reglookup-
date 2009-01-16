@@ -28,7 +28,7 @@ const char* key_special_chars = ",\"\\/";
 const char* subfield_special_chars = ",\"\\|";
 const char* common_special_chars = ",\"\\";
 
-#define REGLOOKUP_VERSION "0.9.0"
+#define REGLOOKUP_VERSION "0.10.0"
 
 
 void bailOut(int code, char* message)
