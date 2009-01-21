@@ -1,8 +1,7 @@
 /*
- * A utility to read a Windows NT/2K/XP/2K3 registry file, using 
- * Gerald Carter''s regfio interface.
+ * A utility to read a Windows NT and later registry files.
  *
- * Copyright (C) 2005-2008 Timothy D. Morgan
+ * Copyright (C) 2005-2009 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -42,7 +41,7 @@ int type_filter;
 char* registry_file = NULL;
 
 /* Other globals */
-REGF_FILE* f;
+REGFI_FILE* f;
 
 
 /* XXX: A hack to share some functions with reglookup-recover.c.
@@ -51,7 +50,7 @@ REGF_FILE* f;
 #include "common.c"
 
 
-void printValue(const REGF_VK_REC* vk, char* prefix)
+void printValue(const REGFI_VK_REC* vk, char* prefix)
 {
   char* quoted_value = NULL;
   char* quoted_name = NULL;
@@ -65,11 +64,11 @@ void printValue(const REGF_VK_REC* vk, char* prefix)
    * malicious. For more info, see:
    *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
    */
-  if(size > VK_MAX_DATA_LENGTH)
+  if(size > REGFI_VK_MAX_DATA_LENGTH)
   {
     fprintf(stderr, "WARNING: value data size %d larger than "
-	    "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
-    size = VK_MAX_DATA_LENGTH;
+	    "%d, truncating...\n", size, REGFI_VK_MAX_DATA_LENGTH);
+    size = REGFI_VK_MAX_DATA_LENGTH;
   }
   
   quoted_name = quote_string(vk->valuename, key_special_chars);
@@ -142,7 +141,7 @@ char** splitPath(const char* s)
   char* copy;
   uint32 ret_cur = 0;
 
-  ret_val = (char**)malloc((REGF_MAX_DEPTH+1+1)*sizeof(char**));
+  ret_val = (char**)malloc((REGFI_MAX_DEPTH+1+1)*sizeof(char**));
   if (ret_val == NULL)
     return NULL;
   ret_val[0] = NULL;
@@ -162,7 +161,7 @@ char** splitPath(const char* s)
       memcpy(copy, cur, next-cur);
       copy[next-cur] = '\0';
       ret_val[ret_cur++] = copy;
-      if(ret_cur < (REGF_MAX_DEPTH+1+1))
+      if(ret_cur < (REGFI_MAX_DEPTH+1+1))
 	ret_val[ret_cur] = NULL;
       else
 	bailOut(EX_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
@@ -175,7 +174,7 @@ char** splitPath(const char* s)
   {
     copy = strdup(cur);
     ret_val[ret_cur++] = copy;
-    if(ret_cur < (REGF_MAX_DEPTH+1+1))
+    if(ret_cur < (REGFI_MAX_DEPTH+1+1))
       ret_val[ret_cur] = NULL;
     else
       bailOut(EX_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
@@ -274,7 +273,7 @@ char* iter2Path(REGFI_ITERATOR* i)
 
 void printValueList(REGFI_ITERATOR* i, char* prefix)
 {
-  const REGF_VK_REC* value;
+  const REGFI_VK_REC* value;
 
   value = regfi_iterator_first_value(i);
   while(value != NULL)
@@ -298,8 +297,8 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
-  const REGF_SK_REC* sk;
-  const REGF_NK_REC* k = regfi_iterator_cur_key(i);
+  const REGFI_SK_REC* sk;
+  const REGFI_NK_REC* k = regfi_iterator_cur_key(i);
 
   *tmp_time = nt_time_to_unix(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
@@ -368,9 +367,9 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
 
 void printKeyTree(REGFI_ITERATOR* iter)
 {
-  const REGF_NK_REC* root = NULL;
-  const REGF_NK_REC* cur = NULL;
-  const REGF_NK_REC* sub = NULL;
+  const REGFI_NK_REC* root = NULL;
+  const REGFI_NK_REC* cur = NULL;
+  const REGFI_NK_REC* sub = NULL;
   char* path = NULL;
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
@@ -440,7 +439,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
  */
 int retrievePath(REGFI_ITERATOR* iter, char** path)
 {
-  const REGF_VK_REC* value;
+  const REGFI_VK_REC* value;
   char* tmp_path_joined;
   const char** tmp_path;
   uint32 i;
@@ -449,14 +448,14 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     return -1;
 
   /* One extra for any value at the end, and one more for NULL */
-  tmp_path = (const char**)malloc(sizeof(const char**)*(REGF_MAX_DEPTH+1+1));
+  tmp_path = (const char**)malloc(sizeof(const char**)*(REGFI_MAX_DEPTH+1+1));
   if(tmp_path == NULL)
     return -2;
 
   /* Strip any potential value name at end of path */
   for(i=0; 
       (path[i] != NULL) && (path[i+1] != NULL) 
-	&& (i < REGF_MAX_DEPTH+1+1);
+	&& (i < REGFI_MAX_DEPTH+1+1);
       i++)
     tmp_path[i] = path[i];
 

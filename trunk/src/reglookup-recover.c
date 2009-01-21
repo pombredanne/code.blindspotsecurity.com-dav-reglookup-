@@ -66,7 +66,7 @@ char* getQuotedData(int fd, uint32 offset, uint32 length)
 }
 
 
-void printKey(REGF_FILE* f, REGF_NK_REC* nk, const char* prefix)
+void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
 {
   char mtime[20];
   time_t tmp_time[1];
@@ -101,7 +101,7 @@ void printKey(REGF_FILE* f, REGF_NK_REC* nk, const char* prefix)
 }
 
 
-void printValue(REGF_FILE* f, const REGF_VK_REC* vk, const char* prefix)
+void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
 {
   char* quoted_value = NULL;
   char* quoted_name = NULL;
@@ -121,11 +121,11 @@ void printValue(REGF_FILE* f, const REGF_VK_REC* vk, const char* prefix)
    *      name of the current value we're having trouble with, since
    *      stderr/stdout don't always sync nicely.
    */
-  if(size > VK_MAX_DATA_LENGTH)
+  if(size > REGFI_VK_MAX_DATA_LENGTH)
   {
     fprintf(stderr, "WARNING: value data size %d larger than "
-	    "%d, truncating...\n", size, VK_MAX_DATA_LENGTH);
-    size = VK_MAX_DATA_LENGTH;
+	    "%d, truncating...\n", size, REGFI_VK_MAX_DATA_LENGTH);
+    size = REGFI_VK_MAX_DATA_LENGTH;
   }
   
   quoted_name = quote_string(vk->valuename, key_special_chars);
@@ -187,7 +187,7 @@ void printValue(REGF_FILE* f, const REGF_VK_REC* vk, const char* prefix)
 }
 
 
-void printSK(REGF_FILE* f, REGF_SK_REC* sk)
+void printSK(REGFI_FILE* f, REGFI_SK_REC* sk)
 {
   char* quoted_raw = NULL;
   char* empty_str = "";
@@ -225,7 +225,7 @@ void printSK(REGF_FILE* f, REGF_SK_REC* sk)
 }
 
 
-int printCell(REGF_FILE* f, uint32 offset)
+int printCell(REGFI_FILE* f, uint32 offset)
 {
   char* quoted_buf;
   uint32 cell_length;
@@ -253,11 +253,11 @@ int printCell(REGF_FILE* f, uint32 offset)
  *      repeatedly.  Should try to add caching.  Also, piecing the path 
  *      together is slow and redundant.
  */
-char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
+char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 {
-  void_stack* path_stack = void_stack_new(REGF_MAX_DEPTH);
-  REGF_HBIN* hbin;
-  REGF_NK_REC* cur_ancestor;
+  void_stack* path_stack = void_stack_new(REGFI_MAX_DEPTH);
+  REGFI_HBIN* hbin;
+  REGFI_NK_REC* cur_ancestor;
   char* ret_val;
   char* path_element;
   char* tmp_str;
@@ -266,24 +266,24 @@ char* getParentPath(REGF_FILE* f, REGF_NK_REC* nk)
 
   /* The path_stack size limit should guarantee that we don't recurse forever. */
   virt_offset = nk->parent_off;
-  while(virt_offset != REGF_OFFSET_NONE)
+  while(virt_offset != REGFI_OFFSET_NONE)
   {  
     hbin = regfi_lookup_hbin(f, virt_offset);
     if(hbin == NULL)
-      virt_offset = REGF_OFFSET_NONE;
+      virt_offset = REGFI_OFFSET_NONE;
     else
     {
       max_length = hbin->block_size + hbin->file_off 
-	- (virt_offset+REGF_BLOCKSIZE);
-      cur_ancestor = regfi_parse_nk(f, virt_offset+REGF_BLOCKSIZE, 
+	- (virt_offset+REGFI_REGF_SIZE);
+      cur_ancestor = regfi_parse_nk(f, virt_offset+REGFI_REGF_SIZE, 
 				    max_length, true);
       if(cur_ancestor == NULL)
-	virt_offset = REGF_OFFSET_NONE;
+	virt_offset = REGFI_OFFSET_NONE;
       else
       {
-	if((cur_ancestor->key_type == NK_TYPE_ROOTKEY1) 
-	   || (cur_ancestor->key_type == NK_TYPE_ROOTKEY2))
-	  virt_offset = REGF_OFFSET_NONE;
+	if((cur_ancestor->key_type == REGFI_NK_TYPE_ROOTKEY1) 
+	   || (cur_ancestor->key_type == REGFI_NK_TYPE_ROOTKEY2))
+	  virt_offset = REGFI_OFFSET_NONE;
 	else
 	  virt_offset = cur_ancestor->parent_off;
 	
@@ -414,12 +414,12 @@ bool removeRange(range_list* rl, uint32 offset, uint32 length)
 
 
 /* NOTE: unalloc_keys should be an empty range_list. */
-int extractKeys(REGF_FILE* f, 
+int extractKeys(REGFI_FILE* f, 
 		range_list* unalloc_cells, 
 		range_list* unalloc_keys)
 {
   const range_list_element* cur_elem;
-  REGF_NK_REC* key;
+  REGFI_NK_REC* key;
   uint32 i, j;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -454,12 +454,12 @@ int extractKeys(REGF_FILE* f,
 }
 
 
-int extractValueLists(REGF_FILE* f,
+int extractValueLists(REGFI_FILE* f,
 		      range_list* unalloc_cells,
 		      range_list* unalloc_keys)
 {
-  REGF_NK_REC* nk;
-  REGF_HBIN* hbin;
+  REGFI_NK_REC* nk;
+  REGFI_HBIN* hbin;
   const range_list_element* cur_elem;
   uint32 i, j, num_keys, off, values_length, max_length;
 
@@ -471,13 +471,13 @@ int extractValueLists(REGF_FILE* f,
       return 10;
     nk = cur_elem->data;
 
-    if(nk->num_values && (nk->values_off!=REGF_OFFSET_NONE))
+    if(nk->num_values && (nk->values_off!=REGFI_OFFSET_NONE))
     {
       hbin = regfi_lookup_hbin(f, nk->values_off);
       
       if(hbin != NULL)
       {
-	off = nk->values_off + REGF_BLOCKSIZE;
+	off = nk->values_off + REGFI_REGF_SIZE;
 	max_length = hbin->block_size + hbin->file_off - off;
 	/* XXX: This is a hack.  We parse all value-lists, VK records,
 	 *      and data records without regard for current allocation status.  
@@ -545,7 +545,7 @@ int extractValueLists(REGF_FILE* f,
 		   */
 		  if(nk->values[j]->data != NULL && !nk->values[j]->data_in_offset)
 		  {
-		    off = nk->values[j]->data_off+REGF_BLOCKSIZE;
+		    off = nk->values[j]->data_off+REGFI_REGF_SIZE;
 		    if(!range_list_has_range(unalloc_cells, off, 
 					     nk->values[j]->data_size))
 		    { /* We've parsed a data cell which isn't in the unallocated 
@@ -575,12 +575,12 @@ int extractValueLists(REGF_FILE* f,
 
 
 /* NOTE: unalloc_values should be an empty range_list. */
-int extractValues(REGF_FILE* f,
+int extractValues(REGFI_FILE* f,
 		  range_list* unalloc_cells,
 		  range_list* unalloc_values)
 {
   const range_list_element* cur_elem;
-  REGF_VK_REC* vk;
+  REGFI_VK_REC* vk;
   uint32 i, j, off;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -615,13 +615,13 @@ int extractValues(REGF_FILE* f,
   for(i=0; i<range_list_size(unalloc_values); i++)
   {
     cur_elem = range_list_get(unalloc_values, i);
-    vk = (REGF_VK_REC*)cur_elem->data;
+    vk = (REGFI_VK_REC*)cur_elem->data;
     if(vk == NULL)
       return 40;
 
     if(vk->data != NULL && !vk->data_in_offset)
     {
-      off = vk->data_off+REGF_BLOCKSIZE;
+      off = vk->data_off+REGFI_REGF_SIZE;
       if(!range_list_has_range(unalloc_cells, off, vk->data_size))
       { /* We've parsed a data cell which isn't in the unallocated 
 	 * list, so prune it.
@@ -642,12 +642,12 @@ int extractValues(REGF_FILE* f,
 
 
 /* NOTE: unalloc_sks should be an empty range_list. */
-int extractSKs(REGF_FILE* f, 
+int extractSKs(REGFI_FILE* f, 
 	       range_list* unalloc_cells,
 	       range_list* unalloc_sks)
 {
   const range_list_element* cur_elem;
-  REGF_SK_REC* sk;
+  REGFI_SK_REC* sk;
   uint32 i, j;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -683,7 +683,7 @@ int extractSKs(REGF_FILE* f,
 
 int main(int argc, char** argv)
 { 
-  REGF_FILE* f;
+  REGFI_FILE* f;
   const range_list_element* cur_elem;
   range_list* unalloc_cells;
   range_list* unalloc_keys;
@@ -692,8 +692,8 @@ int main(int argc, char** argv)
   char** parent_paths;
   char* tmp_name;
   char* tmp_path;
-  REGF_NK_REC* tmp_key;
-  REGF_VK_REC* tmp_value;
+  REGFI_NK_REC* tmp_key;
+  REGFI_VK_REC* tmp_value;
   uint32 argi, arge, i, j, ret, num_unalloc_keys;
   /* uint32 test_offset;*/
   
@@ -805,7 +805,7 @@ int main(int argc, char** argv)
   for(i=0; i < num_unalloc_keys; i++)
   {
     cur_elem = range_list_get(unalloc_keys, i);
-    tmp_key = (REGF_NK_REC*)cur_elem->data;
+    tmp_key = (REGFI_NK_REC*)cur_elem->data;
 
     if(tmp_key == NULL)
       return 20;
@@ -820,7 +820,7 @@ int main(int argc, char** argv)
   for(i=0; i < num_unalloc_keys; i++)
   {
     cur_elem = range_list_get(unalloc_keys, i);
-    tmp_key = (REGF_NK_REC*)cur_elem->data;
+    tmp_key = (REGFI_NK_REC*)cur_elem->data;
 
     printKey(f, tmp_key, parent_paths[i]);
     if(tmp_key->num_values > 0 && tmp_key->values != NULL)
@@ -847,7 +847,7 @@ int main(int argc, char** argv)
   for(i=0; i < range_list_size(unalloc_values); i++)
   {
     cur_elem = range_list_get(unalloc_values, i);
-    tmp_value = (REGF_VK_REC*)cur_elem->data; 
+    tmp_value = (REGFI_VK_REC*)cur_elem->data; 
 
     printValue(f, tmp_value, "");
   }
