@@ -71,21 +71,21 @@
 /* Not a real type in the registry */
 #define REG_KEY                        0x7FFFFFFF
 
-#define REGF_BLOCKSIZE		   0x1000
-#define REGF_ALLOC_BLOCK	   0x1000 /* Minimum allocation unit for HBINs */
-#define REGF_MAX_DEPTH		   512
+#define REGFI_REGF_SIZE            0x1000 /* "regf" header block size */
+#define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
+#define REGFI_MAX_DEPTH		   512
+#define REGFI_OFFSET_NONE          0xffffffff
 
-/* header sizes for various records */
-#define REGF_MAGIC_SIZE		   4
-#define HBIN_MAGIC_SIZE		   4
-#define HBIN_HEADER_REC_SIZE	   0x20
-#define REC_HDR_SIZE		   2
-
-#define REGF_OFFSET_NONE           0xffffffff
+/* Header sizes and magic number lengths for various records */
+#define REGFI_REGF_MAGIC_SIZE      4
+#define REGFI_HBIN_MAGIC_SIZE      4
+#define REGFI_CELL_MAGIC_SIZE      2
+#define REGFI_HBIN_HEADER_SIZE     0x20
 #define REGFI_NK_MIN_LENGTH        0x4C
 #define REGFI_VK_MIN_LENGTH        0x14
 #define REGFI_SK_MIN_LENGTH        0x14
 #define REGFI_SUBKEY_LIST_MIN_LEN  0x4
+
 
 /* Constants used for validation */
 /* XXX: Can we add clock resolution validation as well as range?  It has
@@ -105,21 +105,22 @@
 
 
 /* Flags for the vk records */
-#define VK_FLAG_NAME_PRESENT	   0x0001
-#define VK_DATA_IN_OFFSET	   0x80000000
-#define VK_MAX_DATA_LENGTH         1024*1024
+#define REGFI_VK_FLAG_NAME_PRESENT 0x0001
+#define REGFI_VK_DATA_IN_OFFSET    0x80000000
+#define REGFI_VK_MAX_DATA_LENGTH   1024*1024
 
 /* NK record types */
-#define NK_TYPE_LINKKEY		   0x0010
-#define NK_TYPE_NORMALKEY	   0x0020
-#define NK_TYPE_ROOTKEY1	   0x002c
-#define NK_TYPE_ROOTKEY2	   0x00ac
- /* XXX: Unknown type that shows up in Vista registries */
-#define NK_TYPE_UNKNOWN1           0x1020
+#define REGFI_NK_TYPE_LINKKEY      0x0010
+#define REGFI_NK_TYPE_NORMALKEY    0x0020
+ /* XXX: Unknown key type that shows up in Vista registries */
+#define REGFI_NK_TYPE_UNKNOWN1     0x1020
+#define REGFI_NK_TYPE_ROOTKEY1     0x002c
+ /* XXX: Unknown root key type that shows up in Vista registries */
+#define REGFI_NK_TYPE_ROOTKEY2     0x00ac
 
 
 /* HBIN block */
-typedef struct regf_hbin 
+typedef struct _regfi_hbin 
 {
   uint32 file_off;       /* my offset in the registry file */
   uint32 ref_count;      /* how many active records are pointing to this
@@ -134,8 +135,8 @@ typedef struct regf_hbin
 			  * NOTE: This value may be unreliable!
 			  */
 
-  uint8 magic[HBIN_MAGIC_SIZE]; /* "hbin" */
-} REGF_HBIN;
+  uint8 magic[REGFI_HBIN_MAGIC_SIZE]; /* "hbin" */
+} REGFI_HBIN;
 
 
 /* Subkey List -- list of key offsets and hashed names for consistency */
@@ -143,7 +144,7 @@ typedef struct
 {
   uint32 nk_off;
   uint32 hash;
-} REGF_SUBKEY_LIST_ELEM;
+} REGFI_SUBKEY_LIST_ELEM;
 
 
 typedef struct 
@@ -151,10 +152,10 @@ typedef struct
   uint32 offset;	/* Real offset of this record's cell in the file */
   uint32 cell_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
   uint32 num_keys;
-  REGF_SUBKEY_LIST_ELEM* elements;
+  REGFI_SUBKEY_LIST_ELEM* elements;
   
-  uint8 magic[REC_HDR_SIZE];
-} REGF_SUBKEY_LIST;
+  uint8 magic[REGFI_CELL_MAGIC_SIZE];
+} REGFI_SUBKEY_LIST;
 
 
 /* Key Value */
@@ -163,7 +164,7 @@ typedef struct
   uint32 offset;	/* Real offset of this record's cell in the file */
   uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
 
-  REGF_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
+  REGFI_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
 			 * this nk record 
 			 */
   uint8* data;
@@ -174,17 +175,17 @@ typedef struct
   uint32 data_size;
   uint32 data_off;      /* offset of data cell (virtual) */
   uint32 type;
-  uint8  magic[REC_HDR_SIZE];
+  uint8  magic[REGFI_CELL_MAGIC_SIZE];
   uint16 flag;
   uint16 unknown1;
   bool data_in_offset;
-} REGF_VK_REC;
+} REGFI_VK_REC;
 
 
 /* Key Security */
-struct _regf_sk_rec;
+struct _regfi_sk_rec;
 
-typedef struct _regf_sk_rec 
+typedef struct _regfi_sk_rec 
 {
   uint32 offset;        /* Real file offset of this record */
   uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
@@ -201,8 +202,8 @@ typedef struct _regf_sk_rec
   uint32 ref_count;
   uint32 desc_size;     /* size of security descriptor */
   uint16 unknown_tag;
-  uint8  magic[REC_HDR_SIZE];
-} REGF_SK_REC;
+  uint8  magic[REGFI_CELL_MAGIC_SIZE];
+} REGFI_SK_REC;
 
 
 /* Key Name */
@@ -214,12 +215,12 @@ typedef struct
 			 */
 
   /* link in the other records here */
-  REGF_VK_REC** values;
-  REGF_SUBKEY_LIST* subkeys;
+  REGFI_VK_REC** values;
+  REGFI_SUBKEY_LIST* subkeys;
   
   /* header information */
   uint16 key_type;
-  uint8  magic[REC_HDR_SIZE];
+  uint8  magic[REGFI_CELL_MAGIC_SIZE];
   NTTIME mtime;
   uint16 name_length;
   uint16 classname_length;
@@ -246,24 +247,30 @@ typedef struct
   uint32 num_values;
   uint32 values_off;	/* value lists which point to VK records */
   uint32 sk_off;	/* offset to SK record */
-} REGF_NK_REC;
+} REGFI_NK_REC;
 
 
 
 /* REGF block */
 typedef struct 
 {
-  /* run time information */
+  /* Run-time information */
+  /************************/
   int fd;	  /* file descriptor */
-  /* For sanity checking (not part of the registry header) */
-  uint32 file_length;
-  void* mem_ctx;  /* memory context for run-time file access information */
 
   /* Experimental hbin lists */
   range_list* hbins;
 
-  /* file format information */  
-  uint8  magic[REGF_MAGIC_SIZE];/* "regf" */
+  /* Error/warning/info messages returned by lower layer functions */
+  char* last_message;
+
+  /* For sanity checking (not part of the registry header) */
+  uint32 file_length;
+
+
+  /* Data parsed from file header */
+  /********************************/
+  uint8  magic[REGFI_REGF_MAGIC_SIZE];/* "regf" */
   NTTIME mtime;
   uint32 data_offset;		/* offset to record in the first (or any?) 
 				 * hbin block 
@@ -283,16 +290,16 @@ typedef struct
   uint32 unknown5;
   uint32 unknown6;
   uint32 unknown7;
-} REGF_FILE;
+} REGFI_FILE;
 
 
 
 typedef struct 
 {
-  REGF_FILE* f;
+  REGFI_FILE* f;
   void_stack* key_positions;
   lru_cache* sk_recs;
-  REGF_NK_REC* cur_key;
+  REGFI_NK_REC* cur_key;
   uint32 cur_subkey;
   uint32 cur_value;
 } REGFI_ITERATOR;
@@ -300,7 +307,10 @@ typedef struct
 
 typedef struct 
 {
-  REGF_NK_REC* nk;
+  /* XXX: Should probably eliminate the storage of keys here 
+   *      once key caching is implemented. 
+   */
+  REGFI_NK_REC* nk;
   uint32 cur_subkey;
   /* We could store a cur_value here as well, but didn't see 
    * the use in it right now.
@@ -309,20 +319,23 @@ typedef struct
 
 
 /******************************************************************************/
-/* Function Declarations */
-/*  Main API */
-const char*           regfi_type_val2str(unsigned int val);
-int                   regfi_type_str2val(const char* str);
+/*                         Main iterator API                                  */
+/******************************************************************************/
+REGFI_FILE*           regfi_open(const char* filename);
+int                   regfi_close(REGFI_FILE* r);
 
-char*                 regfi_get_sacl(WINSEC_DESC* sec_desc);
-char*                 regfi_get_dacl(WINSEC_DESC* sec_desc);
-char*                 regfi_get_owner(WINSEC_DESC* sec_desc);
-char*                 regfi_get_group(WINSEC_DESC* sec_desc);
+/* regfi_get_message: Get errors, warnings, and/or verbose information
+ *                    relating to processing of the given registry file.
+ *
+ * Arguments:
+ *   file     -- the structure for the registry file
+ *
+ * Returns:
+ *   A newly allocated char* which must be free()d by the caller.
+ */
+char*                 regfi_get_message(REGFI_FILE* file);
 
-REGF_FILE*            regfi_open(const char* filename);
-int                   regfi_close(REGF_FILE* r);
-
-REGFI_ITERATOR*       regfi_iterator_new(REGF_FILE* fh);
+REGFI_ITERATOR*       regfi_iterator_new(REGFI_FILE* fh);
 void                  regfi_iterator_free(REGFI_ITERATOR* i);
 bool                  regfi_iterator_down(REGFI_ITERATOR* i);
 bool                  regfi_iterator_up(REGFI_ITERATOR* i);
@@ -332,43 +345,37 @@ bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i,
 						 const char* subkey_name);
 bool                  regfi_iterator_walk_path(REGFI_ITERATOR* i, 
 					       const char** path);
-const REGF_NK_REC*    regfi_iterator_cur_key(REGFI_ITERATOR* i);
-const REGF_SK_REC*    regfi_iterator_cur_sk(REGFI_ITERATOR* i);
-const REGF_NK_REC*    regfi_iterator_first_subkey(REGFI_ITERATOR* i);
-const REGF_NK_REC*    regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
-const REGF_NK_REC*    regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+const REGFI_NK_REC*   regfi_iterator_cur_key(REGFI_ITERATOR* i);
+const REGFI_SK_REC*   regfi_iterator_cur_sk(REGFI_ITERATOR* i);
+const REGFI_NK_REC*   regfi_iterator_first_subkey(REGFI_ITERATOR* i);
+const REGFI_NK_REC*   regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
+const REGFI_NK_REC*   regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
 bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
 						const char* value_name);
-const REGF_VK_REC*    regfi_iterator_first_value(REGFI_ITERATOR* i);
-const REGF_VK_REC*    regfi_iterator_cur_value(REGFI_ITERATOR* i);
-const REGF_VK_REC*    regfi_iterator_next_value(REGFI_ITERATOR* i);
+const REGFI_VK_REC*   regfi_iterator_first_value(REGFI_ITERATOR* i);
+const REGFI_VK_REC*   regfi_iterator_cur_value(REGFI_ITERATOR* i);
+const REGFI_VK_REC*   regfi_iterator_next_value(REGFI_ITERATOR* i);
 
 
 /********************************************************/
 /* Middle-layer structure caching, loading, and linking */
 /********************************************************/
-REGF_HBIN* regfi_lookup_hbin(REGF_FILE* file, uint32 offset);
-
-REGF_NK_REC* regfi_load_key(REGF_FILE* file, uint32 offset, bool strict);
-
-REGF_SUBKEY_LIST* regfi_load_subkeylist(REGF_FILE* file, uint32 offset, 
-					uint32 num_keys, uint32 max_size, 
-					bool strict);
-
-REGF_VK_REC** regfi_load_valuelist(REGF_FILE* file, uint32 offset, 
-				   uint32 num_values, uint32 max_size, 
-				   bool strict);
-
-REGF_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists, 
-					  REGF_SUBKEY_LIST** lists,
-					  bool strict);
+REGFI_HBIN*           regfi_lookup_hbin(REGFI_FILE* file, uint32 offset);
+REGFI_NK_REC*         regfi_load_key(REGFI_FILE* file, uint32 offset, 
+				     bool strict);
+REGFI_SUBKEY_LIST*    regfi_load_subkeylist(REGFI_FILE* file, uint32 offset, 
+					    uint32 num_keys, uint32 max_size, 
+					    bool strict);
+REGFI_VK_REC**        regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
+					   uint32 num_values, uint32 max_size, 
+					   bool strict);
 
 /************************************/
 /*  Low-layer data structure access */
 /************************************/
-REGF_FILE*            regfi_parse_regf(int fd, bool strict);
-REGF_HBIN*            regfi_parse_hbin(REGF_FILE* file, uint32 offset, 
+REGFI_FILE*           regfi_parse_regf(int fd, bool strict);
+REGFI_HBIN*           regfi_parse_hbin(REGFI_FILE* file, uint32 offset, 
 				       bool strict);
 
 
@@ -383,31 +390,48 @@ REGF_HBIN*            regfi_parse_hbin(REGF_FILE* file, uint32 offset,
  * Returns:
  *   A newly allocated NK record structure, or NULL on failure.
  */
-REGF_NK_REC*          regfi_parse_nk(REGF_FILE* file, uint32 offset, 
+REGFI_NK_REC*         regfi_parse_nk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
-REGF_VK_REC* regfi_parse_vk(REGF_FILE* file, uint32 offset, 
-			    uint32 max_size, bool strict);
+REGFI_VK_REC*         regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
+				     uint32 max_size, bool strict);
 
-uint8* regfi_parse_data(REGF_FILE* file, uint32 offset, 
-			uint32 length, uint32 max_size, bool strict);
+uint8*                regfi_parse_data(REGFI_FILE* file, uint32 offset, 
+				       uint32 length, uint32 max_size, 
+				       bool strict);
 
-REGF_SK_REC* regfi_parse_sk(REGF_FILE* file, uint32 offset, uint32 max_size, bool strict);
+REGFI_SK_REC*         regfi_parse_sk(REGFI_FILE* file, uint32 offset, 
+				     uint32 max_size, bool strict);
 
-range_list* regfi_parse_unalloc_cells(REGF_FILE* file);
+range_list*           regfi_parse_unalloc_cells(REGFI_FILE* file);
 
-bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
-		      uint32* cell_length, bool* unalloc);
+bool                  regfi_parse_cell(int fd, uint32 offset, 
+				       uint8* hdr, uint32 hdr_len,
+				       uint32* cell_length, bool* unalloc);
 
-char* regfi_parse_classname(REGF_FILE* file, uint32 offset,
-			    uint16* name_length, uint32 max_size, bool strict);
+char*                 regfi_parse_classname(REGFI_FILE* file, uint32 offset,
+					    uint16* name_length, 
+					    uint32 max_size, bool strict);
 
 
-/* Private Functions */
-REGF_NK_REC*          regfi_rootkey(REGF_FILE* file);
-void                  regfi_key_free(REGF_NK_REC* nk);
-void                  regfi_subkeylist_free(REGF_SUBKEY_LIST* list);
+/************************************/
+/*    Private Functions             */
+/************************************/
+REGFI_NK_REC*         regfi_rootkey(REGFI_FILE* file);
+void                  regfi_key_free(REGFI_NK_REC* nk);
+void                  regfi_subkeylist_free(REGFI_SUBKEY_LIST* list);
 uint32                regfi_read(int fd, uint8* buf, uint32* length);
 
+const char*           regfi_type_val2str(unsigned int val);
+int                   regfi_type_str2val(const char* str);
 
+char*                 regfi_get_sacl(WINSEC_DESC* sec_desc);
+char*                 regfi_get_dacl(WINSEC_DESC* sec_desc);
+char*                 regfi_get_owner(WINSEC_DESC* sec_desc);
+char*                 regfi_get_group(WINSEC_DESC* sec_desc);
+
+REGFI_SUBKEY_LIST*    regfi_merge_subkeylists(uint16 num_lists, 
+					      REGFI_SUBKEY_LIST** lists,
+					      bool strict);
+void                  regfi_add_message(REGFI_FILE* file, const char* error);
 #endif	/* _REGFI_H */
