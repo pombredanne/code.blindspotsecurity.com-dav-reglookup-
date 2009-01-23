@@ -37,6 +37,16 @@ void bailOut(int code, char* message)
   exit(code);
 }
 
+void printMsgs(REGFI_ITERATOR* iter)
+{
+  char* msgs = regfi_get_messages(iter->f);
+  if(msgs != NULL)
+  {
+    fprintf(stderr, "%s", msgs);
+    free(msgs);
+  }
+}
+
 
 /* Returns a newly malloc()ed string which contains original buffer,
  * except for non-printable or special characters are quoted in hex
@@ -204,6 +214,10 @@ static char* quote_unicode(unsigned char* uni, uint32 length,
  * message, both the return value and (*error_msg) will be NULL.  It
  * is the responsibility of the caller to free both a non-NULL return
  * value, and a non-NULL (*error_msg).
+ */
+/* XXX: Part of this function's logic should be pushed into the regfi API.
+ *      The structures should be parsed and stored with VK records and only 
+ *      escaped/encoded later in reglookup and reglookup-recover.
  */
 static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type, 
 			   char** error_msg)
