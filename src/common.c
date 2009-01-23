@@ -51,9 +51,11 @@ static char* quote_buffer(const unsigned char* str,
   unsigned int num_written = 0;
 
   unsigned int buf_len = sizeof(char)*(len+1);
-  char* ret_val = malloc(buf_len);
+  char* ret_val = NULL; 
   char* tmp_buf;
 
+  if(buf_len > 0) 
+    ret_val = malloc(buf_len);
   if(ret_val == NULL)
     return NULL;
 
@@ -154,12 +156,13 @@ static char* quote_unicode(unsigned char* uni, uint32 length,
 			   const char* special, char** error_msg)
 {
   char* ret_val;
-  char* ascii;
+  char* ascii = NULL;
   char* tmp_err;
   int ret_err;
   *error_msg = NULL;
 
-  ascii = malloc(length+1);
+  if(length+1 > 0)
+    ascii = malloc(length+1);
   if(ascii == NULL)
   {
     *error_msg = (char*)malloc(27);
@@ -174,12 +177,9 @@ static char* quote_unicode(unsigned char* uni, uint32 length,
   {
     free(ascii);
     tmp_err = strerror(-ret_err);
-    *error_msg = (char*)malloc(54+strlen(tmp_err));
+    *error_msg = (char*)malloc(61+strlen(tmp_err));
     if(*error_msg == NULL)
-    {
-      free(ascii);
       return NULL;
-    }
 
     sprintf(*error_msg, 
 	    "Unicode conversion failed with '%s'. Quoting as binary.", tmp_err);
@@ -304,9 +304,13 @@ static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type,
     if(ret_err < 0)
     {
       tmp_err = strerror(-ret_err);
-      *error_msg = (char*)malloc(54+strlen(tmp_err));
+      *error_msg = (char*)malloc(61+strlen(tmp_err));
       if(*error_msg == NULL)
+      {
+	free(ascii_tmp);
 	return NULL;
+      }
+
       sprintf(*error_msg, "MULTI_SZ unicode conversion"
 	      " failed with '%s'. Quoting as binary.", tmp_err);
       ascii = quote_buffer(datap, len, subfield_special_chars);

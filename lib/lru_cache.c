@@ -235,6 +235,8 @@ bool lru_cache_update(lru_cache* ht, const void* index,
 	free(e);
 	return false;
       }
+      else
+	e->index = tmp_index;
     }
     else
     { /* Brand new element because we have room to spare. */
