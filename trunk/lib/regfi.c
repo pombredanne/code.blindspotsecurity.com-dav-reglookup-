@@ -36,33 +36,39 @@ static const char* regfi_type_names[] =
 
 /******************************************************************************
  ******************************************************************************/
-void regfi_add_message(REGFI_FILE* file, const char* error)
+void regfi_add_message(REGFI_FILE* file, const char* fmt, ...)
 {
-  /* XXX: This function is not particularly efficient, 
+  /* XXX: This function is not particularly efficient,
    *      but then it is mostly used during errors. 
    */
-  uint32 length;
-  char* tmp;
+  /* XXX: Should we add support for filtering by levels of severity? */
+  uint32 buf_size, buf_used;
+  char* new_msg;
+  va_list args;
 
   if(file->last_message == NULL)
-    length = 0;
+    buf_used = 0;
   else
-    length = strlen(error);
+    buf_used = strlen(file->last_message);
 
-  tmp = realloc(file->last_message, length+strlen(file->last_message)+2);
-  if(tmp == NULL)
-    /* XXX: should we do something else here?  */
+  buf_size = buf_used+strlen(fmt)+2+128;
+  new_msg = realloc(file->last_message, buf_size);
+  if(new_msg == NULL)
+    /* XXX: should we report this? */
     return;
   
-  if(length > 0)
-    strcat(tmp, "\n");
-  strcat(tmp, error);
+  va_start(args, fmt);
+  vsnprintf(new_msg+buf_used, buf_size-buf_used, fmt, args);
+  va_end(args);
+  strncat(new_msg, "\n", buf_size-1);
+
+  file->last_message = new_msg;
 }
 
 
 /******************************************************************************
  ******************************************************************************/
-char* regfi_get_message(REGFI_FILE* file)
+char* regfi_get_messages(REGFI_FILE* file)
 {
   char* ret_val = file->last_message;
   file->last_message = NULL;
@@ -309,12 +315,13 @@ char* regfi_get_acl(WINSEC_ACL* acl)
     {
       /* XXX: this is slow */
       extra = strlen(sid_str) + strlen(type_str) 
-	+ strlen(perms_str) + strlen(flags_str)+5;
+	+ strlen(perms_str) + strlen(flags_str) + 5;
       tmp_val = realloc(ret_val, size+extra);
 
       if(tmp_val == NULL)
       {
 	free(ret_val);
+	ret_val = NULL;
 	failed = true;
       }
       else
@@ -839,7 +846,7 @@ REGFI_VK_REC** regfi_load_valuelist(REGFI_FILE* file, uint32 offset,
   if(voffsets == NULL)
     return NULL;
 
-  ret_val = (REGFI_VK_REC**)zalloc(sizeof(REGFI_VK_REC*) * num_values);
+  ret_val = (REGFI_VK_REC**)zalloc(sizeof(REGFI_VK_REC*) * usable_num_values);
   if(ret_val == NULL)
   {
     free(voffsets);
@@ -1374,7 +1381,7 @@ const REGFI_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i)
 {
-  REGFI_SK_REC* ret_val;
+  REGFI_SK_REC* ret_val = NULL;
   REGFI_HBIN* hbin;
   uint32 max_length, off;
 
@@ -1981,7 +1988,7 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
   {
     if(ret_val->data_in_offset)
     {
-      ret_val->data = regfi_parse_data(file, data_offset, 
+      ret_val->data = regfi_parse_data(file, ret_val->data_off, 
 				       raw_data_size, 4, strict);
     }
     else
@@ -2029,7 +2036,6 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
     if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
       return NULL;
 
-    offset = offset - REGFI_REGF_SIZE;
     for(i = 0; i < length; i++)
       ret_val[i] = (uint8)((offset >> i*8) & 0xFF);
   }

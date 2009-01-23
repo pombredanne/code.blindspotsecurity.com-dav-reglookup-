@@ -32,8 +32,9 @@
 void* zalloc(size_t size)
 {
   void* ret_val = NULL;
-  if((ret_val = (void*)malloc(size)) != NULL)
+  if((size > 0) && (ret_val = (void*)malloc(size)) != NULL)
     memset(ret_val, 0, size);
+
   return ret_val;
 }
 

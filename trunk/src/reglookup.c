@@ -254,6 +254,7 @@ char* iter2Path(REGFI_ITERATOR* i)
       buf_len += name_len+1+grow_amt-buf_left;
       if((new_buf = realloc(buf, buf_len)) == NULL)
       {
+	free(name);
 	free(buf);
 	free(iter);
 	return NULL;
@@ -371,12 +372,15 @@ void printKeyTree(REGFI_ITERATOR* iter)
   const REGFI_NK_REC* cur = NULL;
   const REGFI_NK_REC* sub = NULL;
   char* path = NULL;
+  char* msgs = NULL;
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
 
   root = cur = regfi_iterator_cur_key(iter);
   sub = regfi_iterator_first_subkey(iter);
-  
+  msgs = regfi_get_messages(iter->f);
+  if(msgs != NULL)
+    fprintf(stderr, "%s", msgs);
   if(root == NULL)
     bailOut(EX_DATAERR, "ERROR: root cannot be NULL.\n");
   
@@ -454,11 +458,9 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
 
   /* Strip any potential value name at end of path */
   for(i=0; 
-      (path[i] != NULL) && (path[i+1] != NULL) 
-	&& (i < REGFI_MAX_DEPTH+1+1);
+      (path[i] != NULL) && (path[i+1] != NULL) && (i < REGFI_MAX_DEPTH+1);
       i++)
-    tmp_path[i] = path[i];
-
+  { tmp_path[i] = path[i]; }
   tmp_path[i] = NULL;
 
   if(print_verbose)
@@ -470,6 +472,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   {
     if(print_verbose)
       fprintf(stderr, "VERBOSE: Found final path element as root key.\n");
+    free(tmp_path);
     return 2;
   }
 

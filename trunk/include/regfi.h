@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
@@ -69,7 +70,7 @@
 #define REG_QWORD                      11 /* 64-bit little endian */
 /* XXX: Has MS defined a REG_QWORD_BE? */
 /* Not a real type in the registry */
-#define REG_KEY                        0x7FFFFFFF
+#define REG_KEY                    0x7FFFFFFF
 
 #define REGFI_REGF_SIZE            0x1000 /* "regf" header block size */
 #define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
@@ -324,8 +325,8 @@ typedef struct
 REGFI_FILE*           regfi_open(const char* filename);
 int                   regfi_close(REGFI_FILE* r);
 
-/* regfi_get_message: Get errors, warnings, and/or verbose information
- *                    relating to processing of the given registry file.
+/* regfi_get_messages: Get errors, warnings, and/or verbose information
+ *                     relating to processing of the given registry file.
  *
  * Arguments:
  *   file     -- the structure for the registry file
@@ -333,7 +334,7 @@ int                   regfi_close(REGFI_FILE* r);
  * Returns:
  *   A newly allocated char* which must be free()d by the caller.
  */
-char*                 regfi_get_message(REGFI_FILE* file);
+char*                 regfi_get_messages(REGFI_FILE* file);
 
 REGFI_ITERATOR*       regfi_iterator_new(REGFI_FILE* fh);
 void                  regfi_iterator_free(REGFI_ITERATOR* i);
@@ -433,5 +434,5 @@ char*                 regfi_get_group(WINSEC_DESC* sec_desc);
 REGFI_SUBKEY_LIST*    regfi_merge_subkeylists(uint16 num_lists, 
 					      REGFI_SUBKEY_LIST** lists,
 					      bool strict);
-void                  regfi_add_message(REGFI_FILE* file, const char* error);
+void                  regfi_add_message(REGFI_FILE* file, const char* fmt, ...);
 #endif	/* _REGFI_H */

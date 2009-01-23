@@ -98,6 +98,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
   
   if(print_parsedraw)
     free(quoted_raw);
+  free(quoted_name);
 }
 
 
@@ -828,7 +829,11 @@ int main(int argc, char** argv)
       tmp_name = quote_string(tmp_key->keyname, key_special_chars);
       tmp_path = (char*)malloc(strlen(parent_paths[i])+strlen(tmp_name)+2);
       if(tmp_path == NULL)
+      {
+	free(tmp_name);
 	return 10;
+      }
+
       sprintf(tmp_path, "%s/%s", parent_paths[i], tmp_name);
       for(j=0; j < tmp_key->num_values; j++)
       {
