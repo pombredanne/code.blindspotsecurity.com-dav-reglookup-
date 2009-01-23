@@ -700,11 +700,19 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
 
   if(!regfi_parse_cell(file->fd, offset, sk_header, REGFI_SK_MIN_LENGTH,
 		       &cell_length, &unalloc))
+  {
+    regfi_add_message(file, "ERROR: Could not parse SK record cell"
+		      " at offset 0x%.8X.", offset);
     return NULL;
+  }
    
   if(sk_header[0] != 's' || sk_header[1] != 'k')
+  {
+    regfi_add_message(file, "ERROR: Magic number mismatch in parsing SK record"
+		      " at offset 0x%.8X.", offset);
     return NULL;
-  
+  }
+
   ret_val = (REGFI_SK_REC*)zalloc(sizeof(REGFI_SK_REC));
   if(ret_val == NULL)
     return NULL;
@@ -720,6 +728,8 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
   if((ret_val->cell_size < REGFI_SK_MIN_LENGTH) 
      || (strict && ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8)))
   {
+    regfi_add_message(file, "ERROR: Invalid cell size found while parsing SK"
+		      " record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
@@ -736,6 +746,8 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
 
   if(ret_val->desc_size + REGFI_SK_MIN_LENGTH > ret_val->cell_size)
   {
+    regfi_add_message(file, "ERROR: Security descriptor too large for cell"
+		      " while parsing SK record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
@@ -751,12 +763,16 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
   if(regfi_read(file->fd, sec_desc_buf, &length) != 0 
      || length != ret_val->desc_size)
   {
+    regfi_add_message(file, "ERROR: Failed to read security descriptor"
+		      " while parsing SK record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
 
   if(!(ret_val->sec_desc = winsec_parse_desc(sec_desc_buf, ret_val->desc_size)))
   {
+    regfi_add_message(file, "ERROR: Failed to parse security descriptor"
+		      " while parsing SK record at offset 0x%.8X.", offset);
     free(sec_desc_buf);
     free(ret_val);
     return NULL;
@@ -776,7 +792,11 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
   bool unalloc;
 
   if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
+  {
+    regfi_add_message(file, "ERROR: Failed to read cell header"
+		      " while parsing value list at offset 0x%.8X.", offset);
     return NULL;
+  }
 
   if(cell_length != (cell_length & 0xFFFFFFF8))
   {
@@ -785,7 +805,11 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
     cell_length = cell_length & 0xFFFFFFF8;
   }
   if((num_values * sizeof(uint32)) > cell_length-sizeof(uint32))
+  {
+    regfi_add_message(file, "ERROR: Too many values found"
+		      " while parsing value list at offset 0x%.8X.", offset);
     return NULL;
+  }
 
   read_len = num_values*sizeof(uint32);
   ret_val = (uint32*)malloc(read_len);
@@ -795,6 +819,8 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
   length = read_len;
   if((regfi_read(file->fd, (uint8*)ret_val, &length) != 0) || length != read_len)
   {
+    regfi_add_message(file, "ERROR: Failed to read value pointers"
+		      " while parsing value list at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
@@ -810,6 +836,9 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
       if((ret_val[i] + REGFI_REGF_SIZE > file->file_length)
 	 || ((ret_val[i] & 0xFFFFFFF8) != ret_val[i]))
       {
+	regfi_add_message(file, "ERROR: Invalid value pointer (0x%.8X) found"
+			  " while parsing value list at offset 0x%.8X.", 
+			  ret_val[i], offset);
 	free(ret_val);
 	return NULL;
       }
@@ -905,7 +934,7 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
   if ((nk = regfi_parse_nk(file, offset, max_length, true)) == NULL)
   {
     regfi_add_message(file, "ERROR: Could not load NK record at"
-		      " offset 0x%.8X.\n", offset);
+		      " offset 0x%.8X.", offset);
     return NULL;
   }
 
@@ -936,7 +965,7 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
       if(strict && nk->values == NULL)
       {
 	regfi_add_message(file, "ERROR: Could not load value list"
-			  " for NK record at offset 0x%.8X.\n",
+			  " for NK record at offset 0x%.8X.",
 			  offset);
 	free(nk);
 	return NULL;
@@ -1033,9 +1062,10 @@ static bool regfi_find_root_nk(REGFI_FILE* file, uint32 offset, uint32 hbin_size
  *******************************************************************/
 REGFI_FILE* regfi_open(const char* filename)
 {
+  struct stat sbuf;
   REGFI_FILE* rb;
   REGFI_HBIN* hbin = NULL;
-  uint32 hbin_off;
+  uint32 hbin_off, file_length;
   int fd;
   bool rla;
 
@@ -1046,6 +1076,15 @@ REGFI_FILE* regfi_open(const char* filename)
     return NULL;
   }
   
+  /* Determine file length.  Must be at least big enough 
+   * for the header and one hbin. 
+   */
+  if (fstat(fd, &sbuf) == -1)
+    return NULL;
+  file_length = sbuf.st_size;
+  if(file_length < REGFI_REGF_SIZE+REGFI_HBIN_ALLOC)
+    return NULL;
+
   /* read in an existing file */
   if ((rb = regfi_parse_regf(fd, true)) == NULL) 
   {
@@ -1053,7 +1092,8 @@ REGFI_FILE* regfi_open(const char* filename)
     close(fd);
     return NULL;
   }
-  
+  rb->file_length = file_length;  
+
   rb->hbins = range_list_new();
   if(rb->hbins == NULL)
   {
@@ -1068,8 +1108,10 @@ REGFI_FILE* regfi_open(const char* filename)
   hbin = regfi_parse_hbin(rb, hbin_off, true);
   while(hbin && rla)
   {
-    hbin_off = hbin->file_off + hbin->block_size;
     rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
+    hbin_off = hbin->file_off + hbin->block_size;
+    /*fprintf(stderr, "file_length=%.8X,hbin_off=%.8X,hbin->block_size=%.8X,hbin->next_block=%.8X\n", 
+      file_length, hbin_off, hbin->block_size, hbin->next_block);*/
     hbin = regfi_parse_hbin(rb, hbin_off, true);
   }
 
@@ -1549,25 +1591,13 @@ REGFI_FILE* regfi_parse_regf(int fd, bool strict)
 {
   uint8 file_header[REGFI_REGF_SIZE];
   uint32 length;
-  uint32 file_length;
-  struct stat sbuf;
   REGFI_FILE* ret_val;
-
-  /* Determine file length.  Must be at least big enough 
-   * for the header and one hbin. 
-   */
-  if (fstat(fd, &sbuf) == -1)
-    return NULL;
-  file_length = sbuf.st_size;
-  if(file_length < REGFI_REGF_SIZE+REGFI_HBIN_ALLOC)
-    return NULL;
 
   ret_val = (REGFI_FILE*)zalloc(sizeof(REGFI_FILE));
   if(ret_val == NULL)
     return NULL;
 
   ret_val->fd = fd;
-  ret_val->file_length = file_length;
 
   length = REGFI_REGF_SIZE;
   if((regfi_read(fd, file_header, &length)) != 0 
@@ -1629,16 +1659,23 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
     return NULL;
 
   if(lseek(file->fd, offset, SEEK_SET) == -1)
+  {
+    regfi_add_message(file, "ERROR: Seek failed"
+		      " while parsing hbin at offset 0x%.8X.", offset);
     return NULL;
+  }
 
   length = REGFI_HBIN_HEADER_SIZE;
   if((regfi_read(file->fd, hbin_header, &length) != 0) 
      || length != REGFI_HBIN_HEADER_SIZE)
     return NULL;
 
-
   if(lseek(file->fd, offset, SEEK_SET) == -1)
+  {
+    regfi_add_message(file, "ERROR: Seek failed"
+		      " while parsing hbin at offset 0x%.8X.", offset);
     return NULL;
+  }
 
   if(!(hbin = (REGFI_HBIN*)zalloc(sizeof(REGFI_HBIN)))) 
     return NULL;
@@ -1647,12 +1684,18 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
   memcpy(hbin->magic, hbin_header, 4);
   if(strict && (memcmp(hbin->magic, "hbin", 4) != 0))
   {
+    /* XXX: add this back in when we have configurable verbosity. */
+    /*    regfi_add_message(file, "INFO: Magic number mismatch (%.2X %.2X %.2X %.2X)"
+		      " while parsing hbin at offset 0x%.8X.", hbin->magic[0],
+		      hbin->magic[1], hbin->magic[2], hbin->magic[3], offset); */
     free(hbin);
     return NULL;
   }
 
   hbin->first_hbin_off = IVAL(hbin_header, 0x4);
   hbin->block_size = IVAL(hbin_header, 0x8);
+    /*fprintf(stderr, "hbin->block_size field => %.8X\n", IVAL(hbin_header, 0x8));*/
+  /*  hbin->block_size = IVAL(hbin_header, 0x8);*/
   /* this should be the same thing as hbin->block_size but just in case */
   hbin->next_block = IVAL(hbin_header, 0x1C);
 
@@ -1666,6 +1709,9 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
   if((offset + hbin->block_size > file->file_length)
      || (hbin->block_size & 0xFFFFF000) != hbin->block_size)
   {
+    regfi_add_message(file, "ERROR: The hbin offset is not aligned"
+		      " or runs off the end of the file"
+		      " while parsing hbin at offset 0x%.8X.", offset);
     free(hbin);
     return NULL;
   }
@@ -1688,13 +1734,17 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
 
   if(!regfi_parse_cell(file->fd, offset, nk_header, REGFI_NK_MIN_LENGTH,
 		       &cell_length, &unalloc))
-     return NULL;
- 
+  {
+    regfi_add_message(file, "ERROR: Could not parse cell header"
+		      " while parsing NK record at offset 0x%.8X.", offset);
+    return NULL;
+  }
+
   /* A bit of validation before bothering to allocate memory */
   if((nk_header[0x0] != 'n') || (nk_header[0x1] != 'k'))
   {
     regfi_add_message(file, "ERROR: Magic number mismatch in parsing NK record"
-		      " at offset 0x%.8X.\n", offset);
+		      " at offset 0x%.8X.", offset);
     return NULL;
   }
 
@@ -1702,7 +1752,7 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
   if(ret_val == NULL)
   {
     regfi_add_message(file, "ERROR: Failed to allocate memory while"
-		      " parsing NK record at offset 0x%.8X.\n", offset);
+		      " parsing NK record at offset 0x%.8X.", offset);
     return NULL;
   }
 
@@ -1715,7 +1765,7 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
      || (strict && ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8)))
   {
     regfi_add_message(file, "ERROR: A length check failed while parsing"
-		      " NK record at offset 0x%.8X.\n", offset);
+		      " NK record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
@@ -1727,13 +1777,13 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
      && (ret_val->key_type != REGFI_NK_TYPE_ROOTKEY1) 
      && (ret_val->key_type != REGFI_NK_TYPE_ROOTKEY2)
      && (ret_val->key_type != REGFI_NK_TYPE_LINKKEY)
-     && (ret_val->key_type != REGFI_NK_TYPE_UNKNOWN1))
+     && (ret_val->key_type != REGFI_NK_TYPE_UNKNOWN1)
+     && (ret_val->key_type != REGFI_NK_TYPE_UNKNOWN2)
+     && (ret_val->key_type != REGFI_NK_TYPE_UNKNOWN3))
   {
-    regfi_add_message(file, "ERROR: Unknown key type (0x%.4X) while parsing"
-		      " NK record at offset 0x%.8X.\n", ret_val->key_type,
+    regfi_add_message(file, "WARN: Unknown key type (0x%.4X) while parsing"
+		      " NK record at offset 0x%.8X.", ret_val->key_type,
 		      offset);
-    free(ret_val);
-    return NULL;
   }
 
   ret_val->mtime.low = IVAL(nk_header, 0x4);
@@ -1774,6 +1824,8 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
   {
     if(strict)
     {
+      regfi_add_message(file, "ERROR: Contents too large for cell"
+			" while parsing NK record at offset 0x%.8X.", offset);
       free(ret_val);
       return NULL;
     }
@@ -1804,6 +1856,8 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
   if((regfi_read(file->fd, (uint8*)ret_val->keyname, &length) != 0)
      || length != ret_val->name_length)
   {
+    regfi_add_message(file, "ERROR: Failed to read key name"
+		      " while parsing NK record at offset 0x%.8X.", offset);
     free(ret_val->keyname);
     free(ret_val);
     return NULL;
@@ -1822,13 +1876,23 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
 				class_maxsize, strict);
     }
     else
+    {
       ret_val->classname = NULL;
-    /*
+      regfi_add_message(file, "WARN: Could not find hbin for class name"
+			" while parsing NK record at offset 0x%.8X.", offset);
+    }
+    /* XXX: Should add this back and make it more strict?
     if(strict && ret_val->classname == NULL)
 	return NULL;
     */
   }
-
+  /*
+if(ret_val->key_type == 0x0000 || ret_val->key_type == 0x4020)
+{
+  fprintf(stderr, "INFO: keyname=%s,classname=%s,unalloc=%d,num_subkeys=%d,num_values=%d\n",
+	  ret_val->keyname,ret_val->classname,unalloc,ret_val->num_subkeys,ret_val->num_values);
+}
+  */
   return ret_val;
 }
 
@@ -1845,13 +1909,23 @@ char* regfi_parse_classname(REGFI_FILE* file, uint32 offset,
      && offset == (offset & 0xFFFFFFF8))
   {
     if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
+    {
+      regfi_add_message(file, "ERROR: Could not parse cell header"
+			" while parsing class name at offset 0x%.8X.", offset);
 	return NULL;
+    }
 
     if((cell_length & 0xFFFFFFF8) != cell_length)
+    {
+      regfi_add_message(file, "ERROR: Cell length not a multiple of 8"
+			" while parsing class name at offset 0x%.8X.", offset);
       return NULL;
-    
+    }
+
     if(cell_length > max_size)
     {
+      regfi_add_message(file, "WARN: Cell stretches past hbin boundary"
+			" while parsing class name at offset 0x%.8X.", offset);
       if(strict)
 	return NULL;
       cell_length = max_size;
@@ -1859,6 +1933,8 @@ char* regfi_parse_classname(REGFI_FILE* file, uint32 offset,
 
     if((cell_length - 4) < *name_length)
     {
+      regfi_add_message(file, "WARN: Class name is larger than cell_length"
+			" while parsing class name at offset 0x%.8X.", offset);
       if(strict)
 	return NULL;
       *name_length = cell_length - 4;
@@ -1871,11 +1947,11 @@ char* regfi_parse_classname(REGFI_FILE* file, uint32 offset,
       if((regfi_read(file->fd, (uint8*)ret_val, &length) != 0)
 	 || length != *name_length)
       {
+	regfi_add_message(file, "ERROR: Could not read class name"
+			  " while parsing class name at offset 0x%.8X.", offset);
 	free(ret_val);
 	return NULL;
       }
-
-      /*printf("==> cell_length=%d, classname_length=%d, max_bytes_subkeyclassname=%d\n", cell_length, ret_val->classname_length, ret_val->max_bytes_subkeyclassname);*/
     }
   }
 
@@ -1897,7 +1973,11 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
 
   if(!regfi_parse_cell(file->fd, offset, vk_header, REGFI_VK_MIN_LENGTH,
 		       &cell_length, &unalloc))
+  {
+    regfi_add_message(file, "ERROR: Could not parse cell header"
+		      " while parsing VK record at offset 0x%.8X.", offset);
     return NULL;
+  }
 
   ret_val = (REGFI_VK_REC*)zalloc(sizeof(REGFI_VK_REC));
   if(ret_val == NULL)
@@ -1911,6 +1991,8 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
   if((ret_val->cell_size < REGFI_VK_MIN_LENGTH) 
      || ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8))
   {
+    regfi_add_message(file, "ERROR: Invalid cell size encountered"
+		      " while parsing VK record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
@@ -1923,6 +2005,8 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
      *      often have this (and the name length) overwritten with
      *      0xFFFF. 
      */
+    regfi_add_message(file, "ERROR: Magic number mismatch"
+		      " while parsing VK record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
   }
@@ -1940,6 +2024,8 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
   {
     if(ret_val->name_length + REGFI_VK_MIN_LENGTH + 4 > ret_val->cell_size)
     {
+      regfi_add_message(file, "WARN: Name too long for remaining cell space"
+			" while parsing VK record at offset 0x%.8X.", offset);
       if(strict)
       {
 	free(ret_val);
@@ -1965,6 +2051,8 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
     if((regfi_read(file->fd, (uint8*)ret_val->valuename, &length) != 0)
        || length != ret_val->name_length)
     {
+      regfi_add_message(file, "ERROR: Could not read value name"
+			" while parsing VK record at offset 0x%.8X.", offset);
       free(ret_val->valuename);
       free(ret_val);
       return NULL;
@@ -2003,14 +2091,17 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
 	
       }
       else
+      {
+	regfi_add_message(file, "WARN: Could not find hbin for data"
+			  " while parsing VK record at offset 0x%.8X.", offset);
 	ret_val->data = NULL;
+      }
     }
 
-    if(strict && (ret_val->data == NULL))
+    if(ret_val->data == NULL)
     {
-      free(ret_val->valuename);
-      free(ret_val);
-      return NULL;
+      regfi_add_message(file, "WARN: Could not parse data record"
+			" while parsing VK record at offset 0x%.8X.", offset);
     }
   }
 
@@ -2026,12 +2117,17 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
   uint8 i;
   bool unalloc;
 
-  /* The data is stored in the offset if the size <= 4 */
+  /* The data is typically stored in the offset if the size <= 4 */
   if (length & REGFI_VK_DATA_IN_OFFSET)
   {
     length = length & ~REGFI_VK_DATA_IN_OFFSET;
     if(length > 4)
+    {
+      regfi_add_message(file, "ERROR: Data in offset but length > 4"
+			" while parsing data record at offset 0x%.8X.", 
+			offset);
       return NULL;
+    }
 
     if((ret_val = (uint8*)zalloc(sizeof(uint8)*length)) == NULL)
       return NULL;
@@ -2043,13 +2139,25 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
   {
     if(!regfi_parse_cell(file->fd, offset, NULL, 0,
 			 &cell_length, &unalloc))
+    {
+      regfi_add_message(file, "ERROR: Could not parse cell while"
+			" parsing data record at offset 0x%.8X.", offset);
       return NULL;
+    }
 
     if((cell_length & 0xFFFFFFF8) != cell_length)
+    {
+      regfi_add_message(file, "ERROR: Cell length not multiple of 8"
+			" while parsing data record at offset 0x%.8X.",
+			offset);
       return NULL;
+    }
 
     if(cell_length > max_size)
     {
+      regfi_add_message(file, "WARN: Cell extends past hbin boundary"
+			" while parsing data record at offset 0x%.8X.", 
+			offset);
       if(strict)
 	return NULL;
       else
@@ -2062,6 +2170,10 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
        *      Not sure the cause, but the data length values are very large,
        *      such as 53392.
        */
+      regfi_add_message(file, "WARN: Data length (0x%.8X) larger than"
+			" remaining cell length (0x%.8X)"
+			" while parsing data record at offset 0x%.8X.", 
+			length, cell_length - 4, offset);
       if(strict)
 	return NULL;
       else
@@ -2075,6 +2187,8 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
     if((regfi_read(file->fd, ret_val, &read_length) != 0) 
        || read_length != length)
     {
+      regfi_add_message(file, "ERROR: Could not read data block while"
+			" parsing data record at offset 0x%.8X.", offset);
       free(ret_val);
       return NULL;
     }

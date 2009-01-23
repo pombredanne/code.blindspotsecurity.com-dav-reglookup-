@@ -110,14 +110,37 @@
 #define REGFI_VK_DATA_IN_OFFSET    0x80000000
 #define REGFI_VK_MAX_DATA_LENGTH   1024*1024
 
+
 /* NK record types */
+/* XXX: This is starting to look like this is a flags field.  
+ *      Need to decipher the meaning of each flag.
+ */
 #define REGFI_NK_TYPE_LINKKEY      0x0010
 #define REGFI_NK_TYPE_NORMALKEY    0x0020
  /* XXX: Unknown key type that shows up in Vista registries */
 #define REGFI_NK_TYPE_UNKNOWN1     0x1020
+ /* XXX: Unknown key types that shows up in W2K3 registries */
+#define REGFI_NK_TYPE_UNKNOWN2     0x4020
+#define REGFI_NK_TYPE_UNKNOWN3     0x0000  /* XXX: This type seems to have UTF-16 names!!! */
 #define REGFI_NK_TYPE_ROOTKEY1     0x002c
  /* XXX: Unknown root key type that shows up in Vista registries */
 #define REGFI_NK_TYPE_ROOTKEY2     0x00ac
+
+#if 0
+/* Initial hypothesis of NK flags: */
+#define REGFI_NK_FLAG_LINK         0x0010
+/* The name will be in ASCII if this next bit is set, otherwise UTF-16LE */
+#define REGFI_NK_FLAG_ASCIINAME    0x0020
+/* These next two combine to form the "c" on both known root key types */
+#define REGFI_NK_FLAG_ROOT1        0x0008
+#define REGFI_NK_FLAG_ROOT2        0x0004
+/* These next two show up on normal-seeming keys in Vista and W2K3 registries */
+#define REGFI_NK_FLAG_UNKNOWN1     0x4000
+#define REGFI_NK_FLAG_UNKNOWN2     0x1000
+/* This next one shows up on root keys in some Vista "software" registries */
+#define REGFI_NK_FLAG_UNKNOWN3     0x0080
+#endif
+
 
 
 /* HBIN block */

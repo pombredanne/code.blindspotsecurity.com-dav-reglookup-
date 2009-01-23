@@ -66,7 +66,7 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
    */
   if(size > REGFI_VK_MAX_DATA_LENGTH)
   {
-    fprintf(stderr, "WARNING: value data size %d larger than "
+    fprintf(stderr, "WARN: value data size %d larger than "
 	    "%d, truncating...\n", size, REGFI_VK_MAX_DATA_LENGTH);
     size = REGFI_VK_MAX_DATA_LENGTH;
   }
@@ -89,10 +89,10 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
   if(quoted_value == NULL)
   {
     if(conv_error == NULL)
-      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
+      fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
 	      "Memory allocation failure likely.\n", prefix, quoted_name);
     else if(print_verbose)
-      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
+      fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
 	      "Returned error: %s\n", prefix, quoted_name, conv_error);
   }
   else if(conv_error != NULL && print_verbose)
@@ -128,11 +128,6 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
 }
 
 
-
-/* XXX: Each chunk must be unquoted after it is split out. 
- *      Quoting syntax may need to be standardized and pushed into the API 
- *      to deal with this issue and others.
- */
 char** splitPath(const char* s)
 {
   char** ret_val;
@@ -199,9 +194,6 @@ void freePath(char** path)
 
 
 /* Returns a quoted path from an iterator's stack */
-/* XXX: Some way should be found to integrate this into regfi's API 
- *      The problem is that the escaping is sorta reglookup-specific.
- */
 char* iter2Path(REGFI_ITERATOR* i)
 {
   const REGFI_ITER_POSITION* cur;
@@ -272,21 +264,22 @@ char* iter2Path(REGFI_ITERATOR* i)
 }
 
 
-void printValueList(REGFI_ITERATOR* i, char* prefix)
+void printValueList(REGFI_ITERATOR* iter, char* prefix)
 {
   const REGFI_VK_REC* value;
 
-  value = regfi_iterator_first_value(i);
+  value = regfi_iterator_first_value(iter);
   while(value != NULL)
   {
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(value, prefix);
-    value = regfi_iterator_next_value(i);
+    value = regfi_iterator_next_value(iter);
+    printMsgs(iter);
   }
 }
 
 
-void printKey(REGFI_ITERATOR* i, char* full_path)
+void printKey(REGFI_ITERATOR* iter, char* full_path)
 {
   static char empty_str[1] = "";
   char* owner = NULL;
@@ -299,13 +292,13 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
   const REGFI_SK_REC* sk;
-  const REGFI_NK_REC* k = regfi_iterator_cur_key(i);
+  const REGFI_NK_REC* k = regfi_iterator_cur_key(iter);
 
   *tmp_time = nt_time_to_unix(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
 
-  if(print_security && (sk=regfi_iterator_cur_sk(i)))
+  if(print_security && (sk=regfi_iterator_cur_sk(iter)))
   {
     owner = regfi_get_owner(sk->sec_desc);
     group = regfi_get_group(sk->sec_desc);
@@ -339,7 +332,7 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
       else if (error_msg != NULL)
       {
 	if(print_verbose)
-	  fprintf(stderr, "WARNING: While converting classname"
+	  fprintf(stderr, "WARN: While converting classname"
 		  " for key '%s': %s.\n", full_path, error_msg);
 	free(error_msg);
       }
@@ -347,6 +340,7 @@ void printKey(REGFI_ITERATOR* i, char* full_path)
     else
       quoted_classname = empty_str;
 
+    printMsgs(iter);
     printf("%s,KEY,,%s,%s,%s,%s,%s,%s\n", full_path, mtime, 
 	   owner, group, sacl, dacl, quoted_classname);
 
@@ -372,15 +366,13 @@ void printKeyTree(REGFI_ITERATOR* iter)
   const REGFI_NK_REC* cur = NULL;
   const REGFI_NK_REC* sub = NULL;
   char* path = NULL;
-  char* msgs = NULL;
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
 
   root = cur = regfi_iterator_cur_key(iter);
   sub = regfi_iterator_first_subkey(iter);
-  msgs = regfi_get_messages(iter->f);
-  if(msgs != NULL)
-    fprintf(stderr, "%s", msgs);
+  printMsgs(iter);
+
   if(root == NULL)
     bailOut(EX_DATAERR, "ERROR: root cannot be NULL.\n");
   
@@ -391,7 +383,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
       path = iter2Path(iter);
       if(path == NULL)
 	bailOut(EX_OSERR, "ERROR: Could not construct iterator's path.\n");
-      
+
       if(!type_filter_enabled || (key_type == type_filter))
 	printKey(iter, path);
       if(!type_filter_enabled || (key_type != type_filter))
@@ -406,12 +398,18 @@ void printKeyTree(REGFI_ITERATOR* iter)
       {
 	/* We're done with this sub-tree, going up and hitting other branches. */
 	if(!regfi_iterator_up(iter))
+	{
+	  printMsgs(iter);
 	  bailOut(EX_DATAERR, "ERROR: could not traverse iterator upward.\n");
-	
+	}
+
 	cur = regfi_iterator_cur_key(iter);
 	if(cur == NULL)
+	{
+	  printMsgs(iter);
 	  bailOut(EX_DATAERR, "ERROR: unexpected NULL for key.\n");
-	
+	}
+
 	sub = regfi_iterator_next_subkey(iter);
       }
       print_this = false;
@@ -421,12 +419,16 @@ void printKeyTree(REGFI_ITERATOR* iter)
        * Let's move down and print this first sub-tree out. 
        */
       if(!regfi_iterator_down(iter))
+      {
+	printMsgs(iter);
 	bailOut(EX_DATAERR, "ERROR: could not traverse iterator downward.\n");
+      }
 
       cur = sub;
       sub = regfi_iterator_first_subkey(iter);
       print_this = true;
     }
+    printMsgs(iter);
   } while(!((cur == root) && (sub == NULL)));
 
   if(print_verbose)
@@ -478,6 +480,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
 
   if(!regfi_iterator_walk_path(iter, tmp_path))
   {
+    printMsgs(iter);
     free(tmp_path);
     return 0;
   }
@@ -488,6 +491,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
       fprintf(stderr, "VERBOSE: Found final path element as value.\n");
 
     value = regfi_iterator_cur_value(iter);
+    printMsgs(iter);
     tmp_path_joined = iter2Path(iter);
 
     if((value == NULL) || (tmp_path_joined == NULL))
@@ -502,14 +506,19 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   }
   else if(regfi_iterator_find_subkey(iter, path[i]))
   {
+    printMsgs(iter);
     if(print_verbose)
       fprintf(stderr, "VERBOSE: Found final path element as key.\n");
 
     if(!regfi_iterator_down(iter))
+    {
+      printMsgs(iter);
       bailOut(EX_DATAERR, "ERROR: Unexpected error on traversing path filter key.\n");
+    }
 
     return 2;
   }
+  printMsgs(iter);
 
   if(print_verbose)
     fprintf(stderr, "VERBOSE: Could not find last element of path.\n");
@@ -624,10 +633,11 @@ int main(int argc, char** argv)
   if(path != NULL)
   {
     retr_path_ret = retrievePath(iter, path);
+    printMsgs(iter);
     freePath(path);
 
     if(retr_path_ret == 0)
-      fprintf(stderr, "WARNING: specified path not found.\n");
+      fprintf(stderr, "WARN: specified path not found.\n");
     else if (retr_path_ret == 2)
       printKeyTree(iter);
     else if(retr_path_ret < 0)
