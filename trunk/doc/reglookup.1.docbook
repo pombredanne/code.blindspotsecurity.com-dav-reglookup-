@@ -136,7 +136,7 @@
         </term>
         <listitem>
 	  <para>
-	    Verbose output. (Currently does little to nothing.)
+	    Verbose output.
 	  </para>
         </listitem>
       </varlistentry>
@@ -295,9 +295,6 @@
       platforms, but a comprehensive test suite has not yet been developed.
       (Please report results to the development mailing list if you encounter
        any bugs.  Sample registry files and/or patches are greatly appreciated.)
-    </para>
-    <para>
-      Verbose output is not working.
     </para>
     <para>
       The SID conversions haven't been carefully checked for accuracy.

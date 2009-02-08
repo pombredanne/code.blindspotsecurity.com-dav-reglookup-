@@ -37,14 +37,21 @@ void bailOut(int code, char* message)
   exit(code);
 }
 
-void printMsgs(REGFI_ITERATOR* iter)
+void printMsgs(REGFI_FILE* f)
 {
-  char* msgs = regfi_get_messages(iter->f);
+  char* msgs = regfi_get_messages(f);
   if(msgs != NULL)
   {
     fprintf(stderr, "%s", msgs);
     free(msgs);
   }
+}
+
+void clearMsgs(REGFI_FILE* f)
+{
+  char* msgs = regfi_get_messages(f);
+  if(msgs != NULL)
+    free(msgs);
 }
 
 

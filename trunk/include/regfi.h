@@ -52,8 +52,12 @@
 #include "lru_cache.h"
 
 /******************************************************************************/
-/* Macros */
- 
+
+/* regfi library error message types */
+#define REGFI_MSG_INFO  0x0001
+#define REGFI_MSG_WARN  0x0004
+#define REGFI_MSG_ERROR 0x0010
+
 /* Registry data types */
 #define REG_NONE                       0
 #define REG_SZ		               1
@@ -280,16 +284,20 @@ typedef struct
 {
   /* Run-time information */
   /************************/
-  int fd;	  /* file descriptor */
+  /* file descriptor */
+  int fd;
 
-  /* Experimental hbin lists */
+  /* For sanity checking (not part of the registry header) */
+  uint32 file_length;
+
+  /* Metadata about hbins */
   range_list* hbins;
 
   /* Error/warning/info messages returned by lower layer functions */
   char* last_message;
 
-  /* For sanity checking (not part of the registry header) */
-  uint32 file_length;
+  /* Mask for error message types that will be stored. */
+  uint16 msg_mask;
 
 
   /* Data parsed from file header */
@@ -358,6 +366,7 @@ int                   regfi_close(REGFI_FILE* r);
  *   A newly allocated char* which must be free()d by the caller.
  */
 char*                 regfi_get_messages(REGFI_FILE* file);
+void                  regfi_set_message_mask(REGFI_FILE* file, uint16 mask);
 
 REGFI_ITERATOR*       regfi_iterator_new(REGFI_FILE* fh);
 void                  regfi_iterator_free(REGFI_ITERATOR* i);
@@ -457,5 +466,6 @@ char*                 regfi_get_group(WINSEC_DESC* sec_desc);
 REGFI_SUBKEY_LIST*    regfi_merge_subkeylists(uint16 num_lists, 
 					      REGFI_SUBKEY_LIST** lists,
 					      bool strict);
-void                  regfi_add_message(REGFI_FILE* file, const char* fmt, ...);
+void                  regfi_add_message(REGFI_FILE* file, uint16 msg_type, 
+					const char* fmt, ...);
 #endif	/* _REGFI_H */

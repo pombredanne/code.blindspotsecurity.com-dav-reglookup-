@@ -1,7 +1,7 @@
 /*
  * This program attempts to recover deleted data structures in a registry hive.
  *
- * Copyright (C) 2008 Timothy D. Morgan
+ * Copyright (C) 2008-2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -86,7 +86,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
       bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
 
-    fprintf(stderr, "WARNING: NULL key name in NK record at offset %.8X.\n",
+    fprintf(stderr, "WARN: NULL key name in NK record at offset %.8X.\n",
 	    nk->offset);
   }
 
@@ -124,7 +124,7 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
    */
   if(size > REGFI_VK_MAX_DATA_LENGTH)
   {
-    fprintf(stderr, "WARNING: value data size %d larger than "
+    fprintf(stderr, "WARN: value data size %d larger than "
 	    "%d, truncating...\n", size, REGFI_VK_MAX_DATA_LENGTH);
     size = REGFI_VK_MAX_DATA_LENGTH;
   }
@@ -152,15 +152,15 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
     quoted_value[0] = '\0';
 
     if(conv_error == NULL)
-      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
+      fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
 	      "Memory allocation failure likely.\n", prefix, quoted_name);
     else if(print_verbose)
-      fprintf(stderr, "WARNING: Could not quote value for '%s/%s'.  "
+      fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
 	      "Returned error: %s\n", prefix, quoted_name, conv_error);
   }
   /* XXX: should these always be printed? */
   else if(conv_error != NULL && print_verbose)
-    fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
+    fprintf(stderr, "INFO: While quoting value for '%s/%s', "
 	    "warning returned: %s\n", prefix, quoted_name, conv_error);
 
 
@@ -278,6 +278,8 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	- (virt_offset+REGFI_REGF_SIZE);
       cur_ancestor = regfi_parse_nk(f, virt_offset+REGFI_REGF_SIZE, 
 				    max_length, true);
+      printMsgs(f);
+
       if(cur_ancestor == NULL)
 	virt_offset = REGFI_OFFSET_NONE;
       else
@@ -425,12 +427,15 @@ int extractKeys(REGFI_FILE* f,
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
+    printMsgs(f);
     cur_elem = range_list_get(unalloc_cells, i);
     for(j=0; cur_elem->length > REGFI_NK_MIN_LENGTH 
 	  && j <= cur_elem->length-REGFI_NK_MIN_LENGTH; j+=8)
     {
       key = regfi_parse_nk(f, cur_elem->offset+j,
 			   cur_elem->length-j, false);
+      printMsgs(f);
+
       if(key != NULL)
       {
 	if(!range_list_add(unalloc_keys, key->offset, 
@@ -586,11 +591,14 @@ int extractValues(REGFI_FILE* f,
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
+    printMsgs(f);
     cur_elem = range_list_get(unalloc_cells, i);
     for(j=0; j <= cur_elem->length; j+=8)
     {
       vk = regfi_parse_vk(f, cur_elem->offset+j, 
 			   cur_elem->length-j, false);
+      printMsgs(f);
+
       if(vk != NULL)
       {
 	if(!range_list_add(unalloc_values, vk->offset,
@@ -653,11 +661,14 @@ int extractSKs(REGFI_FILE* f,
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
+    printMsgs(f);
     cur_elem = range_list_get(unalloc_cells, i);
     for(j=0; j <= cur_elem->length; j+=8)
     {
       sk = regfi_parse_sk(f, cur_elem->offset+j, 
 			  cur_elem->length-j, false);
+      printMsgs(f);
+
       if(sk != NULL)
       {
 	if(!range_list_add(unalloc_sks, sk->offset,
@@ -740,6 +751,10 @@ int main(int argc, char** argv)
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
     bailOut(EX_NOINPUT, "");
   }
+  if(print_verbose)
+    regfi_set_message_mask(f, REGFI_MSG_ERROR|REGFI_MSG_WARN|REGFI_MSG_INFO);
+  else
+    regfi_set_message_mask(f, REGFI_MSG_ERROR);
 
   if(print_header)
     printf("OFFSET,REC_LENGTH,REC_TYPE,PATH,NAME,"
