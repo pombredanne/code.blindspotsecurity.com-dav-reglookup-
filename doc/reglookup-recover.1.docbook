@@ -25,7 +25,6 @@
     <para>
         reglookup-recover attempts to scour a Windows registry hive for 
         deleted data structures and outputs those found in a CSV-like format.
-        print them out to stdout in a CSV-like format.
     </para>
   </refsect1>
 
@@ -42,7 +41,7 @@
         </term>
         <listitem>
 	  <para>
-	    Verbose output. (Currently does little to nothing.)
+	    Verbose output.
 	  </para>
         </listitem>
       </varlistentry>

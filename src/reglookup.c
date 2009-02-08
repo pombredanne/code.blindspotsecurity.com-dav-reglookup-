@@ -85,19 +85,28 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
     quoted_name[0] = '\0';
   }
 
-  quoted_value = data_to_ascii(vk->data, size, vk->type, &conv_error);
-  if(quoted_value == NULL)
+  if(vk->data == NULL)
   {
-    if(conv_error == NULL)
-      fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
-	      "Memory allocation failure likely.\n", prefix, quoted_name);
-    else if(print_verbose)
-      fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
-	      "Returned error: %s\n", prefix, quoted_name, conv_error);
+    if(print_verbose)
+      fprintf(stderr, "INFO: While quoting value for '%s/%s', "
+	      "data pointer was NULL.\n", prefix, quoted_name);
   }
-  else if(conv_error != NULL && print_verbose)
-    fprintf(stderr, "VERBOSE: While quoting value for '%s/%s', "
-	    "warning returned: %s\n", prefix, quoted_name, conv_error);
+  else
+  {
+    quoted_value = data_to_ascii(vk->data, size, vk->type, &conv_error);
+    if(quoted_value == NULL)
+    {
+      if(conv_error == NULL)
+	fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
+		"Memory allocation failure likely.\n", prefix, quoted_name);
+      else
+	fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
+		"Returned error: %s\n", prefix, quoted_name, conv_error);
+    }
+    else if(conv_error != NULL && print_verbose)
+      fprintf(stderr, "INFO: While quoting value for '%s/%s', "
+	      "warning returned: %s\n", prefix, quoted_name, conv_error);
+  }
 
   str_type = regfi_type_val2str(vk->type);
   if(print_security)
@@ -274,7 +283,7 @@ void printValueList(REGFI_ITERATOR* iter, char* prefix)
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(value, prefix);
     value = regfi_iterator_next_value(iter);
-    printMsgs(iter);
+    printMsgs(iter->f);
   }
 }
 
@@ -332,7 +341,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
       else if (error_msg != NULL)
       {
 	if(print_verbose)
-	  fprintf(stderr, "WARN: While converting classname"
+	  fprintf(stderr, "INFO: While converting classname"
 		  " for key '%s': %s.\n", full_path, error_msg);
 	free(error_msg);
       }
@@ -340,7 +349,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
     else
       quoted_classname = empty_str;
 
-    printMsgs(iter);
+    printMsgs(iter->f);
     printf("%s,KEY,,%s,%s,%s,%s,%s,%s\n", full_path, mtime, 
 	   owner, group, sacl, dacl, quoted_classname);
 
@@ -371,7 +380,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
 
   root = cur = regfi_iterator_cur_key(iter);
   sub = regfi_iterator_first_subkey(iter);
-  printMsgs(iter);
+  printMsgs(iter->f);
 
   if(root == NULL)
     bailOut(EX_DATAERR, "ERROR: root cannot be NULL.\n");
@@ -399,14 +408,14 @@ void printKeyTree(REGFI_ITERATOR* iter)
 	/* We're done with this sub-tree, going up and hitting other branches. */
 	if(!regfi_iterator_up(iter))
 	{
-	  printMsgs(iter);
+	  printMsgs(iter->f);
 	  bailOut(EX_DATAERR, "ERROR: could not traverse iterator upward.\n");
 	}
 
 	cur = regfi_iterator_cur_key(iter);
 	if(cur == NULL)
 	{
-	  printMsgs(iter);
+	  printMsgs(iter->f);
 	  bailOut(EX_DATAERR, "ERROR: unexpected NULL for key.\n");
 	}
 
@@ -420,7 +429,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
        */
       if(!regfi_iterator_down(iter))
       {
-	printMsgs(iter);
+	printMsgs(iter->f);
 	bailOut(EX_DATAERR, "ERROR: could not traverse iterator downward.\n");
       }
 
@@ -428,11 +437,11 @@ void printKeyTree(REGFI_ITERATOR* iter)
       sub = regfi_iterator_first_subkey(iter);
       print_this = true;
     }
-    printMsgs(iter);
+    printMsgs(iter->f);
   } while(!((cur == root) && (sub == NULL)));
 
   if(print_verbose)
-    fprintf(stderr, "VERBOSE: Finished printing key tree.\n");
+    fprintf(stderr, "INFO: Finished printing key tree.\n");
 }
 
 
@@ -466,21 +475,21 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   tmp_path[i] = NULL;
 
   if(print_verbose)
-    fprintf(stderr, "VERBOSE: Attempting to retrieve specified path: %s\n",
+    fprintf(stderr, "INFO: Attempting to retrieve specified path: %s\n",
 	    path_filter);
 
   /* Special check for '/' path filter */
   if(path[0] == NULL)
   {
     if(print_verbose)
-      fprintf(stderr, "VERBOSE: Found final path element as root key.\n");
+      fprintf(stderr, "INFO: Found final path element as root key.\n");
     free(tmp_path);
     return 2;
   }
 
   if(!regfi_iterator_walk_path(iter, tmp_path))
   {
-    printMsgs(iter);
+    printMsgs(iter->f);
     free(tmp_path);
     return 0;
   }
@@ -488,10 +497,10 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   if(regfi_iterator_find_value(iter, path[i]))
   {
     if(print_verbose)
-      fprintf(stderr, "VERBOSE: Found final path element as value.\n");
+      fprintf(stderr, "INFO: Found final path element as value.\n");
 
     value = regfi_iterator_cur_value(iter);
-    printMsgs(iter);
+    printMsgs(iter->f);
     tmp_path_joined = iter2Path(iter);
 
     if((value == NULL) || (tmp_path_joined == NULL))
@@ -506,22 +515,22 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   }
   else if(regfi_iterator_find_subkey(iter, path[i]))
   {
-    printMsgs(iter);
+    printMsgs(iter->f);
     if(print_verbose)
-      fprintf(stderr, "VERBOSE: Found final path element as key.\n");
+      fprintf(stderr, "INFO: Found final path element as key.\n");
 
     if(!regfi_iterator_down(iter))
     {
-      printMsgs(iter);
+      printMsgs(iter->f);
       bailOut(EX_DATAERR, "ERROR: Unexpected error on traversing path filter key.\n");
     }
 
     return 2;
   }
-  printMsgs(iter);
+  printMsgs(iter->f);
 
   if(print_verbose)
-    fprintf(stderr, "VERBOSE: Could not find last element of path.\n");
+    fprintf(stderr, "INFO: Could not find last element of path.\n");
 
   return 0;
 }
@@ -615,6 +624,9 @@ int main(int argc, char** argv)
     bailOut(EX_NOINPUT, "");
   }
 
+  if(print_verbose)
+    regfi_set_message_mask(f, REGFI_MSG_INFO|REGFI_MSG_WARN|REGFI_MSG_ERROR);
+
   iter = regfi_iterator_new(f);
   if(iter == NULL)
     bailOut(EX_OSERR, "ERROR: Couldn't create registry iterator.\n");
@@ -633,7 +645,7 @@ int main(int argc, char** argv)
   if(path != NULL)
   {
     retr_path_ret = retrievePath(iter, path);
-    printMsgs(iter);
+    printMsgs(iter->f);
     freePath(path);
 
     if(retr_path_ret == 0)
