@@ -135,6 +135,7 @@
 
 #if 0
 /* Initial hypothesis of NK flags: */
+/***********************************/
 #define REGFI_NK_FLAG_LINK         0x0010
 /* The name will be in ASCII if this next bit is set, otherwise UTF-16LE */
 #define REGFI_NK_FLAG_ASCIINAME    0x0020
@@ -331,6 +332,9 @@ typedef struct
 				 * (XOR of bytes 0x0000 - 0x01FB) 
 				 */
   
+  /* XXX: Some of these we have some clues about (major/minor version, etc). 
+   *      Should verify and update names accordingly. 
+   */
   /* unknown data structure values */
   uint32 unknown1;
   uint32 unknown2;
@@ -342,7 +346,11 @@ typedef struct
 } REGFI_FILE;
 
 
-
+/* XXX: Should move all caching (SK records, HBINs, NKs, etc) to a single
+ *      structure, probably REGFI_FILE.  Once key caching is in place, 
+ *      convert key_positions stack to store just key offsets rather than
+ *      whole keys.
+ */
 typedef struct 
 {
   REGFI_FILE* f;

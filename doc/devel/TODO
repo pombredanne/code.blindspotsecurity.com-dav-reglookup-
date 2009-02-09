@@ -28,16 +28,19 @@ things you could look into:
    to be decent, UTF-8 output would be nice.
 
  - The interface between reglookup.c and regfi.c is much better than it
-   used to be, but the iter2Stack function needs to be moved into the 
-   library, which means the \xQQ quoting syntax will have to go with it.
-   This syntax will need to be more carefully documented if it's going 
-   to be a part of the library.
+   used to be, but the parsing of data objects needs to be moved into the
+   library.  The quoting syntax should stay in reglookup/reglookup-recover
+   but the basic parsing of data types into proper structures should 
+   happen in the library so that they are accessible to other users of the
+   library.
 
- - NK/VK/SK record caching.  Right now, HBINs and perhaps SK records are 
+ - NK/VK/SK record caching.  Right now, HBIN metadata and SK records are 
    cached, but it's pretty haphazard, and NK/VK records are repeatedly
-   re-parsed.  A generic caching library should be introduced which can
-   cache many of these records with a specific memory limit in mind.  
-   I think this will speed things up greatly.
+   re-parsed.  A generic caching library has been introduced but needs to 
+   be applied to NK records at a minimum.  Eventually, VK records and 
+   data should also be cached separately and only be parsed when needed, 
+   rather than when a key is loaded up front.  Caching also needs 
+   configurable object limits, preferrably configurable at build-time.
 
  - It might be nice to have a way to filter results by security 
    descriptor information.  Maybe by MTIME as well.
@@ -46,19 +49,17 @@ things you could look into:
    documented.  Also, function contracts should be added to the 
    lower-level functions of regfi.c.
 
- - The stuff in smb_deps.h and smb_deps.c needs to be cleaned up.  The
-   eventual goal is to have it all either integrated into regfi, or to
-   be eliminated, or broken out into small supporting libraries, as
-   necessary.  It is currently just a jumble of old Samba code that I
-   haven't decided where to put yet.
+ - The smb_deps.h and smb_deps.c content is almost eliminated.  Just need
+   to integrate parts that are being kept into regfi or other modules.
 
- - At least one user reported that they use reglookup on a Windows host 
-   through Cygwin, but after version 0.3.0 came out, the dependency on
-   libiconv caused that to break.  libiconv seems to be a portability
-   issue on other platforms as well.  However, it's interface is a POSIX
-   standard, and I think I'd like to keep it around.  Perhaps it would 
-   be nice if reglookup could be cross-compiled using MinGW.  Then a 
-   binary could be distributed for that platform.  This app was never 
-   meant for Windows though, so this isn't a high priority.
+ - Need to figure out a reasonably correct way to convert UTF-16LE charaters
+   to ASCII under Windows/MingW or other platforms that don't have proper 
+   libiconv support yet.  Then a build-time option or autodetection can 
+   dictate which version of conversion function is used.
+
+ - It appears the registry may actually support UTF-16LE names on keys, 
+   if the key type field is set appropriately.  Once data parsing is 
+   integrated into regfi, then the UTF-16LE handling routines (which 
+   would then be built-in) should be used to properly handle this case.
 
  - Grep through the source for 'XXX', and you'll find more.
