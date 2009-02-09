@@ -507,11 +507,211 @@ REGFI_HBIN* regfi_lookup_hbin(REGFI_FILE* file, uint32 offset)
 }
 
 
+
+/******************************************************************************
+ ******************************************************************************/
+REGFI_SUBKEY_LIST* regfi_load_subkeylist(REGFI_FILE* file, uint32 offset, 
+					 uint32 num_keys, uint32 max_size, 
+					 bool strict)
+{
+  REGFI_SUBKEY_LIST* ret_val;
+
+  ret_val = regfi_load_subkeylist_aux(file, offset, max_size, strict, 
+				      REGFI_MAX_SUBKEY_DEPTH);
+
+  if(num_keys != ret_val->num_keys)
+  {
+    /*  Not sure which should be authoritative, the number from the 
+     *  NK record, or the number in the subkey list.  Just emit a warning for
+     *  now if they don't match.
+     */
+    regfi_add_message(file, REGFI_MSG_WARN, "Number of subkeys listed in parent"
+		      " (%d) did not match number found in subkey list/tree (%d)"
+		      " while parsing subkey list/tree at offset 0x%.8X.", 
+		      num_keys, ret_val->num_keys, offset);
+  }
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+REGFI_SUBKEY_LIST* regfi_load_subkeylist_aux(REGFI_FILE* file, uint32 offset, 
+					     uint32 max_size, bool strict,
+					     uint8 depth_left)
+{
+  REGFI_SUBKEY_LIST* ret_val;
+  REGFI_SUBKEY_LIST** sublists;
+  REGFI_HBIN* sublist_hbin;
+  uint32 i, num_sublists, off, max_length;
+
+  if(depth_left == 0)
+  {
+    regfi_add_message(file, REGFI_MSG_WARN, "Maximum depth reached"
+		      " while parsing subkey list/tree at offset 0x%.8X.", 
+		      offset);
+    return NULL;
+  }
+
+  ret_val = regfi_parse_subkeylist(file, offset, max_size, strict);
+  if(ret_val == NULL)
+    return NULL;
+
+  if(ret_val->recursive_type)
+  {
+    num_sublists = ret_val->num_children;
+    sublists = (REGFI_SUBKEY_LIST**)zalloc(num_sublists 
+					   * sizeof(REGFI_SUBKEY_LIST*));
+    for(i=0; i < num_sublists; i++)
+    {
+      off = ret_val->elements[i].offset + REGFI_REGF_SIZE;
+      sublist_hbin = regfi_lookup_hbin(file, ret_val->elements[i].offset);
+      if(sublist_hbin == NULL)
+	sublists[i] = NULL;
+      else
+      {
+	max_length = sublist_hbin->block_size + sublist_hbin->file_off - off;
+	sublists[i] = regfi_load_subkeylist_aux(file, off, max_length, strict,
+						depth_left-1);
+      }
+    }
+    free(ret_val);
+
+    return regfi_merge_subkeylists(num_sublists, sublists, strict);
+  }
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+REGFI_SUBKEY_LIST* regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset, 
+					  uint32 max_size, bool strict)
+{
+  REGFI_SUBKEY_LIST* ret_val;
+  uint32 i, cell_length, length, elem_size;
+  uint8* elements;
+  uint8 buf[REGFI_SUBKEY_LIST_MIN_LEN];
+  bool unalloc;
+  bool recursive_type;
+
+  if(!regfi_parse_cell(file->fd, offset, buf, REGFI_SUBKEY_LIST_MIN_LEN, 
+		       &cell_length, &unalloc))
+  {
+    regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell while "
+		      "parsing subkey-list at offset 0x%.8X.", offset);
+    return NULL;
+  }
+
+  if(cell_length > max_size)
+  {
+    regfi_add_message(file, REGFI_MSG_WARN, "Cell size longer than max_size"
+		      " while parsing subkey-list at offset 0x%.8X.", offset);
+    if(strict)
+      return NULL;
+    cell_length = max_size & 0xFFFFFFF8;
+  }
+
+  recursive_type = false;
+  if(buf[0] == 'r' && buf[1] == 'i')
+  {
+    recursive_type = true;
+    elem_size = sizeof(uint32);
+  }
+  else if(buf[0] == 'l' && buf[1] == 'i')
+    elem_size = sizeof(uint32);
+  else if((buf[0] == 'l') && (buf[1] == 'f' || buf[1] == 'h'))
+    elem_size = sizeof(REGFI_SUBKEY_LIST_ELEM);
+  else
+  {
+    regfi_add_message(file, REGFI_MSG_ERROR, "Unknown magic number"
+		      " (0x%.2X, 0x%.2X) encountered while parsing"
+		      " subkey-list at offset 0x%.8X.", buf[0], buf[1], offset);
+    return NULL;
+  }
+
+  ret_val = (REGFI_SUBKEY_LIST*)zalloc(sizeof(REGFI_SUBKEY_LIST));
+  if(ret_val == NULL)
+    return NULL;
+
+  ret_val->offset = offset;
+  ret_val->cell_size = cell_length;
+  ret_val->magic[0] = buf[0];
+  ret_val->magic[1] = buf[1];
+  ret_val->recursive_type = recursive_type;
+  ret_val->num_children = SVAL(buf, 0x2);
+
+  if(!recursive_type)
+    ret_val->num_keys = ret_val->num_children;
+
+  length = elem_size*ret_val->num_children;
+  if(cell_length - REGFI_SUBKEY_LIST_MIN_LEN - sizeof(uint32) < length)
+  {
+    regfi_add_message(file, REGFI_MSG_WARN, "Number of elements too large for"
+		      " cell while parsing subkey-list at offset 0x%.8X.", 
+		      offset);
+    if(strict)
+    {
+      free(ret_val);
+      return NULL;
+    }
+    length = cell_length - REGFI_SUBKEY_LIST_MIN_LEN - sizeof(uint32);
+  }
+
+  ret_val->elements 
+    = (REGFI_SUBKEY_LIST_ELEM*)zalloc(ret_val->num_children
+				      * sizeof(REGFI_SUBKEY_LIST_ELEM));
+  if(ret_val->elements == NULL)
+  {
+    free(ret_val);
+    return NULL;
+  }
+
+  elements = (uint8*)zalloc(length);
+  if(elements == NULL)
+  {
+    free(ret_val->elements);
+    free(ret_val);
+    return NULL;
+  }
+
+  if(regfi_read(file->fd, elements, &length) != 0
+     || length != elem_size*ret_val->num_children)
+  {
+    free(ret_val->elements);
+    free(ret_val);
+    return NULL;
+  }
+
+  if(elem_size == sizeof(uint32))
+  {
+    for (i=0; i < ret_val->num_children; i++)
+    {
+      ret_val->elements[i].offset = IVAL(elements, i*elem_size);
+      ret_val->elements[i].hash = 0;
+    }
+  }
+  else
+  {
+    for (i=0; i < ret_val->num_children; i++)
+    {
+      ret_val->elements[i].offset = IVAL(elements, i*elem_size);
+      ret_val->elements[i].hash = IVAL(elements, i*elem_size+4);
+    }
+  }
+  free(elements);
+
+  return ret_val;
+}
+
+
 /*******************************************************************
  *******************************************************************/
 REGFI_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists, 
-					  REGFI_SUBKEY_LIST** lists,
-					  bool strict)
+					   REGFI_SUBKEY_LIST** lists,
+					   bool strict)
 {
   uint32 i,j,k;
   REGFI_SUBKEY_LIST* ret_val;
@@ -527,15 +727,11 @@ REGFI_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
   ret_val->num_keys = 0;
   for(i=0; i < num_lists; i++)
   {
-    if(lists[i] == NULL)
-    {
-      free(ret_val);
-      free(lists);
-      return NULL;
-    }
-    ret_val->num_keys += lists[i]->num_keys;
+    if(lists[i] != NULL)
+      ret_val->num_keys += lists[i]->num_children;
   }
-  
+  ret_val->num_children = ret_val->num_keys;
+
   if(ret_val->num_keys > 0)
   {
     ret_val->elements = 
@@ -545,12 +741,17 @@ REGFI_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
 
     if(ret_val->elements != NULL)
     {
-      for(i=0; i<num_lists; i++)
-	for(j=0; j<lists[i]->num_keys; j++)
+      for(i=0; i < num_lists; i++)
+      {
+	if(lists[i] != NULL)
 	{
-	  ret_val->elements[k].hash=lists[i]->elements[j].hash;
-	  ret_val->elements[k++].nk_off=lists[i]->elements[j].nk_off;
+	  for(j=0; j < lists[i]->num_keys; j++)
+	  {
+	    ret_val->elements[k].hash=lists[i]->elements[j].hash;
+	    ret_val->elements[k++].offset=lists[i]->elements[j].offset;
+	  }
 	}
+      }
     }
   }
   
@@ -560,155 +761,6 @@ REGFI_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
 
   return ret_val;
 }
-
-
-
-/*******************************************************************
- *******************************************************************/
-REGFI_SUBKEY_LIST* regfi_load_subkeylist(REGFI_FILE* file, uint32 offset, 
-					uint32 num_keys, uint32 max_size, 
-					bool strict)
-{
-  REGFI_SUBKEY_LIST* ret_val;
-  REGFI_SUBKEY_LIST** sublists;
-  REGFI_HBIN* sublist_hbin;
-  uint32 i, cell_length, length, num_sublists, off, max_length, elem_size;
-  uint8* hashes;
-  uint8 buf[REGFI_SUBKEY_LIST_MIN_LEN];
-  bool unalloc;
-
-  if(!regfi_parse_cell(file->fd, offset, buf, REGFI_SUBKEY_LIST_MIN_LEN, 
-		       &cell_length, &unalloc))
-    return NULL;
-
-  if(cell_length > max_size)
-  {
-    if(strict)
-      return NULL;
-    cell_length = max_size & 0xFFFFFFF8;
-  }
-
-  if(buf[0] == 'r' && buf[1] == 'i')
-  {
-    num_sublists = SVAL(buf, 0x2);
-
-    /* XXX: check cell_length vs num_sublists vs max_length */
-    length = num_sublists*sizeof(uint32);
-    hashes = (uint8*)zalloc(length);
-    if(hashes == NULL)
-      return NULL;
-
-    if(regfi_read(file->fd, hashes, &length) != 0
-       || length != num_sublists*sizeof(uint32))
-    { 
-      free(hashes);
-      return NULL; 
-    }
-
-    sublists = (REGFI_SUBKEY_LIST**)zalloc(num_sublists*sizeof(REGFI_SUBKEY_LIST*));    
-    for(i=0; i < num_sublists; i++)
-    {
-      off = IVAL(hashes, i*4)+REGFI_REGF_SIZE;
-      sublist_hbin = regfi_lookup_hbin(file, IVAL(hashes, i*4));
-      max_length = sublist_hbin->block_size + sublist_hbin->file_off - off;
-
-      /* XXX: Need to add a recursion depth limit of some kind. */
-      sublists[i] = regfi_load_subkeylist(file, off, 0, max_length, strict);
-    }
-    free(hashes);
-
-    return regfi_merge_subkeylists(num_sublists, sublists, strict);
-  }
-
-  if(buf[0] == 'l' && buf[1] == 'i')
-    elem_size = sizeof(uint32);
-  else if((buf[0] == 'l') && (buf[1] == 'f' || buf[1] == 'h'))
-    elem_size = sizeof(REGFI_SUBKEY_LIST_ELEM);
-  else
-  {
-    /* fprintf(stderr, "DEBUG: lf->header=%c%c\n", buf[0], buf[1]);*/
-    return NULL;
-  }
-
-  ret_val = (REGFI_SUBKEY_LIST*)zalloc(sizeof(REGFI_SUBKEY_LIST));
-  if(ret_val == NULL)
-    return NULL;
-
-  ret_val->offset = offset;
-  ret_val->cell_size = cell_length;
-  ret_val->magic[0] = buf[0];
-  ret_val->magic[1] = buf[1];
-
-  ret_val->num_keys = SVAL(buf, 0x2);
-  if(num_keys != ret_val->num_keys)
-  {
-    /*  Not sure which should be authoritative, the number from the 
-     *  NK record, or the number in the subkey list.  Go with the larger
-     *  of the two to ensure all keys are found, since in 'ri' records, 
-     *  there is no authoritative parent count for a leaf subkey list.  
-     *  Note the length checks on the cell later ensure that there won't
-     *  be any critical errors.
-     */
-    if(num_keys < ret_val->num_keys)
-      num_keys = ret_val->num_keys;
-    else
-      ret_val->num_keys = num_keys;
-  }
-
-  if(cell_length - REGFI_SUBKEY_LIST_MIN_LEN - sizeof(uint32) 
-     < ret_val->num_keys*elem_size)
-  {
-    free(ret_val);
-    return NULL;
-  }
-
-  length = elem_size*ret_val->num_keys;
-  ret_val->elements 
-    = (REGFI_SUBKEY_LIST_ELEM*)zalloc(ret_val->num_keys 
-				     * sizeof(REGFI_SUBKEY_LIST_ELEM));
-  if(ret_val->elements == NULL)
-  {
-    free(ret_val);
-    return NULL;
-  }
-
-  hashes = (uint8*)zalloc(length);
-  if(hashes == NULL)
-  {
-    free(ret_val->elements);
-    free(ret_val);
-    return NULL;
-  }
-
-  if(regfi_read(file->fd, hashes, &length) != 0
-     || length != elem_size*ret_val->num_keys)
-  {
-    free(ret_val->elements);
-    free(ret_val);
-    return NULL;
-  }
-
-  if(buf[0] == 'l' && buf[1] == 'i')
-  {
-    for (i=0; i < ret_val->num_keys; i++)
-    {
-      ret_val->elements[i].nk_off = IVAL(hashes, i*elem_size);
-      ret_val->elements[i].hash = 0;
-    }
-  }
-  else
-  {
-    for (i=0; i < ret_val->num_keys; i++)
-    {
-      ret_val->elements[i].nk_off = IVAL(hashes, i*elem_size);
-      ret_val->elements[i].hash = IVAL(hashes, i*elem_size+4);
-    }
-  }
-  free(hashes);
-
-  return ret_val;
-}
-
 
 
 /*******************************************************************
@@ -1503,7 +1555,7 @@ const REGFI_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
       || (i->cur_subkey >= i->cur_key->num_subkeys))
     return NULL;
 
-  nk_offset = i->cur_key->subkeys->elements[i->cur_subkey].nk_off;
+  nk_offset = i->cur_key->subkeys->elements[i->cur_subkey].offset;
 
   return regfi_load_key(i->f, nk_offset+REGFI_REGF_SIZE, true);
 }

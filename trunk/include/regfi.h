@@ -81,6 +81,9 @@
 #define REGFI_MAX_DEPTH		   512
 #define REGFI_OFFSET_NONE          0xffffffff
 
+/* XXX: This is totally arbitrary right now. */
+#define REGFI_MAX_SUBKEY_DEPTH     255    
+
 /* Header sizes and magic number lengths for various records */
 #define REGFI_REGF_MAGIC_SIZE      4
 #define REGFI_HBIN_MAGIC_SIZE      4
@@ -170,19 +173,33 @@ typedef struct _regfi_hbin
 /* Subkey List -- list of key offsets and hashed names for consistency */
 typedef struct 
 {
-  uint32 nk_off;
+  /* Virtual offset of NK record or additional subkey list, 
+   * depending on this list's type. 
+   */
+  uint32 offset;
+
   uint32 hash;
 } REGFI_SUBKEY_LIST_ELEM;
 
 
 typedef struct 
 {
-  uint32 offset;	/* Real offset of this record's cell in the file */
-  uint32 cell_size;	 /* ((start_offset - end_offset) & 0xfffffff8) */
-  uint32 num_keys;
-  REGFI_SUBKEY_LIST_ELEM* elements;
+  /* Real offset of this record's cell in the file */
+  uint32 offset;
+
+  uint32 cell_size;
   
+  /* Number of immediate children */
+  uint32 num_children;  
+
+  /* Total number of keys referenced by this list and it's children */
+  uint32 num_keys;      
+
+  REGFI_SUBKEY_LIST_ELEM* elements;
   uint8 magic[REGFI_CELL_MAGIC_SIZE];
+
+  /* Set if the magic indicates this subkey list points to child subkey lists */
+  bool recursive_type;  
 } REGFI_SUBKEY_LIST;
 
 
@@ -426,6 +443,9 @@ REGFI_HBIN*           regfi_parse_hbin(REGFI_FILE* file, uint32 offset,
 REGFI_NK_REC*         regfi_parse_nk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
+REGFI_SUBKEY_LIST*    regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset,
+					     uint32 max_size, bool strict);
+
 REGFI_VK_REC*         regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
@@ -466,6 +486,9 @@ char*                 regfi_get_group(WINSEC_DESC* sec_desc);
 REGFI_SUBKEY_LIST*    regfi_merge_subkeylists(uint16 num_lists, 
 					      REGFI_SUBKEY_LIST** lists,
 					      bool strict);
+REGFI_SUBKEY_LIST*    regfi_load_subkeylist_aux(REGFI_FILE* file, uint32 offset,
+						uint32 max_size, bool strict,
+						uint8 depth_left);
 void                  regfi_add_message(REGFI_FILE* file, uint16 msg_type, 
 					const char* fmt, ...);
 #endif	/* _REGFI_H */
