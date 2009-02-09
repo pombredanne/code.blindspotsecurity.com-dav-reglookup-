@@ -200,15 +200,6 @@ char* regfi_ace_flags2str(uint8 flags)
   if(fo != ret_val)
     fo[-1] = '\0';
 
-  /* XXX: what was this old VI flag for??
-     XXX: Is this check right?  0xF == 1|2|4|8, which makes it redundant...
-  if (flags == 0xF) {
-    if (some) strcat(flg_output, " ");
-    some = 1;
-    strcat(flg_output, "VI");
-  }
-  */
-
   return ret_val;
 }
 
@@ -813,16 +804,25 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
   ret_val->magic[0] = sk_header[0];
   ret_val->magic[1] = sk_header[1];
 
-  /* XXX: Can additional validation be added here? */
   ret_val->unknown_tag = SVAL(sk_header, 0x2);
   ret_val->prev_sk_off = IVAL(sk_header, 0x4);
   ret_val->next_sk_off = IVAL(sk_header, 0x8);
   ret_val->ref_count = IVAL(sk_header, 0xC);
   ret_val->desc_size = IVAL(sk_header, 0x10);
 
+  if(ret_val->prev_sk_off != (ret_val->prev_sk_off & 0xFFFFFFF8) 
+     || ret_val->next_sk_off != (ret_val->next_sk_off & 0xFFFFFFF8))
+  {
+    regfi_add_message(file, REGFI_MSG_WARN, "SK record's next/previous offsets"
+		      " are not a multiple of 8 while parsing SK record at"
+		      " offset 0x%.8X.", offset);
+    free(ret_val);
+    return NULL;
+  }
+
   if(ret_val->desc_size + REGFI_SK_MIN_LENGTH > ret_val->cell_size)
   {
-    regfi_add_message(file, REGFI_MSG_ERROR, "Security descriptor too large for"
+    regfi_add_message(file, REGFI_MSG_WARN, "Security descriptor too large for"
 		      " cell while parsing SK record at offset 0x%.8X.", 
 		      offset);
     free(ret_val);
@@ -885,8 +885,11 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
   }
   if((num_values * sizeof(uint32)) > cell_length-sizeof(uint32))
   {
-    regfi_add_message(file, REGFI_MSG_ERROR, "Too many values found"
+    regfi_add_message(file, REGFI_MSG_WARN, "Too many values found"
 		      " while parsing value list at offset 0x%.8X.", offset);
+    /* XXX: During non-strict, should reduce num_values appropriately and
+     *      continue instead of bailing out.
+     */
     return NULL;
   }
 
@@ -1079,9 +1082,8 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
 
       if(nk->subkeys == NULL)
       {
-	/* XXX: Should we free the key and bail out here instead?  
-	 *      During nonstrict? 
-	 */
+	regfi_add_message(file, REGFI_MSG_WARN, "Could not load subkey list"
+			  " while parsing NK record at offset 0x%.8X.", offset);
 	nk->num_subkeys = 0;
       }
     }
@@ -1842,7 +1844,7 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
   if((ret_val->cell_size < REGFI_NK_MIN_LENGTH) 
      || (strict && ret_val->cell_size != (ret_val->cell_size & 0xFFFFFFF8)))
   {
-    regfi_add_message(file, REGFI_MSG_ERROR, "A length check failed while"
+    regfi_add_message(file, REGFI_MSG_WARN, "A length check failed while"
 		      " parsing NK record at offset 0x%.8X.", offset);
     free(ret_val);
     return NULL;
@@ -1960,10 +1962,14 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
 			" name while parsing NK record at offset 0x%.8X.", 
 			offset);
     }
-    /* XXX: Should add this back and make it more strict?
-    if(strict && ret_val->classname == NULL)
-	return NULL;
-    */
+
+    if(ret_val->classname == NULL)
+    {
+      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse class"
+			" name while parsing NK record at offset 0x%.8X.", 
+			offset);
+      return NULL;
+    }
   }
 
   return ret_val;
@@ -2302,9 +2308,13 @@ range_list* regfi_parse_unalloc_cells(REGFI_FILE* file)
 	break;
       
       if((cell_len == 0) || ((cell_len & 0xFFFFFFF8) != cell_len))
-	/* XXX: should report an error here. */
+      {
+	regfi_add_message(file, REGFI_MSG_ERROR, "Bad cell length encountered"
+			  " while parsing unallocated cells at offset 0x%.8X.",
+			  hbin->file_off+curr_off);
 	break;
-      
+      }
+
       /* for some reason the record_size of the last record in
 	 an hbin block can extend past the end of the block
 	 even though the record fits within the remaining 
