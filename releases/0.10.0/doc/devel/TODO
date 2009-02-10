@@ -1,0 +1,65 @@
+$Id$
+
+If you are interested in contributing to this project, here's a few
+things you could look into:
+
+ - Currently there is no way on the command line to search for exotic 
+   paths/types.  For instance, if reglookup encounters an unknown VK
+   type, it just prints it out in Hex.  However, if you wanted to search
+   specifically for that type, there is no way to do it.  Similarly, it
+   isn't possible to specify certain binary or weird characters in
+   paths.  Reglookup should take the user path and unquote each path
+   component using the \xQQ syntax prior to searching.
+
+ - Testing, testing, and more testing.  reglookup needs to be tested on 
+   NT/XP/2k3/Vista.  A regression test suite would be nice too.  Some 
+   thoughts on this include a script which randomly fuzzes an existing
+   registry file, and tries to detect crashes of reglookup when parsing
+   it.  Another test script might randomly truncate an existing registry
+   file, which will help improve reglookup's parsing on fragmentary
+   files.
+
+ - Build system.  I do not wish to use automake/autoconf in this
+   project.  I have also now decided that make is painful to use for
+   everything.  I'd like to switch to a suite of shell scripts driven by
+   minimal make rules.  If you got any ideas on this, shoot them my way.
+
+ - Unicode support still needs improvement.  While parsing strings seems
+   to be decent, UTF-8 output would be nice.
+
+ - The interface between reglookup.c and regfi.c is much better than it
+   used to be, but the parsing of data objects needs to be moved into the
+   library.  The quoting syntax should stay in reglookup/reglookup-recover
+   but the basic parsing of data types into proper structures should 
+   happen in the library so that they are accessible to other users of the
+   library.
+
+ - NK/VK/SK record caching.  Right now, HBIN metadata and SK records are 
+   cached, but it's pretty haphazard, and NK/VK records are repeatedly
+   re-parsed.  A generic caching library has been introduced but needs to 
+   be applied to NK records at a minimum.  Eventually, VK records and 
+   data should also be cached separately and only be parsed when needed, 
+   rather than when a key is loaded up front.  Caching also needs 
+   configurable object limits, preferrably configurable at build-time.
+
+ - It might be nice to have a way to filter results by security 
+   descriptor information.  Maybe by MTIME as well.
+
+ - Documentation.  The security descriptor output format needs to be 
+   documented.  Also, function contracts should be added to the 
+   lower-level functions of regfi.c.
+
+ - The smb_deps.h and smb_deps.c content is almost eliminated.  Just need
+   to integrate parts that are being kept into regfi or other modules.
+
+ - Need to figure out a reasonably correct way to convert UTF-16LE charaters
+   to ASCII under Windows/MingW or other platforms that don't have proper 
+   libiconv support yet.  Then a build-time option or autodetection can 
+   dictate which version of conversion function is used.
+
+ - It appears the registry may actually support UTF-16LE names on keys, 
+   if the key type field is set appropriately.  Once data parsing is 
+   integrated into regfi, then the UTF-16LE handling routines (which 
+   would then be built-in) should be used to properly handle this case.
+
+ - Grep through the source for 'XXX', and you'll find more.

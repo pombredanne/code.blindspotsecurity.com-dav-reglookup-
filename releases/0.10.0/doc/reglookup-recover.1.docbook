@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<refentry id='reglookup-recover.1'>
+  <!--  $Id$ -->
+  <refmeta>
+    <refentrytitle>reglookup</refentrytitle>
+    <manvolnum>1</manvolnum>
+    <refmiscinfo class="sectdesc">File Conversion Utilities</refmiscinfo>
+  </refmeta>
+  <refnamediv id='name'>
+    <refname>reglookup-recover</refname>
+    <refpurpose>Windows NT+ registry deleted data recovery tool</refpurpose>
+  </refnamediv>
+
+  <refsect1 id='synopsis'>
+    <title>SYNOPSIS</title>
+    <para>
+      <command>
+	reglookup-recover [options] <replaceable>registry-file</replaceable>
+      </command> 
+    </para>
+  </refsect1>
+
+  <refsect1 id='description'>
+    <title>DESCRIPTION</title>
+    <para>
+        reglookup-recover attempts to scour a Windows registry hive for 
+        deleted data structures and outputs those found in a CSV-like format.
+    </para>
+  </refsect1>
+
+  <refsect1 id='options'>
+    <title>OPTIONS</title>
+    <para>
+      <command>reglookup-recover</command> accepts the following parameters:
+    </para>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-v</option>
+        </term>
+        <listitem>
+	  <para>
+	    Verbose output.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-h</option>
+        </term>
+        <listitem>
+	  <para>
+	    Enables the printing of a column header row. (default)
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-H</option>
+        </term>
+        <listitem>
+	  <para>
+	    Disables the printing of a column header row.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-l</option>
+        </term>
+        <listitem>
+	  <para>
+            Display cells which could not be interpreted as valid
+            registry structures at the end of the output.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-L</option>
+        </term>
+        <listitem>
+	  <para>
+            Do not display cells which could not be interpreted as valid
+            registry structures.  This is the default behavior.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-r</option>
+        </term>
+        <listitem>
+	  <para>
+            Display raw cell contents for cells which were interpreted as intact
+            data structures.  This additional output will appear on the same
+            line as the interpreted data.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-R</option>
+        </term>
+        <listitem>
+	  <para>
+            Do not display raw cell contents for cells which were interpreted
+            as intact data structures.  This is the default behavior.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option><replaceable>registry-file</replaceable></option>
+        </term>
+        <listitem>
+	  <para>
+	    Required argument.  Specifies the location of the
+	    registry file to read.  The system registry files should be
+	    found under:
+	    <command>%SystemRoot%/system32/config</command>.
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+  </refsect1>
+
+  <refsect1 id='output'>
+    <title>OUTPUT</title>
+    <para>
+      <!-- XXX: this should be a bit more formal -->
+      <command>reglookup-recover</command> generates a comma-separated values (CSV) 
+      like output and writes it to stdout. For more information on the syntax of 
+      the general format, see <command>reglookup(1)</command>.
+    </para>
+    <para>
+      This tool is new and the output format, particularly the included columns, 
+      may change in future revisions.  When this format stablizes, additional
+      documentation will be included here.
+    </para>
+  </refsect1>
+
+  <refsect1 id='examples'>
+    <title>EXAMPLES</title>
+    <para>
+      To dump the recoverable contents of a system registry hive:
+    </para>
+    <para>
+      <screen>
+	reglookup-recover /mnt/win/c/WINDOWS/system32/config/system
+      </screen>
+    </para>
+    <para>
+      Extract all available unallocated data, including unparsable unallocated
+      space and the raw data associated with parsed cells in a user-specific
+      registry:
+    </para>
+    <para>
+      <screen>
+	reglookup-recover -r -l '/mnt/win/c/Documents and Settings/user/NTUSER.DAT'
+      </screen>
+    </para>
+  </refsect1>
+
+  <refsect1 id='bugs'>
+    <title>BUGS</title>
+    <para>
+      This program has been smoke-tested against most current Windows target 
+      platforms, but a comprehensive test suite has not yet been developed.
+      (Please report results to the development mailing list if you encounter
+       any bugs.  Sample registry files and/or patches are greatly appreciated.)
+    </para>
+    <para>
+      This program is new as of RegLookup release 0.9.0 and should be considered 
+      unstable.
+    </para>
+    <para>
+      For more information on registry format details and the recovery 
+      algorithm, see:
+        http://sentinelchicken.com/research/registry_format/
+        http://sentinelchicken.com/research/registry_recovery/
+    </para>
+  </refsect1>
+
+  <refsect1 id='credits'>
+    <title>CREDITS</title>
+    <para>
+      This program was written by Timothy D. Morgan.
+    </para>
+  </refsect1>
+
+  <refsect1 id='license'>
+    <title>LICENSE</title>
+    <para>
+      Please see the file "LICENSE" included with this software
+      distribution.
+    </para>
+    <para>      
+      This program is distributed in the hope that it will be useful,
+      but WITHOUT ANY WARRANTY; without even the implied warranty of
+      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+      GNU General Public License version 3 for more details.
+    </para>
+  </refsect1>
+
+  <refsect1 id='seealso'>
+    <title>SEE ALSO</title>
+    <para>
+      reglookup-timeline(1) reglookup-recover(1)
+    </para>
+  </refsect1>
+</refentry>
