@@ -651,7 +651,7 @@ int main(int argc, char** argv)
     freePath(path);
 
     if(retr_path_ret == 0)
-      fprintf(stderr, "WARN: specified path not found.\n");
+      fprintf(stderr, "WARN: Specified path '%s' not found.\n", path_filter);
     else if (retr_path_ret == 2)
       printKeyTree(iter);
     else if(retr_path_ret < 0)
