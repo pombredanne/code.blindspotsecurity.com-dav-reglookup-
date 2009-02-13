@@ -21,7 +21,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <sysexits.h>
 
 #include "../include/regfi.h"
 #include "../include/range_list.h"
@@ -83,7 +82,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
   {
     quoted_name = malloc(1*sizeof(char));
     if(quoted_name == NULL)
-      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+      bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
 
     fprintf(stderr, "WARN: NULL key name in NK record at offset %.8X.\n",
@@ -139,7 +138,7 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
      */
     quoted_name = malloc(1*sizeof(char));
     if(quoted_name == NULL)
-      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+      bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
   }
 
@@ -148,7 +147,7 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
   {
     quoted_value = malloc(1*sizeof(char));
     if(quoted_value == NULL)
-      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+      bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_value[0] = '\0';
 
     if(conv_error == NULL)
@@ -713,7 +712,7 @@ int main(int argc, char** argv)
   if(argc < 2)
   {
     usage();
-    bailOut(EX_USAGE, "ERROR: Requires at least one argument.\n");
+    bailOut(REGLOOKUP_EXIT_USAGE, "ERROR: Requires at least one argument.\n");
   }
   
   arge = argc-1;
@@ -737,19 +736,19 @@ int main(int argc, char** argv)
     {
       usage();
       fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
-      bailOut(EX_USAGE, "");
+      bailOut(REGLOOKUP_EXIT_USAGE, "");
     }
   }
   /*test_offset = strtol(argv[argi++], NULL, 16);*/
 
   if((registry_file = strdup(argv[argi])) == NULL)
-    bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
+    bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
 
   f = regfi_open(registry_file);
   if(f == NULL)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
-    bailOut(EX_NOINPUT, "");
+    bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
   if(print_verbose)
     regfi_set_message_mask(f, REGFI_MSG_ERROR|REGFI_MSG_WARN|REGFI_MSG_INFO);

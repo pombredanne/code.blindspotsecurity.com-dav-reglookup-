@@ -14,10 +14,20 @@ CC=gcc
 OPTS=-std=gnu89 -pedantic -Wall
 INC=-I/usr/local/include
 LIB=-L/usr/local/lib -lm
+BIN_EXT=
+EXTRA_OBJ=
 
 UNAME := $(shell uname)
 ifneq ($(UNAME),Linux) 	
   LIB:=$(LIB) -liconv
+endif
+
+ifdef BUILD_MINGW
+CC=i586-mingw32msvc-cc
+BIN_EXT=.exe
+LIBICONV_PATH=/usr/local/src/libiconv-1.9.2-1-lib
+INC:=$(INC) -I$(LIBICONV_PATH)/include
+EXTRA_OBJ=$(LIBICONV_PATH)/lib/libiconv.dll.a
 endif
 
 BUILD=$(CURDIR)/build

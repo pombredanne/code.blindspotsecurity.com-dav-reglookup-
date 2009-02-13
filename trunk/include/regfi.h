@@ -58,6 +58,13 @@
 #define REGFI_MSG_WARN  0x0004
 #define REGFI_MSG_ERROR 0x0010
 
+/* Windows is lame */
+#ifdef O_BINARY
+#define REGFI_OPEN_FLAGS O_RDONLY|O_BINARY
+#else
+#define REGFI_OPEN_FLAGS O_RDONLY
+#endif
+
 /* Registry data types */
 #define REG_NONE                       0
 #define REG_SZ		               1

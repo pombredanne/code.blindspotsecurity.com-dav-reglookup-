@@ -30,6 +30,12 @@ const char* common_special_chars = ",\"\\";
 
 #define REGLOOKUP_VERSION "0.10.0"
 
+#define REGLOOKUP_EXIT_OK       0
+#define REGLOOKUP_EXIT_OSERR   71
+#define REGLOOKUP_EXIT_USAGE   64
+#define REGLOOKUP_EXIT_DATAERR 65
+#define REGLOOKUP_EXIT_NOINPUT 66
+
 
 void bailOut(int code, char* message)
 {
