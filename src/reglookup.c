@@ -22,7 +22,6 @@
 
 
 #include <stdlib.h>
-#include <sysexits.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -81,7 +80,7 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
      */
     quoted_name = malloc(1*sizeof(char));
     if(quoted_name == NULL)
-      bailOut(EX_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+      bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
   }
 
@@ -160,7 +159,7 @@ char** splitPath(const char* s)
     {
       copy = (char*)malloc((next-cur+1)*sizeof(char));
       if(copy == NULL)
-	bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
+	bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
 	  
       memcpy(copy, cur, next-cur);
       copy[next-cur] = '\0';
@@ -168,7 +167,7 @@ char** splitPath(const char* s)
       if(ret_cur < (REGFI_MAX_DEPTH+1+1))
 	ret_val[ret_cur] = NULL;
       else
-	bailOut(EX_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
+	bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
     }
     cur = next+1;
   }
@@ -181,7 +180,7 @@ char** splitPath(const char* s)
     if(ret_cur < (REGFI_MAX_DEPTH+1+1))
       ret_val[ret_cur] = NULL;
     else
-      bailOut(EX_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
+      bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: Registry maximum depth exceeded.\n");
   }
 
   return ret_val;
@@ -383,7 +382,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
   printMsgs(iter->f);
 
   if(root == NULL)
-    bailOut(EX_DATAERR, "ERROR: root cannot be NULL.\n");
+    bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: root cannot be NULL.\n");
   
   do
   {
@@ -391,7 +390,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     {
       path = iter2Path(iter);
       if(path == NULL)
-	bailOut(EX_OSERR, "ERROR: Could not construct iterator's path.\n");
+	bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not construct iterator's path.\n");
 
       if(!type_filter_enabled || (key_type == type_filter))
 	printKey(iter, path);
@@ -409,14 +408,14 @@ void printKeyTree(REGFI_ITERATOR* iter)
 	if(!regfi_iterator_up(iter))
 	{
 	  printMsgs(iter->f);
-	  bailOut(EX_DATAERR, "ERROR: could not traverse iterator upward.\n");
+	  bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: could not traverse iterator upward.\n");
 	}
 
 	cur = regfi_iterator_cur_key(iter);
 	if(cur == NULL)
 	{
 	  printMsgs(iter->f);
-	  bailOut(EX_DATAERR, "ERROR: unexpected NULL for key.\n");
+	  bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: unexpected NULL for key.\n");
 	}
 
 	sub = regfi_iterator_next_subkey(iter);
@@ -430,7 +429,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
       if(!regfi_iterator_down(iter))
       {
 	printMsgs(iter->f);
-	bailOut(EX_DATAERR, "ERROR: could not traverse iterator downward.\n");
+	bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: could not traverse iterator downward.\n");
       }
 
       cur = sub;
@@ -506,7 +505,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     tmp_path_joined = iter2Path(iter);
 
     if((value == NULL) || (tmp_path_joined == NULL))
-      bailOut(EX_OSERR, "ERROR: Unexpected error before printValue.\n");
+      bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Unexpected error before printValue.\n");
 
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(value, tmp_path_joined);
@@ -524,7 +523,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     if(!regfi_iterator_down(iter))
     {
       printMsgs(iter->f);
-      bailOut(EX_DATAERR, "ERROR: Unexpected error on traversing path filter key.\n");
+      bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: Unexpected error on traversing path filter key.\n");
     }
 
     return 2;
@@ -567,7 +566,7 @@ int main(int argc, char** argv)
   if(argc < 2)
   {
     usage();
-    bailOut(EX_USAGE, "ERROR: Requires at least one argument.\n");
+    bailOut(REGLOOKUP_EXIT_USAGE, "ERROR: Requires at least one argument.\n");
   }
   
   arge = argc-1;
@@ -578,10 +577,10 @@ int main(int argc, char** argv)
       if(++argi >= arge)
       {
 	usage();
-	bailOut(EX_USAGE, "ERROR: '-p' option requires parameter.\n");
+	bailOut(REGLOOKUP_EXIT_USAGE, "ERROR: '-p' option requires parameter.\n");
       }
       if((path_filter = strdup(argv[argi])) == NULL)
-	bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
+	bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
 
       path_filter_enabled = true;
     }
@@ -590,12 +589,12 @@ int main(int argc, char** argv)
       if(++argi >= arge)
       {
 	usage();
-	bailOut(EX_USAGE, "ERROR: '-t' option requires parameter.\n");
+	bailOut(REGLOOKUP_EXIT_USAGE, "ERROR: '-t' option requires parameter.\n");
       }
       if((type_filter = regfi_type_str2val(argv[argi])) < 0)
       {
 	fprintf(stderr, "ERROR: Invalid type specified: %s.\n", argv[argi]);
-	bailOut(EX_USAGE, "");
+	bailOut(REGLOOKUP_EXIT_USAGE, "");
       }
       type_filter_enabled = true;
     }
@@ -613,17 +612,17 @@ int main(int argc, char** argv)
     {
       usage();
       fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
-      bailOut(EX_USAGE, "");
+      bailOut(REGLOOKUP_EXIT_USAGE, "");
     }
   }
   if((registry_file = strdup(argv[argi])) == NULL)
-    bailOut(EX_OSERR, "ERROR: Memory allocation problem.\n");
+    bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
 
   f = regfi_open(registry_file);
   if(f == NULL)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
-    bailOut(EX_NOINPUT, "");
+    bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
 
   if(print_verbose)
@@ -631,7 +630,7 @@ int main(int argc, char** argv)
 
   iter = regfi_iterator_new(f);
   if(iter == NULL)
-    bailOut(EX_OSERR, "ERROR: Couldn't create registry iterator.\n");
+    bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Couldn't create registry iterator.\n");
 
   if(print_header)
   {
@@ -658,7 +657,8 @@ int main(int argc, char** argv)
     {
       fprintf(stderr, "ERROR: retrievePath() returned %d.\n", 
 	      retr_path_ret);
-      bailOut(EX_DATAERR,"ERROR: Unknown error occurred in retrieving path.\n");
+      bailOut(REGLOOKUP_EXIT_DATAERR,
+	      "ERROR: Unknown error occurred in retrieving path.\n");
     }
   }
   else

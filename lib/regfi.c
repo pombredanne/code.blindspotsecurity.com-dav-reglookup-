@@ -509,6 +509,12 @@ REGFI_SUBKEY_LIST* regfi_load_subkeylist(REGFI_FILE* file, uint32 offset,
 
   ret_val = regfi_load_subkeylist_aux(file, offset, max_size, strict, 
 				      REGFI_MAX_SUBKEY_DEPTH);
+  if(ret_val == NULL)
+  {
+    regfi_add_message(file, REGFI_MSG_WARN, "Failed to load subkey list at"
+		      " offset 0x%.8X.", offset);
+    return NULL;
+  }
 
   if(num_keys != ret_val->num_keys)
   {
@@ -1151,9 +1157,9 @@ REGFI_FILE* regfi_open(const char* filename)
   bool rla;
 
   /* open an existing file */
-  if ((fd = open(filename, O_RDONLY)) == -1) 
+  if ((fd = open(filename, REGFI_OPEN_FLAGS)) == -1)
   {
-    /* DEBUG(0,("regfi_open: failure to open %s (%s)\n", filename, strerror(errno)));*/
+    /* fprintf(stderr, "regfi_open: failure to open %s (%s)\n", filename, strerror(errno));*/
     return NULL;
   }
   
@@ -1169,7 +1175,7 @@ REGFI_FILE* regfi_open(const char* filename)
   /* read in an existing file */
   if ((rb = regfi_parse_regf(fd, true)) == NULL) 
   {
-    /* DEBUG(0,("regfi_open: Failed to read initial REGF block\n"));*/
+    /* fprintf(stderr, "regfi_open: Failed to read initial REGF block\n"); */
     close(fd);
     return NULL;
   }
@@ -1178,6 +1184,7 @@ REGFI_FILE* regfi_open(const char* filename)
   rb->hbins = range_list_new();
   if(rb->hbins == NULL)
   {
+    /* fprintf(stderr, "regfi_open: Failed to create HBIN list.\n"); */
     range_list_free(rb->hbins);
     close(fd);
     free(rb);
@@ -1330,8 +1337,7 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* fh)
    * secret is just designed to prevent someone from trying to blow our
    * caching and make things slow.
    */
-  ret_val->sk_recs = lru_cache_create(127, 0x15DEAD05^time(NULL)
-				           ^(getpid()<<16)^(getppid()<<8),
+  ret_val->sk_recs = lru_cache_create(127, 0x15DEAD05^time(NULL)^(getpid()<<16),
 				      true);
 
   ret_val->f = fh;
