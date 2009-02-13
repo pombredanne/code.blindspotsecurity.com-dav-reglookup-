@@ -22,13 +22,23 @@ ifneq ($(UNAME),Linux)
   LIB:=$(LIB) -liconv
 endif
 
+
+################################################################################
+# MinGW cross-compiling build settings
 ifdef BUILD_MINGW
+
+## These may need to be changed
 CC=i586-mingw32msvc-cc
-BIN_EXT=.exe
 LIBICONV_PATH=/usr/local/src/libiconv-1.9.2-1-lib
+
+## These probably do not need to be changed
+BIN_EXT=.exe
 INC:=$(INC) -I$(LIBICONV_PATH)/include
 EXTRA_OBJ=$(LIBICONV_PATH)/lib/libiconv.dll.a
+
 endif
+################################################################################
+
 
 BUILD=$(CURDIR)/build
 BUILD_BIN=$(BUILD)/bin
