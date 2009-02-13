@@ -10,6 +10,11 @@ comes with any free operating system.  Be sure you have:
  - GNU Make
  - GCC
 
+Note that iconv support is required, as specified in IEEE Std 1003.1 
+(POSIX.1-2001).  Some platforms still do not contain support for this 
+natively, in which case you may need to install libiconv from:
+  http://www.gnu.org/software/libiconv/
+
 
 Survival Commands
 -----------------
@@ -43,3 +48,7 @@ make VAR=value install
 
 
 For more information, see the Makefiles.
+
+Primitive build features have been added to support cross-compiling to
+Windows binaries using MinGW.  For more information on this, see: 
+  doc/mingw-build.txt
