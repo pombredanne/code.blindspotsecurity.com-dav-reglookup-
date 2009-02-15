@@ -415,6 +415,110 @@ bool removeRange(range_list* rl, uint32 offset, uint32 length)
 }
 
 
+int extractVKs(REGFI_FILE* f,
+	       range_list* unalloc_cells,
+	       range_list* unalloc_values)
+{
+  const range_list_element* cur_elem;
+  REGFI_VK_REC* vk;
+  uint32 i, j;
+
+  for(i=0; i < range_list_size(unalloc_cells); i++)
+  {
+    printMsgs(f);
+    cur_elem = range_list_get(unalloc_cells, i);
+    for(j=0; j <= cur_elem->length; j+=8)
+    {
+      vk = regfi_parse_vk(f, cur_elem->offset+j, 
+			   cur_elem->length-j, false);
+      printMsgs(f);
+
+      if(vk != NULL)
+      {
+	if(!range_list_add(unalloc_values, vk->offset,
+			   vk->cell_size, vk))
+	{
+	  fprintf(stderr, "ERROR: Couldn't add value to unalloc_values.\n");
+	  return 20;
+	}
+	j+=vk->cell_size-8;
+      }
+    }
+  }
+
+  /* Remove value ranges from the unalloc_cells before we continue. */
+  for(i=0; i<range_list_size(unalloc_values); i++)
+  {
+    cur_elem = range_list_get(unalloc_values, i);
+    if(!removeRange(unalloc_cells, cur_elem->offset, cur_elem->length))
+      return 30;
+  }
+
+  return 0;
+}
+
+
+int extractDataCells(REGFI_FILE* f,
+		     range_list* unalloc_cells,
+		     range_list* unalloc_values)
+{
+  const range_list_element* cur_elem;
+  REGFI_VK_REC* vk;
+  REGFI_HBIN* hbin;
+  uint32 i, off, data_offset, data_maxsize;
+
+  for(i=0; i<range_list_size(unalloc_values); i++)
+  {
+    cur_elem = range_list_get(unalloc_values, i);
+    vk = (REGFI_VK_REC*)cur_elem->data;
+    if(vk == NULL)
+      return 40;
+
+    if(vk->data_size == 0)
+      vk->data = NULL;
+    else
+    {
+      off = vk->data_off+REGFI_REGF_SIZE;
+
+      if(vk->data_in_offset)
+      {
+	vk->data = regfi_parse_data(f, vk->type, vk->data_off,
+				    vk->data_size, 4,
+				    vk->data_in_offset, false);
+      }
+      else if(range_list_has_range(unalloc_cells, off, vk->data_size))
+      {
+	hbin = regfi_lookup_hbin(f, vk->data_off);
+	if(hbin)
+	{
+	  data_offset = vk->data_off+REGFI_REGF_SIZE;
+	  data_maxsize = hbin->block_size + hbin->file_off - data_offset;
+	  vk->data = regfi_parse_data(f, vk->type, data_offset, 
+				      vk->data_size, data_maxsize, 
+				      vk->data_in_offset, false);
+	  if(vk->data != NULL)
+	  {
+	    /* XXX: This strict checking prevents partial recovery of data 
+	     *      cells.  Also, see code for regfi_parse_data and note that
+	     *      lengths indicated in VK records are sometimes just plain 
+	     *      wrong.  Need a feedback mechanism to be more fuzzy with 
+	     *      data cell lengths and the ranges removed. 
+	     */
+	    /* A data record was recovered. Remove from unalloc_cells. */
+	    if(!removeRange(unalloc_cells, off, vk->data_size))
+	      return 50;
+	  }
+	}
+	else
+	  vk->data = NULL;
+      }
+    }
+  }
+
+  return 0;
+}
+
+
 /* NOTE: unalloc_keys should be an empty range_list. */
 int extractKeys(REGFI_FILE* f, 
 		range_list* unalloc_cells, 
@@ -458,12 +562,13 @@ int extractKeys(REGFI_FILE* f,
   return 0;
 }
 
-
 int extractValueLists(REGFI_FILE* f,
 		      range_list* unalloc_cells,
-		      range_list* unalloc_keys)
+		      range_list* unalloc_keys,
+		      range_list* unalloc_linked_values)
 {
   REGFI_NK_REC* nk;
+  REGFI_VK_REC* vk;
   REGFI_HBIN* hbin;
   const range_list_element* cur_elem;
   uint32 i, j, num_keys, off, values_length, max_length;
@@ -484,34 +589,24 @@ int extractValueLists(REGFI_FILE* f,
       {
 	off = nk->values_off + REGFI_REGF_SIZE;
 	max_length = hbin->block_size + hbin->file_off - off;
-	/* XXX: This is a hack.  We parse all value-lists, VK records,
-	 *      and data records without regard for current allocation status.  
-	 *      On the off chance that such a record correctly parsed but is 
-	 *      actually a reallocated structure used by something else, we 
-	 *      simply prune it after the fact.  Would be faster to check this
-	 *      up front somehow.
-	 */
-	nk->values = regfi_load_valuelist(f, off, nk->num_values, max_length,
-					  false);
-	values_length = (nk->num_values+1)*sizeof(uint32);
-	if(values_length != (values_length & 0xFFFFFFF8))
-	  values_length = (values_length & 0xFFFFFFF8) + 8;
-
-	if(nk->values != NULL)
+	nk->values = regfi_load_valuelist(f, off, nk->num_values, 
+					  max_length, false);
+	if(nk->values != NULL && nk->values->elements != NULL)
 	{
+	  /* Number of elements in the value list may be shorter than advertised 
+	   * by NK record due to cell truncation.  We'll consider this valid and 
+	   * only throw out the whole value list if it bleeds into an already 
+	   * parsed structure.
+	   */
+	  values_length = (nk->values->num_values+1)*sizeof(uint32);
+	  if(values_length != (values_length & 0xFFFFFFF8))
+	    values_length = (values_length & 0xFFFFFFF8) + 8;
+
 	  if(!range_list_has_range(unalloc_cells, off, values_length))
 	  { /* We've parsed a values-list which isn't in the unallocated list,
-	     * so prune it. 
+	     * so prune it.
 	     */
-	    for(j=0; j<nk->num_values; j++)
-	    {
-	      if(nk->values[j] != NULL)
-	      {
-		if(nk->values[j]->data != NULL)
-		  free(nk->values[j]->data);
-		free(nk->values[j]);
-	      }
-	    }
+	    free(nk->values->elements);
 	    free(nk->values);
 	    nk->values = NULL;
 	  }
@@ -522,51 +617,32 @@ int extractValueLists(REGFI_FILE* f,
 	    if(!removeRange(unalloc_cells, off, values_length))
 	      return 20;
 
-	    for(j=0; j < nk->num_values; j++)
+	    for(j=0; j < nk->values->num_values; j++)
 	    {
-	      if(nk->values[j] != NULL)
+	      /* Don't bother to restrict cell length here, since we'll
+	       * check our unalloc_cells range_list later. 
+	       */
+	      vk = regfi_parse_vk(f, nk->values->elements[j]+REGFI_REGF_SIZE,
+				  0x7FFFFFFF, false);
+	      printMsgs(f);
+	      
+	      if(vk != NULL)
 	      {
-		if(!range_list_has_range(unalloc_cells, nk->values[j]->offset, 
-					 nk->values[j]->cell_size))
-		{ /* We've parsed a value which isn't in the unallocated list,
-		   * so prune it.
-		   */
-		  if(nk->values[j]->data != NULL)
-		    free(nk->values[j]->data);
-		  free(nk->values[j]);
-		  nk->values[j] = NULL;
+		if(range_list_has_range(unalloc_cells, 
+					vk->offset, vk->cell_size))
+		{
+		  if(!range_list_add(unalloc_linked_values, vk->offset,
+				     vk->cell_size, vk))
+		  {
+		    free(vk);
+		    return 30;
+		  }
+
+		  if(!removeRange(unalloc_cells, vk->offset, vk->cell_size))
+		    return 40;
 		}
 		else
-		{
-		  /* A VK record was recovered.  Remove from unalloc_cells
-		   * and inspect data.
-		   */
-		  if(!removeRange(unalloc_cells, nk->values[j]->offset,
-				  nk->values[j]->cell_size))
-		    return 21;
-
-		  /* Don't bother pruning or removing from unalloc_cells if 
-		   * there is no data, or it is stored in the offset.
-		   */
-		  if(nk->values[j]->data != NULL && !nk->values[j]->data_in_offset)
-		  {
-		    off = nk->values[j]->data_off+REGFI_REGF_SIZE;
-		    if(!range_list_has_range(unalloc_cells, off, 
-					     nk->values[j]->data_size))
-		    { /* We've parsed a data cell which isn't in the unallocated 
-		       * list, so prune it.
-		       */
-		      free(nk->values[j]->data);
-		      nk->values[j]->data = NULL;
-		    }
-		    else
-		    { /*A data record was recovered. Remove from unalloc_cells.*/
-		      if(!removeRange(unalloc_cells, off, 
-				      nk->values[j]->data_size))
-			return 22;
-		    }
-		  }
-		}
+		  free(vk);
 	      }
 	    }
 	  }
@@ -578,75 +654,6 @@ int extractValueLists(REGFI_FILE* f,
   return 0;
 }
 
-
-/* NOTE: unalloc_values should be an empty range_list. */
-int extractValues(REGFI_FILE* f,
-		  range_list* unalloc_cells,
-		  range_list* unalloc_values)
-{
-  const range_list_element* cur_elem;
-  REGFI_VK_REC* vk;
-  uint32 i, j, off;
-
-  for(i=0; i < range_list_size(unalloc_cells); i++)
-  {
-    printMsgs(f);
-    cur_elem = range_list_get(unalloc_cells, i);
-    for(j=0; j <= cur_elem->length; j+=8)
-    {
-      vk = regfi_parse_vk(f, cur_elem->offset+j, 
-			   cur_elem->length-j, false);
-      printMsgs(f);
-
-      if(vk != NULL)
-      {
-	if(!range_list_add(unalloc_values, vk->offset,
-			   vk->cell_size, vk))
-	{
-	  fprintf(stderr, "ERROR: Couldn't add value to unalloc_values.\n");
-	  return 20;
-	}
-	j+=vk->cell_size-8;
-      }
-    }
-  }
-  
-  /* Remove value ranges from the unalloc_cells before we continue. */
-  for(i=0; i<range_list_size(unalloc_values); i++)
-  {
-    cur_elem = range_list_get(unalloc_values, i);
-    if(!removeRange(unalloc_cells, cur_elem->offset, cur_elem->length))
-      return 30;
-  }
-
-  /* Now see if the data associated with each value is intact */
-  for(i=0; i<range_list_size(unalloc_values); i++)
-  {
-    cur_elem = range_list_get(unalloc_values, i);
-    vk = (REGFI_VK_REC*)cur_elem->data;
-    if(vk == NULL)
-      return 40;
-
-    if(vk->data != NULL && !vk->data_in_offset)
-    {
-      off = vk->data_off+REGFI_REGF_SIZE;
-      if(!range_list_has_range(unalloc_cells, off, vk->data_size))
-      { /* We've parsed a data cell which isn't in the unallocated 
-	 * list, so prune it.
-	 */
-	free(vk->data);
-	vk->data = NULL;
-      }
-      else
-      { /*A data record was recovered. Remove from unalloc_cells.*/
-	if(!removeRange(unalloc_cells, off, vk->data_size))
-	  return 50;
-      }
-    }
-  }
-
-  return 0;
-}
 
 
 /* NOTE: unalloc_sks should be an empty range_list. */
@@ -698,6 +705,7 @@ int main(int argc, char** argv)
   const range_list_element* cur_elem;
   range_list* unalloc_cells;
   range_list* unalloc_keys;
+  range_list* unalloc_linked_values;
   range_list* unalloc_values;
   range_list* unalloc_sks;
   char** parent_paths;
@@ -706,7 +714,6 @@ int main(int argc, char** argv)
   REGFI_NK_REC* tmp_key;
   REGFI_VK_REC* tmp_value;
   uint32 argi, arge, i, j, ret, num_unalloc_keys;
-  /* uint32 test_offset;*/
   
   /* Process command line arguments */
   if(argc < 2)
@@ -771,6 +778,10 @@ int main(int argc, char** argv)
   if(unalloc_keys == NULL)
     return 10;
 
+  unalloc_linked_values = range_list_new();
+  if(unalloc_linked_values == NULL)
+    return 10;
+
   unalloc_values = range_list_new();
   if(unalloc_values == NULL)
     return 10;
@@ -786,21 +797,35 @@ int main(int argc, char** argv)
     return ret;
   }
 
-  ret = extractValueLists(f, unalloc_cells, unalloc_keys);
+  ret = extractValueLists(f, unalloc_cells, unalloc_keys,unalloc_linked_values);
   if(ret != 0)
   {
     fprintf(stderr, "ERROR: extractValueLists() failed with %d.\n", ret);
     return ret;
   }
 
-  /* Carve any orphan values and associated data */
-  ret = extractValues(f, unalloc_cells, unalloc_values);
+  /* Carve any orphan values */
+  ret = extractVKs(f, unalloc_cells, unalloc_values);
   if(ret != 0)
   {
-    fprintf(stderr, "ERROR: extractValues() failed with %d.\n", ret);
+    fprintf(stderr, "ERROR: extractVKs() failed with %d.\n", ret);
     return ret;
   }
 
+  /* Carve any data associated with VK records */
+  ret = extractDataCells(f, unalloc_cells, unalloc_linked_values);
+  if(ret != 0)
+  {
+    fprintf(stderr, "ERROR: extractDataCells() failed with %d.\n", ret);
+    return ret;
+  }
+  ret = extractDataCells(f, unalloc_cells, unalloc_values);
+  if(ret != 0)
+  {
+    fprintf(stderr, "ERROR: extractDataCells() failed with %d.\n", ret);
+    return ret;
+  }
+  
   /* Carve any SK records */
   ret = extractSKs(f, unalloc_cells, unalloc_sks);
   if(ret != 0)
@@ -831,7 +856,6 @@ int main(int argc, char** argv)
   }
   
   /* Now start the output */
-
   for(i=0; i < num_unalloc_keys; i++)
   {
     cur_elem = range_list_get(unalloc_keys, i);
@@ -849,9 +873,12 @@ int main(int argc, char** argv)
       }
 
       sprintf(tmp_path, "%s/%s", parent_paths[i], tmp_name);
-      for(j=0; j < tmp_key->num_values; j++)
+      for(j=0; j < tmp_key->values->num_values; j++)
       {
-	tmp_value = tmp_key->values[j];
+	tmp_value = 
+	  (REGFI_VK_REC*)range_list_find_data(unalloc_linked_values, 
+					      tmp_key->values->elements[j]
+					      + REGFI_REGF_SIZE);
 	if(tmp_value != NULL)
 	  printValue(f, tmp_value, tmp_path);
       }

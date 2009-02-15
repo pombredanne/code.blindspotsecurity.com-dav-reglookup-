@@ -10,8 +10,8 @@ MAN_PREFIX=$(PREFIX)/man
 ################################################################################
 
 CC=gcc
-#OPTS=-std=gnu89 -pedantic -Wall -ggdb
-OPTS=-std=gnu89 -pedantic -Wall
+OPTS=-std=gnu89 -pedantic -Wall -ggdb
+#OPTS=-std=gnu89 -pedantic -Wall
 INC=-I/usr/local/include
 LIB=-L/usr/local/lib -lm
 BIN_EXT=
