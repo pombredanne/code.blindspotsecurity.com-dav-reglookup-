@@ -264,17 +264,20 @@ int32_t range_list_find(const range_list* rl, uint32_t offset)
   uint32_t prev_idx;
   range_list_element* elem;
 
+  if(rl->size == 0)
+    return -1;
+
   if((offset < rl->elements[0]->offset)
      || (offset > rl->elements[rl->size-1]->offset 
 	 + rl->elements[rl->size-1]->length))
-    return -1;
+    return -2;
 
   prev_idx = range_list_find_previous(rl, offset);
   elem = rl->elements[prev_idx];
   if(offset < elem->offset+elem->length)
     return prev_idx;
 
-  return -2;
+  return -3;
 }
 
 

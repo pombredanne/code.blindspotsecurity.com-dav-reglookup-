@@ -474,13 +474,13 @@ bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
  * Given an offset and an hbin, is the offset within that hbin?
  * The offset is a virtual file offset.
  *******************************************************************/
-static bool regfi_offset_in_hbin(REGFI_HBIN* hbin, uint32 offset)
+static bool regfi_offset_in_hbin(REGFI_HBIN* hbin, uint32 voffset)
 {
   if(!hbin)
     return false;
 
-  if((offset > hbin->first_hbin_off) 
-     && (offset < (hbin->first_hbin_off + hbin->block_size)))
+  if((voffset > hbin->first_hbin_off) 
+     && (voffset < (hbin->first_hbin_off + hbin->block_size)))
     return true;
 		
   return false;
@@ -492,9 +492,9 @@ static bool regfi_offset_in_hbin(REGFI_HBIN* hbin, uint32 offset)
  * Provide a virtual offset and receive the correpsonding HBIN 
  * block for it.  NULL if one doesn't exist.
  *******************************************************************/
-REGFI_HBIN* regfi_lookup_hbin(REGFI_FILE* file, uint32 offset)
+REGFI_HBIN* regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset)
 {
-  return (REGFI_HBIN*)range_list_find_data(file->hbins, offset+REGFI_REGF_SIZE);
+  return (REGFI_HBIN*)range_list_find_data(file->hbins, voffset+REGFI_REGF_SIZE);
 }
 
 
@@ -869,10 +869,10 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
 }
 
 
-uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset, 
-			      uint32 num_values, bool strict)
+REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset, 
+					uint32 num_values, bool strict)
 {
-  uint32* ret_val;
+  REGFI_VALUE_LIST* ret_val;
   uint32 i, cell_length, length, read_len;
   bool unalloc;
 
@@ -885,30 +885,42 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
 
   if(cell_length != (cell_length & 0xFFFFFFF8))
   {
+    regfi_add_message(file, REGFI_MSG_WARN, "Cell length not a multiple of 8"
+		      " while parsing value list at offset 0x%.8X.", offset);
     if(strict)
       return NULL;
     cell_length = cell_length & 0xFFFFFFF8;
   }
+
   if((num_values * sizeof(uint32)) > cell_length-sizeof(uint32))
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Too many values found"
 		      " while parsing value list at offset 0x%.8X.", offset);
-    /* XXX: During non-strict, should reduce num_values appropriately and
-     *      continue instead of bailing out.
-     */
-    return NULL;
+    if(strict)
+      return NULL;
+    num_values = cell_length/sizeof(uint32) - sizeof(uint32);
   }
 
   read_len = num_values*sizeof(uint32);
-  ret_val = (uint32*)malloc(read_len);
+  ret_val = (REGFI_VALUE_LIST*)malloc(sizeof(REGFI_VALUE_LIST));
   if(ret_val == NULL)
     return NULL;
 
+  ret_val->elements = (REGFI_VALUE_LIST_ELEM*)malloc(read_len);
+  if(ret_val->elements == NULL)
+  {
+    free(ret_val);
+    return NULL;
+  }
+  ret_val->num_values = num_values;
+
   length = read_len;
-  if((regfi_read(file->fd, (uint8*)ret_val, &length) != 0) || length != read_len)
+  if((regfi_read(file->fd, (uint8*)ret_val->elements, &length) != 0) 
+     || length != read_len)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to read value pointers"
 		      " while parsing value list at offset 0x%.8X.", offset);
+    free(ret_val->elements);
     free(ret_val);
     return NULL;
   }
@@ -916,17 +928,20 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
   for(i=0; i < num_values; i++)
   {
     /* Fix endianness */
-    ret_val[i] = IVAL(&ret_val[i], 0);
+    ret_val->elements[i] = IVAL(&ret_val->elements[i], 0);
 
     /* Validate the first num_values values to ensure they make sense */
     if(strict)
     {
-      if((ret_val[i] + REGFI_REGF_SIZE > file->file_length)
-	 || ((ret_val[i] & 0xFFFFFFF8) != ret_val[i]))
+      /* XXX: Need to revisit this file length check when we start dealing 
+       *      with partial files. */
+      if((ret_val->elements[i] + REGFI_REGF_SIZE > file->file_length)
+	 || ((ret_val->elements[i] & 0xFFFFFFF8) != ret_val->elements[i]))
       {
-	regfi_add_message(file, REGFI_MSG_ERROR, "Invalid value pointer"
+	regfi_add_message(file, REGFI_MSG_WARN, "Invalid value pointer"
 			  " (0x%.8X) found while parsing value list at offset"
-			  " 0x%.8X.", ret_val[i], offset);
+			  " 0x%.8X.", ret_val->elements[i], offset);
+	free(ret_val->elements);
 	free(ret_val);
 	return NULL;
       }
@@ -939,19 +954,80 @@ uint32* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
 
 
 /******************************************************************************
+ ******************************************************************************/
+REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
+{
+  REGFI_VK_REC* ret_val = NULL;
+  REGFI_HBIN* hbin;
+  uint32 data_offset, data_maxsize;
+
+  hbin = regfi_lookup_hbin(file, offset - REGFI_REGF_SIZE);
+  if(!hbin)
+    return NULL;
+  
+  ret_val = regfi_parse_vk(file, offset, 
+			   hbin->block_size + hbin->file_off - offset, strict);
+
+  if(ret_val == NULL)
+    return NULL;
+
+  if(ret_val->data_size == 0)
+    ret_val->data = NULL;
+  else
+  {
+    if(ret_val->data_in_offset)
+    {
+      ret_val->data = regfi_parse_data(file, ret_val->type, ret_val->data_off,
+				       ret_val->data_size, 4,
+				       ret_val->data_in_offset, strict);
+    }
+    else
+    {
+      hbin = regfi_lookup_hbin(file, ret_val->data_off);
+      if(hbin)
+      {
+	data_offset = ret_val->data_off+REGFI_REGF_SIZE;
+	data_maxsize = hbin->block_size + hbin->file_off - data_offset;
+	ret_val->data = regfi_parse_data(file, ret_val->type, data_offset, 
+					 ret_val->data_size, data_maxsize, 
+					 ret_val->data_in_offset, strict);
+      }
+      else
+      {
+	regfi_add_message(file, REGFI_MSG_WARN, "Could not find HBIN for data"
+			  " while parsing VK record at offset 0x%.8X.", 
+			  ret_val->offset);
+	ret_val->data = NULL;
+      }
+    }
+
+    if(ret_val->data == NULL)
+    {
+      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse data record"
+			" while parsing VK record at offset 0x%.8X.", 
+			ret_val->offset);
+    }
+  }
+
+  return ret_val;
+}
+
+
+/******************************************************************************
  * If !strict, the list may contain NULLs, VK records may point to NULL.
  ******************************************************************************/
-REGFI_VK_REC** regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
-				   uint32 num_values, uint32 max_size, 
-				   bool strict)
+REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
+				       uint32 num_values, uint32 max_size, 
+				       bool strict)
 {
-  REGFI_VK_REC** ret_val;
-  REGFI_HBIN* hbin;
-  uint32 i, vk_offset, vk_max_length, usable_num_values;
-  uint32* voffsets;
+  uint32 usable_num_values;
 
   if((num_values+1) * sizeof(uint32) > max_size)
   {
+    regfi_add_message(file, REGFI_MSG_WARN, "Number of values indicated by"
+		      " parent key (%d) would cause cell to straddle HBIN"
+		      " boundary while loading value list at offset"
+		      " 0x%.8X.", num_values, offset);
     if(strict)
       return NULL;
     usable_num_values = max_size/sizeof(uint32) - sizeof(uint32);
@@ -959,45 +1035,7 @@ REGFI_VK_REC** regfi_load_valuelist(REGFI_FILE* file, uint32 offset,
   else
     usable_num_values = num_values;
 
-  voffsets = regfi_parse_valuelist(file, offset, usable_num_values, strict);
-  if(voffsets == NULL)
-    return NULL;
-
-  ret_val = (REGFI_VK_REC**)zalloc(sizeof(REGFI_VK_REC*) * usable_num_values);
-  if(ret_val == NULL)
-  {
-    free(voffsets);
-    return NULL;
-  }
-  
-  for(i=0; i < usable_num_values; i++)
-  {
-    hbin = regfi_lookup_hbin(file, voffsets[i]);
-    if(!hbin)
-    {
-      free(voffsets);
-      free(ret_val);
-      return NULL;
-    }
-
-    vk_offset =  voffsets[i] + REGFI_REGF_SIZE;
-    vk_max_length = hbin->block_size + hbin->file_off - vk_offset;
-    ret_val[i] = regfi_parse_vk(file, vk_offset, vk_max_length, strict);
-    if(ret_val[i] == NULL)
-    { /* If we're being strict, throw out the whole list.
-       * Otherwise, let it be NULL.
-       */
-      if(strict)
-      {
-	free(voffsets);
-	free(ret_val);
-	return NULL;
-      }
-    }
-  }
-
-  free(voffsets);
-  return ret_val;
+  return regfi_parse_valuelist(file, offset, usable_num_values, strict);
 }
 
 
@@ -1050,15 +1088,16 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
       max_length = sub_hbin->block_size + sub_hbin->file_off - off;
       nk->values = regfi_load_valuelist(file, off, nk->num_values, max_length, 
 					true);
-      if(strict && nk->values == NULL)
+      if(nk->values == NULL)
       {
-	regfi_add_message(file, REGFI_MSG_ERROR, "Could not load value list"
-			  " for NK record at offset 0x%.8X.",
-			  offset);
-	free(nk);
-	return NULL;
+	regfi_add_message(file, REGFI_MSG_WARN, "Could not load value list"
+			  " for NK record at offset 0x%.8X.", offset);
+	if(strict)
+	{
+	  free(nk);
+	  return NULL;
+	}
       }
-
     }
   }
 
@@ -1270,18 +1309,10 @@ REGFI_NK_REC* regfi_rootkey(REGFI_FILE *file)
  *****************************************************************************/
 void regfi_key_free(REGFI_NK_REC* nk)
 {
-  uint32 i;
-  
   if((nk->values != NULL) && (nk->values_off!=REGFI_OFFSET_NONE))
   {
-    for(i=0; i < nk->num_values; i++)
-    {
-      if(nk->values[i]->valuename != NULL)
-	free(nk->values[i]->valuename);
-      if(nk->values[i]->data != NULL)
-	free(nk->values[i]->data);
-      free(nk->values[i]);
-    }
+    if(nk->values->elements != NULL)
+      free(nk->values->elements);
     free(nk->values);
   }
 
@@ -1627,8 +1658,16 @@ const REGFI_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i)
 const REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
   REGFI_VK_REC* ret_val = NULL;
-  if(i->cur_value < i->cur_key->num_values)
-    ret_val = i->cur_key->values[i->cur_value];
+  uint32 voffset;
+
+  if(i->cur_key->values != NULL && i->cur_key->values->elements != NULL)
+  {
+    if(i->cur_value < i->cur_key->values->num_values)
+    {
+      voffset = i->cur_key->values->elements[i->cur_value];
+      ret_val = regfi_load_value(i->f, voffset+REGFI_REGF_SIZE, true);
+    }
+  }
 
   return ret_val;
 }
@@ -2049,13 +2088,11 @@ char* regfi_parse_classname(REGFI_FILE* file, uint32 offset,
 /*******************************************************************
  *******************************************************************/
 REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
-			    uint32 max_size, bool strict)
+			     uint32 max_size, bool strict)
 {
   REGFI_VK_REC* ret_val;
-  REGFI_HBIN *hbin;
   uint8 vk_header[REGFI_VK_MIN_LENGTH];
   uint32 raw_data_size, length, cell_length;
-  uint32 data_offset, data_maxsize;
   bool unalloc = false;
 
   if(!regfi_parse_cell(file->fd, offset, vk_header, REGFI_VK_MIN_LENGTH,
@@ -2158,47 +2195,14 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
       ret_val->cell_size = cell_length;
   }
 
-  if(ret_val->data_size == 0)
-    ret_val->data = NULL;
-  else
-  {
-    if(ret_val->data_in_offset)
-    {
-      ret_val->data = regfi_parse_data(file, ret_val->data_off, 
-				       raw_data_size, 4, strict);
-    }
-    else
-    {
-      hbin = regfi_lookup_hbin(file, ret_val->data_off);
-      if(hbin)
-      {
-	data_offset = ret_val->data_off+REGFI_REGF_SIZE;
-	data_maxsize = hbin->block_size + hbin->file_off - data_offset;
-	ret_val->data = regfi_parse_data(file, data_offset, raw_data_size,
-					 data_maxsize, strict);
-	
-      }
-      else
-      {
-	regfi_add_message(file, REGFI_MSG_WARN, "Could not find hbin for data"
-			  " while parsing VK record at offset 0x%.8X.", offset);
-	ret_val->data = NULL;
-      }
-    }
-
-    if(ret_val->data == NULL)
-    {
-      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse data record"
-			" while parsing VK record at offset 0x%.8X.", offset);
-    }
-  }
-
   return ret_val;
 }
 
 
-uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
-			uint32 max_size, bool strict)
+uint8* regfi_parse_data(REGFI_FILE* file, 
+			uint32 data_type, uint32 offset,
+			uint32 length, uint32 max_size, 
+			bool data_in_offset, bool strict)
 {
   uint8* ret_val;
   uint32 read_length, cell_length;
@@ -2206,9 +2210,8 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
   bool unalloc;
 
   /* The data is typically stored in the offset if the size <= 4 */
-  if (length & REGFI_VK_DATA_IN_OFFSET)
+  if(data_in_offset)
   {
-    length = length & ~REGFI_VK_DATA_IN_OFFSET;
     if(length > 4)
     {
       regfi_add_message(file, REGFI_MSG_ERROR, "Data in offset but length > 4"
@@ -2243,8 +2246,8 @@ uint8* regfi_parse_data(REGFI_FILE* file, uint32 offset, uint32 length,
 
     if(cell_length > max_size)
     {
-      regfi_add_message(file, REGFI_MSG_WARN, "Cell extends past hbin boundary"
-			" while parsing data record at offset 0x%.8X.", 
+      regfi_add_message(file, REGFI_MSG_WARN, "Cell extends past HBIN boundary"
+			" while parsing data record at offset 0x%.8X.",
 			offset);
       if(strict)
 	return NULL;

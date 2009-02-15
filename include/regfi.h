@@ -190,7 +190,7 @@ typedef struct
 } REGFI_SUBKEY_LIST_ELEM;
 
 
-typedef struct 
+typedef struct _regfi_subkey_list
 {
   /* Real offset of this record's cell in the file */
   uint32 offset;
@@ -209,6 +209,18 @@ typedef struct
   /* Set if the magic indicates this subkey list points to child subkey lists */
   bool recursive_type;  
 } REGFI_SUBKEY_LIST;
+
+
+typedef uint32 REGFI_VALUE_LIST_ELEM;
+typedef struct _regfi_value_list
+{
+  /* Actual number of values referenced by this list.  
+   * May differ from parent key's num_values if there were parsing errors. 
+   */
+  uint32 num_values;
+
+  REGFI_VALUE_LIST_ELEM* elements;
+} REGFI_VALUE_LIST;
 
 
 /* Key Value */
@@ -268,7 +280,7 @@ typedef struct
 			 */
 
   /* link in the other records here */
-  REGFI_VK_REC** values;
+  REGFI_VALUE_LIST* values;
   REGFI_SUBKEY_LIST* subkeys;
   
   /* header information */
@@ -426,13 +438,15 @@ const REGFI_VK_REC*   regfi_iterator_next_value(REGFI_ITERATOR* i);
 /********************************************************/
 /* Middle-layer structure caching, loading, and linking */
 /********************************************************/
-REGFI_HBIN*           regfi_lookup_hbin(REGFI_FILE* file, uint32 offset);
+REGFI_HBIN*           regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset);
 REGFI_NK_REC*         regfi_load_key(REGFI_FILE* file, uint32 offset, 
 				     bool strict);
 REGFI_SUBKEY_LIST*    regfi_load_subkeylist(REGFI_FILE* file, uint32 offset, 
 					    uint32 num_keys, uint32 max_size, 
 					    bool strict);
-REGFI_VK_REC**        regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
+REGFI_VK_REC*         regfi_load_value(REGFI_FILE* file, uint32 offset, 
+				       bool strict);
+REGFI_VALUE_LIST*     regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
 					   uint32 num_values, uint32 max_size, 
 					   bool strict);
 
@@ -464,9 +478,10 @@ REGFI_SUBKEY_LIST*    regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset,
 REGFI_VK_REC*         regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
-uint8*                regfi_parse_data(REGFI_FILE* file, uint32 offset, 
+uint8*                regfi_parse_data(REGFI_FILE* file, 
+				       uint32 data_type, uint32 offset, 
 				       uint32 length, uint32 max_size, 
-				       bool strict);
+				       bool data_in_offset, bool strict);
 
 REGFI_SK_REC*         regfi_parse_sk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
