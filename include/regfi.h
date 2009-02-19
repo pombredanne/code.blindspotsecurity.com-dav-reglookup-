@@ -157,7 +157,6 @@
 #endif
 
 
-
 /* HBIN block */
 typedef struct _regfi_hbin 
 {
@@ -258,10 +257,6 @@ typedef struct _regfi_sk_rec
   WINSEC_DESC* sec_desc;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   
-  uint32 sk_off;	/* offset parsed from NK record used as a key
-			 * to lookup reference to this SK record 
-			 */
-  
   uint32 prev_sk_off;
   uint32 next_sk_off;
   uint32 ref_count;
@@ -330,6 +325,9 @@ typedef struct
   /* Metadata about hbins */
   range_list* hbins;
 
+  /* SK record cached since they're repeatedly reused */
+  lru_cache* sk_cache;
+
   /* Error/warning/info messages returned by lower layer functions */
   char* last_message;
 
@@ -374,7 +372,6 @@ typedef struct
 {
   REGFI_FILE* f;
   void_stack* key_positions;
-  lru_cache* sk_recs;
   REGFI_NK_REC* cur_key;
   uint32 cur_subkey;
   uint32 cur_value;
@@ -383,9 +380,6 @@ typedef struct
 
 typedef struct 
 {
-  /* XXX: Should probably eliminate the storage of keys here 
-   *      once key caching is implemented. 
-   */
   REGFI_NK_REC* nk;
   uint32 cur_subkey;
   /* We could store a cur_value here as well, but didn't see 
@@ -436,19 +430,25 @@ const REGFI_VK_REC*   regfi_iterator_next_value(REGFI_ITERATOR* i);
 
 
 /********************************************************/
-/* Middle-layer structure caching, loading, and linking */
+/* Middle-layer structure loading, linking, and caching */
 /********************************************************/
-REGFI_HBIN*           regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset);
 REGFI_NK_REC*         regfi_load_key(REGFI_FILE* file, uint32 offset, 
 				     bool strict);
-REGFI_SUBKEY_LIST*    regfi_load_subkeylist(REGFI_FILE* file, uint32 offset, 
-					    uint32 num_keys, uint32 max_size, 
-					    bool strict);
 REGFI_VK_REC*         regfi_load_value(REGFI_FILE* file, uint32 offset, 
 				       bool strict);
+REGFI_SUBKEY_LIST*    regfi_load_subkeylist(REGFI_FILE* file, uint32 offset,
+					    uint32 num_keys, uint32 max_size,
+					    bool strict);
 REGFI_VALUE_LIST*     regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
-					   uint32 num_values, uint32 max_size, 
+					   uint32 num_values, uint32 max_size,
 					   bool strict);
+
+/* These are cached so return values don't need to be freed. */
+const REGFI_SK_REC*   regfi_load_sk(REGFI_FILE* file, uint32 offset,
+				    bool strict);
+const REGFI_HBIN*     regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset);
+
+
 
 /************************************/
 /*  Low-layer data structure access */
@@ -521,4 +521,7 @@ REGFI_SUBKEY_LIST*    regfi_load_subkeylist_aux(REGFI_FILE* file, uint32 offset,
 						uint8 depth_left);
 void                  regfi_add_message(REGFI_FILE* file, uint16 msg_type, 
 					const char* fmt, ...);
+REGFI_NK_REC*         regfi_copy_nk(const REGFI_NK_REC* nk);
+REGFI_VK_REC*         regfi_copy_vk(const REGFI_VK_REC* vk);
+
 #endif	/* _REGFI_H */

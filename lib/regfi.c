@@ -474,7 +474,7 @@ bool regfi_parse_cell(int fd, uint32 offset, uint8* hdr, uint32 hdr_len,
  * Given an offset and an hbin, is the offset within that hbin?
  * The offset is a virtual file offset.
  *******************************************************************/
-static bool regfi_offset_in_hbin(REGFI_HBIN* hbin, uint32 voffset)
+static bool regfi_offset_in_hbin(const REGFI_HBIN* hbin, uint32 voffset)
 {
   if(!hbin)
     return false;
@@ -492,9 +492,10 @@ static bool regfi_offset_in_hbin(REGFI_HBIN* hbin, uint32 voffset)
  * Provide a virtual offset and receive the correpsonding HBIN 
  * block for it.  NULL if one doesn't exist.
  *******************************************************************/
-REGFI_HBIN* regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset)
+const REGFI_HBIN* regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset)
 {
-  return (REGFI_HBIN*)range_list_find_data(file->hbins, voffset+REGFI_REGF_SIZE);
+  return (const REGFI_HBIN*)range_list_find_data(file->hbins, 
+						 voffset+REGFI_REGF_SIZE);
 }
 
 
@@ -540,7 +541,7 @@ REGFI_SUBKEY_LIST* regfi_load_subkeylist_aux(REGFI_FILE* file, uint32 offset,
 {
   REGFI_SUBKEY_LIST* ret_val;
   REGFI_SUBKEY_LIST** sublists;
-  REGFI_HBIN* sublist_hbin;
+  const REGFI_HBIN* sublist_hbin;
   uint32 i, num_sublists, off, max_length;
 
   if(depth_left == 0)
@@ -955,10 +956,11 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
+REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, 
+			       bool strict)
 {
   REGFI_VK_REC* ret_val = NULL;
-  REGFI_HBIN* hbin;
+  const REGFI_HBIN* hbin;
   uint32 data_offset, data_maxsize;
 
   hbin = regfi_lookup_hbin(file, offset - REGFI_REGF_SIZE);
@@ -1017,7 +1019,7 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
  * If !strict, the list may contain NULLs, VK records may point to NULL.
  ******************************************************************************/
 REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32 offset, 
-				       uint32 num_values, uint32 max_size, 
+				       uint32 num_values, uint32 max_size,
 				       bool strict)
 {
   uint32 usable_num_values;
@@ -1040,14 +1042,13 @@ REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32 offset,
 
 
 
-/*******************************************************************
- * XXX: Need to add full key caching using a 
- *      custom cache structure.
- *******************************************************************/
+/******************************************************************************
+ *
+ ******************************************************************************/
 REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
 {
-  REGFI_HBIN* hbin;
-  REGFI_HBIN* sub_hbin;
+  const REGFI_HBIN* hbin;
+  const REGFI_HBIN* sub_hbin;
   REGFI_NK_REC* nk;
   uint32 max_length, off;
 
@@ -1057,14 +1058,14 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
 
   /* get the initial nk record */
   max_length = hbin->block_size + hbin->file_off - offset;
-  if ((nk = regfi_parse_nk(file, offset, max_length, true)) == NULL)
+  if((nk = regfi_parse_nk(file, offset, max_length, true)) == NULL)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Could not load NK record at"
 		      " offset 0x%.8X.", offset);
     return NULL;
   }
 
-  /* fill in values */
+  /* get value list */
   if(nk->num_values && (nk->values_off!=REGFI_OFFSET_NONE)) 
   {
     sub_hbin = hbin;
@@ -1101,7 +1102,7 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
     }
   }
 
-  /* now get subkeys */
+  /* now get subkey list */
   if(nk->num_subkeys && (nk->subkeys_off != REGFI_OFFSET_NONE)) 
   {
     sub_hbin = hbin;
@@ -1140,7 +1141,44 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
 
 /******************************************************************************
  ******************************************************************************/
-static bool regfi_find_root_nk(REGFI_FILE* file, uint32 offset, uint32 hbin_size,
+const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32 offset, bool strict)
+{
+  REGFI_SK_REC* ret_val = NULL;
+  const REGFI_HBIN* hbin;
+  uint32 max_length;
+
+  /* First look if we have already parsed it */
+  ret_val = (REGFI_SK_REC*)lru_cache_find(file->sk_cache, &offset, 4);
+
+  /* Bail out if we have previously cached a parse failure at this offset. */
+  if(ret_val == (void*)REGFI_OFFSET_NONE)
+    return NULL;
+
+  if(ret_val == NULL)
+  {
+    hbin = regfi_lookup_hbin(file, offset - REGFI_REGF_SIZE);
+    if(hbin == NULL)
+      return NULL;
+
+    max_length = hbin->block_size + hbin->file_off - offset;
+    ret_val = regfi_parse_sk(file, offset, max_length, strict);
+    if(ret_val == NULL)
+    { /* Cache the parse failure and bail out. */
+      lru_cache_update(file->sk_cache, &offset, 4, (void*)REGFI_OFFSET_NONE);
+      return NULL;
+    }
+
+    lru_cache_update(file->sk_cache, &offset, 4, ret_val);
+  }
+
+  return ret_val;
+}
+
+
+
+/******************************************************************************
+ ******************************************************************************/
+static bool regfi_find_root_nk(REGFI_FILE* file, uint32 offset,uint32 hbin_size,
 			       uint32* root_offset)
 {
   uint8 tmp[4];
@@ -1191,7 +1229,7 @@ REGFI_FILE* regfi_open(const char* filename)
   struct stat sbuf;
   REGFI_FILE* rb;
   REGFI_HBIN* hbin = NULL;
-  uint32 hbin_off, file_length;
+  uint32 hbin_off, file_length, cache_secret;
   int fd;
   bool rla;
 
@@ -1240,6 +1278,16 @@ REGFI_FILE* regfi_open(const char* filename)
     hbin = regfi_parse_hbin(rb, hbin_off, true);
   }
 
+
+  /* This secret isn't very secret, but we don't need a good one.  This 
+   * secret is just designed to prevent someone from trying to blow our
+   * caching and make things slow.
+   */
+  cache_secret = 0x15DEAD05^time(NULL)^(getpid()<<16);
+
+  /* Cache an unlimited number of SK records.  Typically there are very few. */
+  rb->sk_cache = lru_cache_create(0, cache_secret, true);
+
   /* Default message mask */
   rb->msg_mask = REGFI_MSG_ERROR|REGFI_MSG_WARN;
 
@@ -1250,7 +1298,7 @@ REGFI_FILE* regfi_open(const char* filename)
 
 /*******************************************************************
  *******************************************************************/
-int regfi_close( REGFI_FILE *file )
+int regfi_close(REGFI_FILE *file)
 {
   int fd;
   uint32 i;
@@ -1265,6 +1313,8 @@ int regfi_close( REGFI_FILE *file )
     free(range_list_get(file->hbins, i)->data);
   range_list_free(file->hbins);
 
+  if(file->sk_cache != NULL)
+    lru_cache_destroy(file->sk_cache);
   free(file);
 
   return close(fd);
@@ -1278,17 +1328,17 @@ int regfi_close( REGFI_FILE *file )
 REGFI_NK_REC* regfi_rootkey(REGFI_FILE *file)
 {
   REGFI_NK_REC* nk = NULL;
-  REGFI_HBIN*   hbin;
-  uint32       root_offset, i, num_hbins;
+  REGFI_HBIN* hbin;
+  uint32 root_offset, i, num_hbins;
   
   if(!file)
     return NULL;
 
   /* Scan through the file one HBIN block at a time looking 
-     for an NK record with a type == 0x002c.
-     Normally this is the first nk record in the first hbin 
-     block (but I'm not assuming that for now) */
-
+   * for an NK record with a root key type.
+   * This is typically the first NK record in the first HBIN
+   * block (but we're not assuming that generally).
+   */
   num_hbins = range_list_size(file->hbins);
   for(i=0; i < num_hbins; i++)
   {
@@ -1360,16 +1410,8 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* fh)
   if(ret_val->key_positions == NULL)
   {
     free(ret_val);
-    free(root);
     return NULL;
   }
-
-  /* This secret isn't very secret, but we don't need a good one.  This 
-   * secret is just designed to prevent someone from trying to blow our
-   * caching and make things slow.
-   */
-  ret_val->sk_recs = lru_cache_create(127, 0x15DEAD05^time(NULL)^(getpid()<<16),
-				      true);
 
   ret_val->f = fh;
   ret_val->cur_key = root;
@@ -1395,8 +1437,7 @@ void regfi_iterator_free(REGFI_ITERATOR* i)
     free(cur);
   }
   
-  lru_cache_destroy(i->sk_recs);
-
+  void_stack_free(i->key_positions);
   free(i);
 }
 
@@ -1542,36 +1583,11 @@ const REGFI_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i)
 {
-  REGFI_SK_REC* ret_val = NULL;
-  REGFI_HBIN* hbin;
-  uint32 max_length, off;
-
-  if(i->cur_key == NULL)
+  if(i->cur_key == NULL || i->cur_key->sk_off == REGFI_OFFSET_NONE)
     return NULL;
-  
-  /* First look if we have already parsed it */
-  if((i->cur_key->sk_off!=REGFI_OFFSET_NONE)
-     && !(ret_val =(REGFI_SK_REC*)lru_cache_find(i->sk_recs, 
-						&i->cur_key->sk_off, 4)))
-  {
-    hbin = regfi_lookup_hbin(i->f, i->cur_key->sk_off);
 
-    if(hbin == NULL)
-      return NULL;
-
-    off = i->cur_key->sk_off + REGFI_REGF_SIZE;
-    max_length = hbin->block_size + hbin->file_off - off;
-    ret_val = regfi_parse_sk(i->f, off, max_length, true);
-    if(ret_val == NULL)
-      return NULL;
-
-    ret_val->sk_off = i->cur_key->sk_off;
-    lru_cache_update(i->sk_recs, &i->cur_key->sk_off, 4, ret_val);
-  }
-
-  return ret_val;
+  return regfi_load_sk(i->f, i->cur_key->sk_off + REGFI_REGF_SIZE, true);
 }
-
 
 
 /******************************************************************************
@@ -1657,7 +1673,7 @@ const REGFI_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
-  REGFI_VK_REC* ret_val = NULL;
+  const REGFI_VK_REC* ret_val = NULL;
   uint32 voffset;
 
   if(i->cur_key->values != NULL && i->cur_key->values->elements != NULL)
@@ -1686,7 +1702,6 @@ const REGFI_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
 
   return ret_val;
 }
-
 
 
 /*******************************************************************
@@ -1851,7 +1866,7 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
 			    uint32 max_size, bool strict)
 {
   uint8 nk_header[REGFI_NK_MIN_LENGTH];
-  REGFI_HBIN *hbin;
+  const REGFI_HBIN *hbin;
   REGFI_NK_REC* ret_val;
   uint32 length,cell_length;
   uint32 class_offset, class_maxsize;
