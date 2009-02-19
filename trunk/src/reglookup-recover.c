@@ -256,7 +256,7 @@ int printCell(REGFI_FILE* f, uint32 offset)
 char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 {
   void_stack* path_stack = void_stack_new(REGFI_MAX_DEPTH);
-  REGFI_HBIN* hbin;
+  const REGFI_HBIN* hbin;
   REGFI_NK_REC* cur_ancestor;
   char* ret_val;
   char* path_element;
@@ -464,7 +464,7 @@ int extractDataCells(REGFI_FILE* f,
 {
   const range_list_element* cur_elem;
   REGFI_VK_REC* vk;
-  REGFI_HBIN* hbin;
+  const REGFI_HBIN* hbin;
   uint32 i, off, data_offset, data_maxsize;
 
   for(i=0; i<range_list_size(unalloc_values); i++)
@@ -569,7 +569,7 @@ int extractValueLists(REGFI_FILE* f,
 {
   REGFI_NK_REC* nk;
   REGFI_VK_REC* vk;
-  REGFI_HBIN* hbin;
+  const REGFI_HBIN* hbin;
   const range_list_element* cur_elem;
   uint32 i, j, num_keys, off, values_length, max_length;
 

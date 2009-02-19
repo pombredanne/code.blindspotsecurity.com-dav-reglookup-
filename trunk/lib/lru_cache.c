@@ -105,7 +105,7 @@ lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
     return NULL;
 
   if(max_keys == 0)
-    ret_val->num_buckets = 2048;
+    ret_val->num_buckets = 1024;
   else
   {
     ret_val->num_buckets = max_keys/lru_cache_floor_log2(max_keys);
