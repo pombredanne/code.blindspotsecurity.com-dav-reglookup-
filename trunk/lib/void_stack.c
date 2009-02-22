@@ -21,7 +21,7 @@
  * $Id$
  */
 
-#include "../include/void_stack.h"
+#include "void_stack.h"
 
 void_stack* void_stack_new(unsigned short max_size)
 {

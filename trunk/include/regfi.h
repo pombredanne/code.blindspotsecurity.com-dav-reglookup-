@@ -45,6 +45,7 @@
 #include <unistd.h>
 #include <assert.h>
 
+#include "talloc.h"
 #include "smb_deps.h"
 #include "winsec.h"
 #include "void_stack.h"
@@ -83,8 +84,6 @@
 /* Not a real type in the registry */
 #define REG_KEY                    0x7FFFFFFF
 
-#define REGFI_REGF_SIZE            0x1000 /* "regf" header block size */
-#define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
 #define REGFI_MAX_DEPTH		   512
 #define REGFI_OFFSET_NONE          0xffffffff
 
@@ -92,6 +91,8 @@
 #define REGFI_MAX_SUBKEY_DEPTH     255    
 
 /* Header sizes and magic number lengths for various records */
+#define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
+#define REGFI_REGF_SIZE            0x1000 /* "regf" header block size */
 #define REGFI_REGF_MAGIC_SIZE      4
 #define REGFI_HBIN_MAGIC_SIZE      4
 #define REGFI_CELL_MAGIC_SIZE      2
@@ -106,7 +107,7 @@
 /* XXX: Can we add clock resolution validation as well as range?  It has
  *      been reported that Windows timestamps are never more than a
  *      certain granularity (250ms?), which could be used to help
- *      eliminate false positives.  Would need to validate this and
+ *      eliminate false positives.  Would need to verify this and
  *      perhaps conservatively implement a check.
  */
  /* Minimum time is Jan 1, 1990 00:00:00 */

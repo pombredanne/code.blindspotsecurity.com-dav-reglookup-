@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Timothy D. Morgan
+ * Copyright (C) 2008-2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "talloc.h"
 
 struct lru_cache_element;
 typedef struct lru_cache_element lru_cache_element; 
@@ -49,15 +50,17 @@ typedef struct _lru_cache
   lru_cache_element* oldest;
   lru_cache_element* newest;
   lru_cache_element** table;
-  bool free_data;
+  bool talloc_data;
 } lru_cache;
 
 
-lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data);
+lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret);
+lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys, 
+				uint32_t secret, bool talloc_data);
 void lru_cache_destroy(lru_cache* ht);
 
-/* Returns a pointer to the old, replaced data stored at index.  
- * Returns NULL if no entry was overwritten.
+/* 
+ * 
  */
 bool lru_cache_update(lru_cache* ht, const void* index, 
 		      uint32_t index_len, void* data);

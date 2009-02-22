@@ -26,8 +26,8 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
-#include "../include/regfi.h"
-#include "../include/void_stack.h"
+#include "regfi.h"
+#include "void_stack.h"
 
 /* Globals, influenced by command line parameters */
 bool print_verbose = false;
