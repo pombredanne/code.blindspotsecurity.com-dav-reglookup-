@@ -342,11 +342,11 @@ char* regfi_get_acl(WINSEC_ACL* acl)
       else
       {
 	ret_val = tmp_val;
-	size += snprintf(ret_val+size, extra, "%s%s%c%s%c%s%c%s",
-			 ace_delim,sid_str,
-			 field_delim,type_str,
-			 field_delim,perms_str,
-			 field_delim,flags_str);
+	size += sprintf(ret_val+size, "%s%s%c%s%c%s%c%s",
+			ace_delim,sid_str,
+			field_delim,type_str,
+			field_delim,perms_str,
+			field_delim,flags_str);
 	ace_delim = "|";
       }
     }
@@ -1278,10 +1278,11 @@ REGFI_FILE* regfi_open(const char* filename)
   while(hbin && rla)
   {
     rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
+    if(rla)
+      talloc_steal(rb->hbins, hbin);
     hbin_off = hbin->file_off + hbin->block_size;
     hbin = regfi_parse_hbin(rb, hbin_off, true);
   }
-
 
   /* This secret isn't very secret, but we don't need a good one.  This 
    * secret is just designed to prevent someone from trying to blow our
@@ -1300,12 +1301,11 @@ REGFI_FILE* regfi_open(const char* filename)
 }
 
 
-/*******************************************************************
- *******************************************************************/
+/******************************************************************************
+ ******************************************************************************/
 int regfi_close(REGFI_FILE *file)
 {
   int fd;
-  uint32 i;
 
   /* nothing to do if there is no open file */
   if ((file == NULL) || (file->fd == -1))
@@ -1313,15 +1313,13 @@ int regfi_close(REGFI_FILE *file)
 
   fd = file->fd;
   file->fd = -1;
-  for(i=0; i < range_list_size(file->hbins); i++)
-    free(range_list_get(file->hbins, i)->data);
+
   range_list_free(file->hbins);
 
-  
   if(file->sk_cache != NULL)
     lru_cache_destroy(file->sk_cache);
-  free(file);
 
+  free(file);
   return close(fd);
 }
 
@@ -1329,7 +1327,7 @@ int regfi_close(REGFI_FILE *file)
 /******************************************************************************
  * There should be only *one* root key in the registry file based 
  * on my experience.  --jerry
- *****************************************************************************/
+ ******************************************************************************/
 REGFI_NK_REC* regfi_rootkey(REGFI_FILE *file)
 {
   REGFI_NK_REC* nk = NULL;
@@ -1790,12 +1788,10 @@ REGFI_FILE* regfi_parse_regf(int fd, bool strict)
 
 
 
-/*******************************************************************
+/******************************************************************************
  * Given real file offset, read and parse the hbin at that location
  * along with it's associated cells.
- *******************************************************************/
-/* XXX: Need a way to return types of errors.
- */
+ ******************************************************************************/
 REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
 {
   REGFI_HBIN *hbin;
@@ -1824,7 +1820,8 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
     return NULL;
   }
 
-  if(!(hbin = (REGFI_HBIN*)zalloc(sizeof(REGFI_HBIN)))) 
+  hbin = talloc(NULL, REGFI_HBIN);
+  if(hbin == NULL)
     return NULL;
   hbin->file_off = offset;
 
@@ -1835,7 +1832,7 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
 		      "(%.2X %.2X %.2X %.2X) while parsing hbin at offset"
 		      " 0x%.8X.", hbin->magic[0], hbin->magic[1], 
 		      hbin->magic[2], hbin->magic[3], offset);
-    free(hbin);
+    talloc_free(hbin);
     return NULL;
   }
 
@@ -1857,7 +1854,7 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
     regfi_add_message(file, REGFI_MSG_ERROR, "The hbin offset is not aligned"
 		      " or runs off the end of the file"
 		      " while parsing hbin at offset 0x%.8X.", offset);
-    free(hbin);
+    talloc_free(hbin);
     return NULL;
   }
 

@@ -54,10 +54,7 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
 
   if (buf == NULL || buf_len <  WINSEC_DESC_HEADER_SIZE)
     return NULL;
-  /*
-  if((ret_val = (WINSEC_DESC*)zalloc(sizeof(WINSEC_DESC))) == NULL)
-    return NULL;
-  */
+
   if((ret_val = talloc(talloc_ctx, WINSEC_DESC)) == NULL)
     return NULL;
 
@@ -85,7 +82,9 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
     return NULL;
   }
 
-  if(ret_val->off_owner_sid != 0)
+  if(ret_val->off_owner_sid == 0)
+    ret_val->owner_sid = NULL;
+  else
   {
     ret_val->owner_sid = winsec_parse_dom_sid(ret_val, 
 					      buf + ret_val->off_owner_sid,
@@ -97,7 +96,9 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
     }
   }
 
-  if (ret_val->off_grp_sid != 0) 
+  if(ret_val->off_grp_sid == 0) 
+    ret_val->grp_sid = NULL;
+  else
   {
     ret_val->grp_sid = winsec_parse_dom_sid(ret_val, buf + ret_val->off_grp_sid,
 					    buf_len - ret_val->off_grp_sid);
@@ -108,7 +109,7 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
     }
   }
 
-  if ((ret_val->control & WINSEC_DESC_SACL_PRESENT) && ret_val->off_sacl)
+  if((ret_val->control & WINSEC_DESC_SACL_PRESENT) && ret_val->off_sacl)
   {
     ret_val->sacl = winsec_parse_acl(ret_val, buf + ret_val->off_sacl,
 				     buf_len - ret_val->off_sacl);
@@ -118,8 +119,10 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
       return NULL;
     }
   }
+  else
+    ret_val->sacl = NULL;
 
-  if ((ret_val->control & WINSEC_DESC_DACL_PRESENT) && ret_val->off_dacl != 0) 
+  if((ret_val->control & WINSEC_DESC_DACL_PRESENT) && ret_val->off_dacl != 0) 
   {
     ret_val->dacl = winsec_parse_acl(ret_val, buf + ret_val->off_dacl,
 				     buf_len - ret_val->off_dacl);
@@ -129,6 +132,8 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
       return NULL;
     }
   }
+  else
+    ret_val->dacl = NULL;
 
   return ret_val;
 }
@@ -149,10 +154,7 @@ WINSEC_ACL* winsec_parse_acl(void* talloc_ctx,
    */
   if (buf == NULL || buf_len < 8)
     return NULL;
-  /*
-  if((ret_val = (WINSEC_ACL*)zalloc(sizeof(WINSEC_ACL))) == NULL)
-    return NULL;
-  */
+
   if((ret_val = talloc(talloc_ctx, WINSEC_ACL)) == NULL)
     return NULL;
   
@@ -174,9 +176,6 @@ WINSEC_ACL* winsec_parse_acl(void* talloc_ctx,
    * between a non-present DACL (allow all access) and a DACL with no ACE's
    * (allow no access).
    */
-  /*  if((ret_val->aces = (WINSEC_ACE**)zcalloc(sizeof(WINSEC_ACE*),
-					   ret_val->num_aces+1)) == NULL)
-  */
   if((ret_val->aces = talloc_array(ret_val, WINSEC_ACE*, 
 				   ret_val->num_aces+1)) == NULL)
   {
@@ -202,6 +201,7 @@ WINSEC_ACL* winsec_parse_acl(void* talloc_ctx,
       return NULL;
     }
   }
+  ret_val->aces[ret_val->num_aces] = NULL;
 
   return ret_val;
 }
@@ -218,8 +218,6 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
 
   if(buf == NULL || buf_len < WINSEC_ACE_MIN_SIZE)
     return NULL;
-
-  /*  if((ret_val = (WINSEC_ACE*)zalloc(sizeof(WINSEC_ACE))) == NULL)*/
 
   if((ret_val = talloc(talloc_ctx, WINSEC_ACE)) == NULL)
     return NULL;
@@ -248,6 +246,8 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
       }
       offset += sizeof(WINSEC_UUID);
     }
+    else
+      ret_val->obj_guid = NULL;
 
     if(ret_val->obj_flags & WINSEC_ACE_OBJECT_INHERITED_PRESENT)
     {
@@ -260,6 +260,8 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
       }
       offset += sizeof(WINSEC_UUID);
     }
+    else
+      ret_val->inh_guid = NULL;
   }
 
   ret_val->trustee = winsec_parse_dom_sid(ret_val, buf+offset, buf_len-offset);
@@ -321,7 +323,6 @@ WINSEC_UUID* winsec_parse_uuid(void* talloc_ctx,
   if(buf == NULL || buf_len < sizeof(WINSEC_UUID))
     return false;
 
-  /* if((ret_val = (WINSEC_UUID*)zalloc(sizeof(WINSEC_UUID))) == NULL)*/
   if((ret_val = talloc(talloc_ctx, WINSEC_UUID)) == NULL)
     return NULL;
   

@@ -53,9 +53,9 @@
 #define WINSEC_ACL_HEADER_SIZE      (2 * sizeof(uint32_t))
 #define WINSEC_ACE_MIN_SIZE         16
 
-/* TODO: Fill in definitions of other flags */
-/* This means offsets contained in the descriptor are relative to the
- * descriptor's offset.  This had better be true in the registry. 
+/* XXX: Fill in definitions of other flags */
+/* This self relative flag means offsets contained in the descriptor are relative
+ * to the descriptor's offset.  This had better be true in the registry.
  */
 #define WINSEC_DESC_SELF_RELATIVE   0x8000
 #define WINSEC_DESC_SACL_PRESENT    0x0010
@@ -69,7 +69,7 @@
 #define WINSEC_ACE_TYPE_SYSTEM_ALARM_OBJECT    0x8
 
 
-typedef struct _winsec_uuid 
+typedef struct _winsec_uuid
 {
        uint32 time_low;
        uint16 time_mid;
