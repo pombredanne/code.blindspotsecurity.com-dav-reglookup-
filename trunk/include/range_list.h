@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Timothy D. Morgan
+ * Copyright (C) 2008-2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,14 +17,15 @@
  * $Id$
  */
 
+#ifndef _RANGE_LIST_H
+#define _RANGE_LIST_H
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-
-#ifndef _RANGE_LIST_H
-#define _RANGE_LIST_H
-
+#include <math.h>
+#include "talloc.h"
 
 typedef struct _range_list_element
 {

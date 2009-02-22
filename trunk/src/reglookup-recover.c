@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "talloc.h"
 #include "regfi.h"
 #include "range_list.h"
 #include "lru_cache.h"
@@ -683,6 +684,7 @@ int extractSKs(REGFI_FILE* f,
 	  fprintf(stderr, "ERROR: Couldn't add sk to unalloc_sks.\n");
 	  return 20;
 	}
+	talloc_steal(unalloc_sks, sk);
 	j+=sk->cell_size-8;
       }
     }
@@ -906,6 +908,12 @@ int main(int argc, char** argv)
       printCell(f, cur_elem->offset);
     }
   }
+
+  range_list_free(unalloc_cells);
+  range_list_free(unalloc_keys);
+  range_list_free(unalloc_linked_values);
+  range_list_free(unalloc_values);
+  range_list_free(unalloc_sks);
 
   return 0;
 }

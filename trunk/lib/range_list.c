@@ -17,7 +17,6 @@
  * $Id$
  */
 
-#include <math.h>
 #include "range_list.h"
 
 
@@ -26,7 +25,7 @@
 /*******************/
 #define RANGE_LIST_ALLOC_SIZE 256
 
-#if 0
+#if 0 /* For debugging */
 #include <stdio.h>
 static void range_list_print(const range_list* rl)
 {
@@ -52,9 +51,8 @@ static bool range_list_insert(range_list* rl, range_list_element* elem, uint32_t
 
   if(rl->size == rl->elem_alloced)
   {
-    tmp = (range_list_element**)realloc(rl->elements, 
-					(rl->elem_alloced+RANGE_LIST_ALLOC_SIZE)
-					* sizeof(range_list_element*));
+    tmp = talloc_realloc(rl, rl->elements, range_list_element*, 
+			 (rl->elem_alloced+RANGE_LIST_ALLOC_SIZE));
     if(tmp == NULL)
       return false;
     rl->elements = tmp;
@@ -124,16 +122,14 @@ range_list* range_list_new()
 {
   range_list* rl;
 
-  rl = (range_list*)malloc(sizeof(range_list));
+  rl = talloc(NULL, range_list);
   if(rl == NULL)
     return NULL;
 
-  rl->elements = (range_list_element**)malloc(sizeof(range_list_element*)
-					      * RANGE_LIST_ALLOC_SIZE);
-
+  rl->elements = talloc_array(rl, range_list_element*, RANGE_LIST_ALLOC_SIZE);
   if(rl->elements == NULL)
   {
-    free(rl);
+    talloc_free(rl);
     return NULL;
   }
 
@@ -146,16 +142,10 @@ range_list* range_list_new()
 
 void range_list_free(range_list* rl)
 {
-  uint32_t i;
-
   if(rl == NULL)
     return;
 
-  for(i=0; i < rl->size; i++)
-    free(rl->elements[i]);
-
-  free(rl->elements);
-  free(rl);
+  talloc_free(rl);
 }
 
 
@@ -200,7 +190,7 @@ bool range_list_add(range_list* rl, uint32_t offset, uint32_t length, void* data
      && (offset+length > rl->elements[insert_index+1]->offset))
     return false;
 
-  elem = (range_list_element*)malloc(sizeof(range_list_element));
+  elem = talloc(rl->elements, range_list_element);
   if(elem == NULL)
     return false;
   elem->offset = offset;
@@ -209,7 +199,7 @@ bool range_list_add(range_list* rl, uint32_t offset, uint32_t length, void* data
   
   if(!range_list_insert(rl, elem, insert_index))
   {
-    free(elem);
+    talloc_free(elem);
     return false;
   }
 
@@ -225,7 +215,7 @@ bool range_list_remove(range_list* rl, uint32_t index)
   if(index >= rl->size)
     return false;
 
-  free(rl->elements[index]);
+  talloc_free(rl->elements[index]);
 
   /* Do the shuffle to the left. */
   for(i=index; i < (rl->size-1); i++)
@@ -236,9 +226,8 @@ bool range_list_remove(range_list* rl, uint32_t index)
   /* Try to keep memory usage down */
   if(rl->size + 2 * RANGE_LIST_ALLOC_SIZE  < rl->elem_alloced)
   {
-    tmp = (range_list_element**)realloc(rl->elements, 
-					(rl->elem_alloced-2*RANGE_LIST_ALLOC_SIZE)
-					* sizeof(range_list_element*));
+    tmp = talloc_realloc(rl, rl->elements, range_list_element*, 
+			 (rl->elem_alloced-2*RANGE_LIST_ALLOC_SIZE));
     if(tmp != NULL)
     {
       rl->elements = tmp;
@@ -304,7 +293,7 @@ bool range_list_split_element(range_list* rl, uint32_t index, uint32_t offset)
      || (offset >= cur_elem->offset+cur_elem->length))
     return false;
 
-  new_elem = (range_list_element*)malloc(sizeof(range_list_element));
+  new_elem = talloc(rl->elements, range_list_element);
   if(new_elem == NULL)
     return false;
   
@@ -314,7 +303,7 @@ bool range_list_split_element(range_list* rl, uint32_t index, uint32_t offset)
   
   if(!range_list_insert(rl, new_elem, index+1))
   {
-    free(new_elem);
+    talloc_free(new_elem);
     return false;
   }
 
