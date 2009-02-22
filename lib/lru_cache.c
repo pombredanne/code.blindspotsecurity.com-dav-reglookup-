@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Timothy D. Morgan
+ * Copyright (C) 2008-2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
  * $Id$
  */
 
-#include "../include/lru_cache.h"
+#include "lru_cache.h"
 
 
 #define LRU_CACHE_DEBUG 0
@@ -96,11 +96,19 @@ static void lru_cache_print(lru_cache* ht)
 }
 #endif
 
-lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
+
+lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret)
+{
+  return lru_cache_create_ctx(NULL, max_keys, secret, false);
+}
+
+
+lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys, 
+				uint32_t secret, bool talloc_data)
 {
   lru_cache* ret_val;
 
-  ret_val = (lru_cache*)malloc(sizeof(lru_cache));
+  ret_val = talloc(talloc_ctx, lru_cache);
   if(ret_val == NULL)
     return NULL;
 
@@ -113,12 +121,11 @@ lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
       ret_val->num_buckets = 1;
   }
 
-  ret_val->table 
-    = (lru_cache_element**)malloc(sizeof(lru_cache_element*) 
-				  * ret_val->num_buckets);
+  ret_val->table = talloc_array(ret_val, 
+				lru_cache_element*, ret_val->num_buckets);
   if(ret_val->table == NULL)
   {
-    free(ret_val);
+    talloc_free(ret_val);
     return NULL;
   }
   
@@ -126,7 +133,7 @@ lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
   ret_val->newest = NULL;
   ret_val->max_keys = max_keys;
   ret_val->secret = secret;
-  ret_val->free_data = free_data;
+  ret_val->talloc_data = talloc_data;
   ret_val->num_keys = 0;
   memset(ret_val->table, 0, ret_val->num_buckets*sizeof(lru_cache_element*));
 
@@ -136,22 +143,8 @@ lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret, bool free_data)
 
 void lru_cache_destroy(lru_cache* ht)
 {
-  lru_cache_element* cur;
-  lru_cache_element* last = NULL;
-  
-  for(cur=ht->oldest; cur != NULL; last=cur,cur=cur->newer)
-  {
-    if(last != NULL)
-    {
-      if(ht->free_data)
-	free(last->data);
-      free(last->index);
-      free(last);
-    }
-  }
-  free(ht->table);
   ht->secret = 0;
-  free(ht);
+  talloc_free(ht);
 }
 
 
@@ -178,8 +171,8 @@ bool lru_cache_update(lru_cache* ht, const void* index,
      * We also need to reposition the element to the newest position,
      * so remove it from the list for now.
      */
-    if(ht->free_data)
-      free(e->data);
+    if(ht->talloc_data)
+      talloc_free(e->data);
 
     if(e->newer == NULL)
       ht->newest = e->older;
@@ -225,14 +218,13 @@ bool lru_cache_update(lru_cache* ht, const void* index,
 	last->next = e->next;
       e->next = NULL;
 
-      if(ht->free_data)
-	free(e->data);
+      if(ht->talloc_data)
+	talloc_free(e->data);
 
-      tmp_index = realloc(e->index, index_len);
+      tmp_index = talloc_realloc_size(e, e->index, index_len);
       if(tmp_index == NULL)
       {
-	free(e->index);
-	free(e);
+	talloc_free(e);
 	return false;
       }
       else
@@ -241,14 +233,14 @@ bool lru_cache_update(lru_cache* ht, const void* index,
     else
     { /* Brand new element because we have room to spare. */
 
-      e = (lru_cache_element*)malloc(sizeof(lru_cache_element));
+      e = talloc(ht->table, lru_cache_element);
       if(e == NULL)
 	return false;
       
-      e->index = malloc(index_len);
+      e->index = talloc_size(e, index_len);
       if(e->index == NULL)
       {
-	free(e);
+	talloc_free(e);
 	return false;
       }
       
@@ -263,6 +255,8 @@ bool lru_cache_update(lru_cache* ht, const void* index,
     ht->table[hash] = e;
   }
   e->data = data;
+  if(ht->talloc_data)
+    talloc_steal(e, e->data);
 
   /* Finally, let's insert the element to the newest position in the LRU list.*/
   if(ht->newest != NULL)
@@ -335,9 +329,6 @@ bool lru_cache_remove(lru_cache* ht, const void* index,
   if(cur == NULL)
     return false;
 
-  if(ht->free_data)
-    free(cur->data);
-
   /* Detach from list */
   if(cur->newer == NULL)
     ht->newest = cur->older;
@@ -355,8 +346,7 @@ bool lru_cache_remove(lru_cache* ht, const void* index,
   else
     last->next = cur->next;
 
-  free(cur->index);
-  free(cur);
+  talloc_free(cur);
   
   /* Removing entry, decrement counters. */
   ht->num_keys--;

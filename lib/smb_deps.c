@@ -23,7 +23,7 @@
  * $Id$
  */
 
-#include "../include/smb_deps.h"
+#include "smb_deps.h"
 
 
 /* These act as replacements for numerous Samba memory allocation

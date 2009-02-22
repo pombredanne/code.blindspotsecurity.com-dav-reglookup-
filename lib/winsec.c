@@ -23,21 +23,42 @@
  * $Id$
  */
 
-#include "../include/winsec.h"
+#include "winsec.h"
 
+
+/******************************************************************************
+ * Non-talloc() interface for parsing a descriptor.
+ ******************************************************************************/
+WINSEC_DESC* winsec_parse_descriptor(const uint8_t* buf, uint32_t buf_len)
+{
+  return winsec_parse_desc(NULL, buf, buf_len);
+}
+
+
+/******************************************************************************
+ * Free a descriptor.  Not needed if using talloc and a parent context is freed.
+ ******************************************************************************/
+void winsec_free_descriptor(WINSEC_DESC* desc)
+{
+  talloc_free(desc);
+}
 
 
 /******************************************************************************
  * Parses a WINSEC_DESC structure and substructures.
  ******************************************************************************/
-WINSEC_DESC* winsec_parse_desc(const uint8_t* buf, uint32_t buf_len)
+WINSEC_DESC* winsec_parse_desc(void* talloc_ctx, 
+			       const uint8_t* buf, uint32_t buf_len)
 {
   WINSEC_DESC* ret_val;
 
   if (buf == NULL || buf_len <  WINSEC_DESC_HEADER_SIZE)
     return NULL;
-
+  /*
   if((ret_val = (WINSEC_DESC*)zalloc(sizeof(WINSEC_DESC))) == NULL)
+    return NULL;
+  */
+  if((ret_val = talloc(talloc_ctx, WINSEC_DESC)) == NULL)
     return NULL;
 
   ret_val->revision = buf[0];
@@ -60,62 +81,51 @@ WINSEC_DESC* winsec_parse_desc(const uint8_t* buf, uint32_t buf_len)
      || (ret_val->off_sacl >= buf_len)
      || (ret_val->off_dacl >= buf_len))
   {
-    free(ret_val);
+    talloc_free(ret_val);
     return NULL;
   }
 
   if(ret_val->off_owner_sid != 0)
   {
-    ret_val->owner_sid = winsec_parse_dom_sid(buf + ret_val->off_owner_sid, 
+    ret_val->owner_sid = winsec_parse_dom_sid(ret_val, 
+					      buf + ret_val->off_owner_sid,
 					      buf_len - ret_val->off_owner_sid);
     if(ret_val->owner_sid == NULL)
     {
-      free(ret_val);
+      talloc_free(ret_val);
       return NULL;
     }
   }
 
   if (ret_val->off_grp_sid != 0) 
   {
-    ret_val->grp_sid = winsec_parse_dom_sid(buf + ret_val->off_grp_sid, 
+    ret_val->grp_sid = winsec_parse_dom_sid(ret_val, buf + ret_val->off_grp_sid,
 					    buf_len - ret_val->off_grp_sid);
     if(ret_val->grp_sid == NULL)
     {
-      if(ret_val->owner_sid != NULL)
-	free(ret_val->owner_sid);
-      free(ret_val);
+      talloc_free(ret_val);
       return NULL;
     }
   }
 
   if ((ret_val->control & WINSEC_DESC_SACL_PRESENT) && ret_val->off_sacl)
   {
-    ret_val->sacl = winsec_parse_acl(buf + ret_val->off_sacl,
+    ret_val->sacl = winsec_parse_acl(ret_val, buf + ret_val->off_sacl,
 				     buf_len - ret_val->off_sacl);
     if(ret_val->sacl == NULL)
     {
-      if(ret_val->owner_sid != NULL)
-	free(ret_val->owner_sid);
-      if(ret_val->grp_sid != NULL)
-	free(ret_val->grp_sid);
-      free(ret_val);
+      talloc_free(ret_val);
       return NULL;
     }
   }
 
   if ((ret_val->control & WINSEC_DESC_DACL_PRESENT) && ret_val->off_dacl != 0) 
   {
-    ret_val->dacl = winsec_parse_acl(buf + ret_val->off_dacl,
+    ret_val->dacl = winsec_parse_acl(ret_val, buf + ret_val->off_dacl,
 				     buf_len - ret_val->off_dacl);
     if(ret_val->dacl == NULL)
     {
-      if(ret_val->owner_sid != NULL)
-	free(ret_val->owner_sid);
-      if(ret_val->grp_sid != NULL)
-	free(ret_val->grp_sid);
-      if(ret_val->sacl != NULL)
-	free(ret_val->sacl);
-      free(ret_val);
+      talloc_free(ret_val);
       return NULL;
     }
   }
@@ -127,7 +137,8 @@ WINSEC_DESC* winsec_parse_desc(const uint8_t* buf, uint32_t buf_len)
 /******************************************************************************
  * Parses a WINSEC_ACL structure and all substructures.
  ******************************************************************************/
-WINSEC_ACL* winsec_parse_acl(const uint8_t* buf, uint32_t buf_len)
+WINSEC_ACL* winsec_parse_acl(void* talloc_ctx,
+			     const uint8_t* buf, uint32_t buf_len)
 {
   uint32_t i, offset;
   WINSEC_ACL* ret_val;
@@ -138,8 +149,11 @@ WINSEC_ACL* winsec_parse_acl(const uint8_t* buf, uint32_t buf_len)
    */
   if (buf == NULL || buf_len < 8)
     return NULL;
-
+  /*
   if((ret_val = (WINSEC_ACL*)zalloc(sizeof(WINSEC_ACL))) == NULL)
+    return NULL;
+  */
+  if((ret_val = talloc(talloc_ctx, WINSEC_ACL)) == NULL)
     return NULL;
   
   ret_val->revision = SVAL(buf, 0x0);
@@ -152,7 +166,7 @@ WINSEC_ACL* winsec_parse_acl(const uint8_t* buf, uint32_t buf_len)
    */
   if((ret_val->size > buf_len) || (ret_val->num_aces > 4095))
   {
-    free(ret_val);
+    talloc_free(ret_val);
     return NULL;
   }
 
@@ -160,29 +174,31 @@ WINSEC_ACL* winsec_parse_acl(const uint8_t* buf, uint32_t buf_len)
    * between a non-present DACL (allow all access) and a DACL with no ACE's
    * (allow no access).
    */
-  if((ret_val->aces = (WINSEC_ACE**)zcalloc(sizeof(WINSEC_ACE*),
+  /*  if((ret_val->aces = (WINSEC_ACE**)zcalloc(sizeof(WINSEC_ACE*),
 					   ret_val->num_aces+1)) == NULL)
+  */
+  if((ret_val->aces = talloc_array(ret_val, WINSEC_ACE*, 
+				   ret_val->num_aces+1)) == NULL)
   {
-    free(ret_val);
+    talloc_free(ret_val);
     return NULL;
   }
 
   offset = 8;
   for(i=0; i < ret_val->num_aces; i++)
   {
-    ret_val->aces[i] = winsec_parse_ace(buf+offset, buf_len-offset);
+    ret_val->aces[i] = winsec_parse_ace(ret_val->aces, 
+					buf+offset, buf_len-offset);
     if(ret_val->aces[i] == NULL)
     {
-      free(ret_val->aces);
-      free(ret_val);
+      talloc_free(ret_val);
       return NULL;
     }
 
     offset += ret_val->aces[i]->size;
     if(offset > buf_len)
     {
-      free(ret_val->aces);
-      free(ret_val);
+      talloc_free(ret_val);
       return NULL;
     }
   }
@@ -194,7 +210,8 @@ WINSEC_ACL* winsec_parse_acl(const uint8_t* buf, uint32_t buf_len)
 /******************************************************************************
  * Parses a WINSEC_ACE structure and all substructures.
  ******************************************************************************/
-WINSEC_ACE* winsec_parse_ace(const uint8_t* buf, uint32_t buf_len)
+WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
+			     const uint8_t* buf, uint32_t buf_len)
 {
   uint32_t offset;
   WINSEC_ACE* ret_val;
@@ -202,7 +219,9 @@ WINSEC_ACE* winsec_parse_ace(const uint8_t* buf, uint32_t buf_len)
   if(buf == NULL || buf_len < WINSEC_ACE_MIN_SIZE)
     return NULL;
 
-  if((ret_val = (WINSEC_ACE*)zalloc(sizeof(WINSEC_ACE))) == NULL)
+  /*  if((ret_val = (WINSEC_ACE*)zalloc(sizeof(WINSEC_ACE))) == NULL)*/
+
+  if((ret_val = talloc(talloc_ctx, WINSEC_ACE)) == NULL)
     return NULL;
 
   ret_val->type = buf[0];
@@ -220,10 +239,11 @@ WINSEC_ACE* winsec_parse_ace(const uint8_t* buf, uint32_t buf_len)
 
     if(ret_val->obj_flags & WINSEC_ACE_OBJECT_PRESENT)
     {
-      ret_val->obj_guid = winsec_parse_uuid(buf+offset, buf_len-offset);
+      ret_val->obj_guid = winsec_parse_uuid(ret_val, 
+					    buf+offset, buf_len-offset);
       if(ret_val->obj_guid == NULL)
       {
-	free(ret_val);
+	talloc_free(ret_val);
 	return NULL;
       }
       offset += sizeof(WINSEC_UUID);
@@ -231,27 +251,22 @@ WINSEC_ACE* winsec_parse_ace(const uint8_t* buf, uint32_t buf_len)
 
     if(ret_val->obj_flags & WINSEC_ACE_OBJECT_INHERITED_PRESENT)
     {
-      ret_val->inh_guid = winsec_parse_uuid(buf+offset, buf_len-offset);
+      ret_val->inh_guid = winsec_parse_uuid(ret_val, 
+					    buf+offset, buf_len-offset);
       if(ret_val->inh_guid == NULL)
       {
-	if(ret_val->obj_guid != NULL)
-	  free(ret_val->obj_guid);
-	free(ret_val);
+	talloc_free(ret_val);
 	return NULL;
       }
       offset += sizeof(WINSEC_UUID);
     }
   }
 
-  ret_val->trustee = winsec_parse_dom_sid(buf+offset, buf_len-offset);
+  ret_val->trustee = winsec_parse_dom_sid(ret_val, buf+offset, buf_len-offset);
   if(ret_val->trustee == NULL)
   {
-    if(ret_val->obj_guid != NULL)
-      free(ret_val->obj_guid);
-    if(ret_val->inh_guid != NULL)
-      free(ret_val->inh_guid);
-    free(ret_val);
-	return NULL;
+    talloc_free(ret_val);
+    return NULL;
   }
   
   return ret_val;
@@ -261,7 +276,8 @@ WINSEC_ACE* winsec_parse_ace(const uint8_t* buf, uint32_t buf_len)
 /******************************************************************************
  * Parses a WINSEC_DOM_SID structure.
  ******************************************************************************/
-WINSEC_DOM_SID* winsec_parse_dom_sid(const uint8_t* buf, uint32_t buf_len)
+WINSEC_DOM_SID* winsec_parse_dom_sid(void* talloc_ctx,
+				     const uint8_t* buf, uint32_t buf_len)
 {
   uint32_t i;
   WINSEC_DOM_SID* ret_val;
@@ -269,7 +285,8 @@ WINSEC_DOM_SID* winsec_parse_dom_sid(const uint8_t* buf, uint32_t buf_len)
   if(buf == NULL || buf_len < 8)
     return NULL;
 
-  if((ret_val = (WINSEC_DOM_SID*)zalloc(sizeof(WINSEC_DOM_SID))) == NULL)
+  /*  if((ret_val = (WINSEC_DOM_SID*)zalloc(sizeof(WINSEC_DOM_SID))) == NULL)*/
+  if((ret_val = talloc(talloc_ctx, WINSEC_DOM_SID)) == NULL)
     return NULL;
 
   ret_val->sid_rev_num = buf[0];
@@ -282,7 +299,7 @@ WINSEC_DOM_SID* winsec_parse_dom_sid(const uint8_t* buf, uint32_t buf_len)
 
   if(buf_len < ret_val->num_auths*sizeof(uint32_t)+8)
   {
-    free(ret_val);
+    talloc_free(ret_val);
     return NULL;
   }
   
@@ -296,14 +313,16 @@ WINSEC_DOM_SID* winsec_parse_dom_sid(const uint8_t* buf, uint32_t buf_len)
 /******************************************************************************
  * Parses a WINSEC_UUID struct.
  ******************************************************************************/
-WINSEC_UUID* winsec_parse_uuid(const uint8_t* buf, uint32_t buf_len)
+WINSEC_UUID* winsec_parse_uuid(void* talloc_ctx,
+			       const uint8_t* buf, uint32_t buf_len)
 {
   WINSEC_UUID* ret_val;
 
   if(buf == NULL || buf_len < sizeof(WINSEC_UUID))
     return false;
 
-  if((ret_val = (WINSEC_UUID*)zalloc(sizeof(WINSEC_UUID))) == NULL)
+  /* if((ret_val = (WINSEC_UUID*)zalloc(sizeof(WINSEC_UUID))) == NULL)*/
+  if((ret_val = talloc(talloc_ctx, WINSEC_UUID)) == NULL)
     return NULL;
   
   ret_val->time_low = IVAL(buf, 0x0);
@@ -320,7 +339,6 @@ WINSEC_UUID* winsec_parse_uuid(const uint8_t* buf, uint32_t buf_len)
 /******************************************************************************
  * Calculates the size of a SID.
  ******************************************************************************/
-/*size_t sid_size(const WINSEC_DOM_SID *sid)*/
 size_t winsec_sid_size(const WINSEC_DOM_SID* sid)
 {
   if (sid == NULL)
@@ -333,7 +351,6 @@ size_t winsec_sid_size(const WINSEC_DOM_SID* sid)
 /******************************************************************************
  * Compare the auth portion of two SIDs.
  ******************************************************************************/
-/*int sid_compare_auth(const WINSEC_DOM_SID *sid1, const WINSEC_DOM_SID *sid2)*/
 int winsec_sid_compare_auth(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2)
 {
   int i;
@@ -359,7 +376,6 @@ int winsec_sid_compare_auth(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* si
 /******************************************************************************
  * Compare two SIDs.
  ******************************************************************************/
-/*int sid_compare(const WINSEC_DOM_SID *sid1, const WINSEC_DOM_SID *sid2)*/
 int winsec_sid_compare(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2)
 {
   int i;

@@ -41,6 +41,7 @@
 #include <unistd.h>
 
 #include "smb_deps.h"
+#include "talloc.h"
 
 
 /* This is the maximum number of subauths in a SID, as defined here:
@@ -144,13 +145,19 @@ typedef struct _winsec_desc
 
 } WINSEC_DESC;
 
+WINSEC_DESC* winsec_parse_descriptor(const uint8_t* buf, uint32_t buf_len);
+void winsec_free_descriptor(WINSEC_DESC* desc);
 
-/* XXX: Need API functions to deallocate these structures */
-WINSEC_DESC* winsec_parse_desc(const uint8_t* buf, uint32_t buf_len);
-WINSEC_ACL* winsec_parse_acl(const uint8_t* buf, uint32_t buf_len);
-WINSEC_ACE* winsec_parse_ace(const uint8_t* buf, uint32_t buf_len);
-WINSEC_DOM_SID* winsec_parse_dom_sid(const uint8_t* buf, uint32_t buf_len);
-WINSEC_UUID* winsec_parse_uuid(const uint8_t* buf, uint32_t buf_len);
+WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
+			       const uint8_t* buf, uint32_t buf_len);
+WINSEC_ACL* winsec_parse_acl(void* talloc_ctx, 
+			     const uint8_t* buf, uint32_t buf_len);
+WINSEC_ACE* winsec_parse_ace(void* talloc_ctx, 
+			     const uint8_t* buf, uint32_t buf_len);
+WINSEC_DOM_SID* winsec_parse_dom_sid(void* talloc_ctx, 
+				     const uint8_t* buf, uint32_t buf_len);
+WINSEC_UUID* winsec_parse_uuid(void* talloc_ctx, 
+			       const uint8_t* buf, uint32_t buf_len);
 
 size_t winsec_sid_size(const WINSEC_DOM_SID* sid);
 int winsec_sid_compare_auth(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);

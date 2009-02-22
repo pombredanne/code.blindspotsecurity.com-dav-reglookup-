@@ -22,9 +22,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../include/regfi.h"
-#include "../include/range_list.h"
-#include "../include/lru_cache.h"
+#include "regfi.h"
+#include "range_list.h"
+#include "lru_cache.h"
 
 
 /* Globals, influenced by command line parameters */

@@ -23,7 +23,7 @@
  * $Id$
  */
 
-#include "../include/regfi.h"
+#include "regfi.h"
 
 
 /* Registry types mapping */
@@ -761,14 +761,15 @@ REGFI_SUBKEY_LIST* regfi_merge_subkeylists(uint16 num_lists,
 }
 
 
-/*******************************************************************
- *******************************************************************/
-REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, bool strict)
+/******************************************************************************
+ *
+ ******************************************************************************/
+REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, 
+			     bool strict)
 {
   REGFI_SK_REC* ret_val;
-  uint8* sec_desc_buf;
+  uint8* sec_desc_buf = NULL;
   uint32 cell_length, length;
-  /*prs_struct ps;*/
   uint8 sk_header[REGFI_SK_MIN_LENGTH];
   bool unalloc = false;
 
@@ -787,7 +788,8 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
     return NULL;
   }
 
-  ret_val = (REGFI_SK_REC*)zalloc(sizeof(REGFI_SK_REC));
+  /*  ret_val = (REGFI_SK_REC*)zalloc(sizeof(REGFI_SK_REC));*/
+  ret_val = talloc(NULL, REGFI_SK_REC);
   if(ret_val == NULL)
     return NULL;
 
@@ -804,8 +806,7 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Invalid cell size found while"
 		      " parsing SK record at offset 0x%.8X.", offset);
-    free(ret_val);
-    return NULL;
+    goto fail;
   }
 
   ret_val->magic[0] = sk_header[0];
@@ -823,8 +824,7 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
     regfi_add_message(file, REGFI_MSG_WARN, "SK record's next/previous offsets"
 		      " are not a multiple of 8 while parsing SK record at"
 		      " offset 0x%.8X.", offset);
-    free(ret_val);
-    return NULL;
+    goto fail;
   }
 
   if(ret_val->desc_size + REGFI_SK_MIN_LENGTH > ret_val->cell_size)
@@ -832,16 +832,12 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
     regfi_add_message(file, REGFI_MSG_WARN, "Security descriptor too large for"
 		      " cell while parsing SK record at offset 0x%.8X.", 
 		      offset);
-    free(ret_val);
-    return NULL;
+    goto fail;
   }
 
-  sec_desc_buf = (uint8*)zalloc(ret_val->desc_size);
-  if(ret_val == NULL)
-  {
-    free(ret_val);
-    return NULL;
-  }
+  sec_desc_buf = (uint8*)malloc(ret_val->desc_size);
+  if(sec_desc_buf == NULL)
+    goto fail;
 
   length = ret_val->desc_size;
   if(regfi_read(file->fd, sec_desc_buf, &length) != 0 
@@ -850,23 +846,26 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32 offset, uint32 max_size, b
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to read security"
 		      " descriptor while parsing SK record at offset 0x%.8X.",
 		      offset);
-    free(ret_val);
-    return NULL;
+    goto fail;
   }
 
-  if(!(ret_val->sec_desc = winsec_parse_desc(sec_desc_buf, ret_val->desc_size)))
+  if(!(ret_val->sec_desc = winsec_parse_desc(ret_val, sec_desc_buf, 
+						   ret_val->desc_size)))
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to parse security"
 		      " descriptor while parsing SK record at offset 0x%.8X.",
 		      offset);
-    free(sec_desc_buf);
-    free(ret_val);
-    return NULL;
+    goto fail;
   }
+
   free(sec_desc_buf);
-
-
   return ret_val;
+
+ fail:
+  if(sec_desc_buf != NULL)
+    free(sec_desc_buf);
+  talloc_free(ret_val);
+  return NULL;
 }
 
 
@@ -1146,7 +1145,8 @@ const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32 offset, bool strict)
   REGFI_SK_REC* ret_val = NULL;
   const REGFI_HBIN* hbin;
   uint32 max_length;
-
+  void* failure_ptr = NULL;
+  
   /* First look if we have already parsed it */
   ret_val = (REGFI_SK_REC*)lru_cache_find(file->sk_cache, &offset, 4);
 
@@ -1164,7 +1164,11 @@ const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32 offset, bool strict)
     ret_val = regfi_parse_sk(file, offset, max_length, strict);
     if(ret_val == NULL)
     { /* Cache the parse failure and bail out. */
-      lru_cache_update(file->sk_cache, &offset, 4, (void*)REGFI_OFFSET_NONE);
+      failure_ptr = talloc(NULL, uint32_t);
+      if(failure_ptr == NULL)
+	return NULL;
+      *(uint32_t*)failure_ptr = REGFI_OFFSET_NONE;
+      lru_cache_update(file->sk_cache, &offset, 4, failure_ptr);
       return NULL;
     }
 
@@ -1286,7 +1290,7 @@ REGFI_FILE* regfi_open(const char* filename)
   cache_secret = 0x15DEAD05^time(NULL)^(getpid()<<16);
 
   /* Cache an unlimited number of SK records.  Typically there are very few. */
-  rb->sk_cache = lru_cache_create(0, cache_secret, true);
+  rb->sk_cache = lru_cache_create_ctx(NULL, 0, cache_secret, true);
 
   /* Default message mask */
   rb->msg_mask = REGFI_MSG_ERROR|REGFI_MSG_WARN;
@@ -1313,6 +1317,7 @@ int regfi_close(REGFI_FILE *file)
     free(range_list_get(file->hbins, i)->data);
   range_list_free(file->hbins);
 
+  
   if(file->sk_cache != NULL)
     lru_cache_destroy(file->sk_cache);
   free(file);

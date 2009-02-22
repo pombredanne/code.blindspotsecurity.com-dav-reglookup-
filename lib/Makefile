@@ -2,7 +2,7 @@
 
 ################################################################################
 
-FILES=regfi.o smb_deps.o winsec.o void_stack.o range_list.o lru_cache.o
+FILES=regfi.o smb_deps.o winsec.o void_stack.o range_list.o lru_cache.o talloc.o
 
 all: $(FILES)
 
@@ -23,6 +23,9 @@ range_list.o: range_list.c
 
 lru_cache.o: lru_cache.c
 	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ lru_cache.c
+
+talloc.o: talloc.c
+	$(CC) $(CFLAGS) $(OPTS) $(INC) -c -o $@ talloc.c
 
 clean:
 	rm -f $(FILES)
