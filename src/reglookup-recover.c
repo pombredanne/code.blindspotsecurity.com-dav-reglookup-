@@ -251,8 +251,7 @@ int printCell(REGFI_FILE* f, uint32 offset)
  * Paths returned must be free()d.
  */
 /* XXX: This is not terribly efficient, as it may reparse many keys 
- *      repeatedly.  Should try to add caching.  Also, piecing the path 
- *      together is slow and redundant.
+ *      repeatedly.  Should try to add caching.
  */
 char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 {
@@ -260,13 +259,20 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
   const REGFI_HBIN* hbin;
   REGFI_NK_REC* cur_ancestor;
   char* ret_val;
-  char* path_element;
-  char* tmp_str;
-  uint32 virt_offset, i, stack_size, ret_val_size, ret_val_left, element_size;
+  uint32 virt_offset, i, stack_size, ret_val_size, ret_val_used;
   uint32 max_length;
+  /* A little hack so we don't have to walk a quoted string twice. */
+  struct name_holder
+  {
+    char* quoted_name;
+    uint32_t length;
+  };
+  struct name_holder* path_element;
 
+  
   /* The path_stack size limit should guarantee that we don't recurse forever. */
   virt_offset = nk->parent_off;
+  ret_val_size = 1; /* NUL */
   while(virt_offset != REGFI_OFFSET_NONE)
   {  
     hbin = regfi_lookup_hbin(f, virt_offset);
@@ -290,8 +296,13 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	else
 	  virt_offset = cur_ancestor->parent_off;
 	
-	path_element = quote_string(cur_ancestor->keyname, key_special_chars);
-	if(path_element == NULL || !void_stack_push(path_stack, path_element))
+	path_element = (struct name_holder*)malloc(sizeof(struct name_holder));
+	if(path_element != NULL)
+	  path_element->quoted_name = quote_string(cur_ancestor->keyname, 
+						   key_special_chars);
+	  
+	if(path_element == NULL || path_element->quoted_name == NULL 
+	   || !void_stack_push(path_stack, path_element))
 	{
 	  free(cur_ancestor->keyname);
 	  free(cur_ancestor);
@@ -299,16 +310,20 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	  return NULL;
 	}
 
+	/* Path element and preceeding delimiter
+	 * Note that this integer can't overflow since key name lengths are
+	 * 16 bits and the max depth is 512.
+	 */
+	path_element->length = strlen(path_element->quoted_name);
+	ret_val_size += path_element->length + 1;
+
 	regfi_key_free(cur_ancestor);
       }
     }
   }
   
   stack_size = void_stack_size(path_stack);
-  ret_val_size = 16*stack_size;
-  if(ret_val_size == 0)
-    ret_val_size = 1;
-  ret_val_left = ret_val_size;
+  ret_val_used = 0;
   ret_val = malloc(ret_val_size);
   if(ret_val == NULL)
   {
@@ -320,22 +335,10 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
   for(i=0; i<stack_size; i++)
   {
     path_element = void_stack_pop(path_stack);
-    element_size = strlen(path_element);
-    if(ret_val_left < element_size+2)
-    {
-      ret_val_size += element_size+16;
-      ret_val_left += element_size+16;
-      tmp_str = (char*)realloc(ret_val, ret_val_size);
-      if(tmp_str == NULL)
-      {
-	free(ret_val);
-	void_stack_free_deep(path_stack);
-	return NULL;
-      }
-      ret_val = tmp_str;
-    }
-
-    ret_val_left -= snprintf(ret_val+ret_val_size-ret_val_left,ret_val_left, "/%s", path_element);
+    snprintf(ret_val+ret_val_used, ret_val_size-ret_val_used, 
+	     "/%s", path_element->quoted_name);
+    ret_val_used += path_element->length + 1;
+    free(path_element->quoted_name);
     free(path_element);
   }
   void_stack_free(path_stack);

@@ -88,7 +88,7 @@
 #define REGFI_OFFSET_NONE          0xffffffff
 
 /* XXX: This is totally arbitrary right now. */
-#define REGFI_MAX_SUBKEY_DEPTH     255    
+#define REGFI_MAX_SUBKEY_DEPTH     255
 
 /* Header sizes and magic number lengths for various records */
 #define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
