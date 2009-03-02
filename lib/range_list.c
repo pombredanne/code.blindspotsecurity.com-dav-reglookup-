@@ -142,10 +142,8 @@ range_list* range_list_new()
 
 void range_list_free(range_list* rl)
 {
-  if(rl == NULL)
-    return;
-
-  talloc_free(rl);
+  if(rl != NULL)
+    talloc_free(rl);
 }
 
 
