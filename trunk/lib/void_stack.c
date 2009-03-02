@@ -3,7 +3,7 @@
  * of memory of any type.  It still needs work to eliminate memory
  * leaks. 
  *
- * Copyright (C) 2005,2007 Timothy D. Morgan
+ * Copyright (C) 2005,2007,2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,15 +25,15 @@
 
 void_stack* void_stack_new(unsigned short max_size)
 {
-  void_stack* ret_val = (void_stack*)malloc(sizeof(void_stack));
+  void_stack* ret_val = talloc(NULL, void_stack);
 
   if (ret_val != NULL)
   {
     memset(ret_val, 0, sizeof(*ret_val));
-    ret_val->elements = (void**)malloc(max_size*sizeof(void*));
+    ret_val->elements = talloc_array(ret_val, void*, max_size);
     if (ret_val->elements == NULL)
     {
-      free(ret_val);
+      talloc_free(ret_val);
       ret_val = NULL;
     }
     else
@@ -89,8 +89,7 @@ void_stack* void_stack_copy_reverse(const void_stack* v)
 
 void void_stack_free(void_stack* stack)
 {
-  free(stack->elements);
-  free(stack);
+  talloc_free(stack);
 }
 
 
@@ -99,8 +98,7 @@ void void_stack_free_deep(void_stack* stack)
   unsigned short i;
   for(i=0; i < stack->top; i++)
     free(stack->elements[i]);
-  free(stack->elements);
-  free(stack);
+  talloc_free(stack);
 }
 
 
@@ -153,7 +151,7 @@ void_stack_iterator* void_stack_iterator_new(const void_stack* stack)
   
   if(stack != NULL)
   {
-    ret_val = (void_stack_iterator*)malloc(sizeof(void_stack_iterator));
+    ret_val = talloc(stack, void_stack_iterator);
     if (ret_val != NULL)
     {
       ret_val->stack = stack;
@@ -167,7 +165,7 @@ void_stack_iterator* void_stack_iterator_new(const void_stack* stack)
 
 void void_stack_iterator_free(void_stack_iterator* iter)
 {
-  free(iter);
+  talloc_free(iter);
 }
 
 

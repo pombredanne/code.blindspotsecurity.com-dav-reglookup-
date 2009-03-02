@@ -14,7 +14,7 @@
  * 
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Id$
  */
@@ -83,7 +83,8 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
   {
     quoted_name = malloc(1*sizeof(char));
     if(quoted_name == NULL)
-      bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
+      bailOut(REGLOOKUP_EXIT_OSERR, 
+	      "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
 
     fprintf(stderr, "WARN: NULL key name in NK record at offset %.8X.\n",
@@ -296,7 +297,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	else
 	  virt_offset = cur_ancestor->parent_off;
 	
-	path_element = (struct name_holder*)malloc(sizeof(struct name_holder));
+	path_element = talloc(path_stack, struct name_holder);
 	if(path_element != NULL)
 	  path_element->quoted_name = quote_string(cur_ancestor->keyname, 
 						   key_special_chars);
@@ -304,9 +305,9 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	if(path_element == NULL || path_element->quoted_name == NULL 
 	   || !void_stack_push(path_stack, path_element))
 	{
-	  free(cur_ancestor->keyname);
-	  free(cur_ancestor);
-	  void_stack_free_deep(path_stack);
+	  /* XXX: Need to add a warning here */
+	  regfi_free_key(cur_ancestor);
+	  void_stack_free(path_stack);
 	  return NULL;
 	}
 
@@ -317,7 +318,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	path_element->length = strlen(path_element->quoted_name);
 	ret_val_size += path_element->length + 1;
 
-	regfi_key_free(cur_ancestor);
+	regfi_free_key(cur_ancestor);
       }
     }
   }
@@ -327,7 +328,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
   ret_val = malloc(ret_val_size);
   if(ret_val == NULL)
   {
-    void_stack_free_deep(path_stack);
+    void_stack_free(path_stack);
     return NULL;
   }
   ret_val[0] = '\0';
@@ -339,7 +340,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	     "/%s", path_element->quoted_name);
     ret_val_used += path_element->length + 1;
     free(path_element->quoted_name);
-    free(path_element);
+    talloc_free(path_element);
   }
   void_stack_free(path_stack);
 
@@ -531,6 +532,7 @@ int extractKeys(REGFI_FILE* f,
   const range_list_element* cur_elem;
   REGFI_NK_REC* key;
   uint32 i, j;
+  int error_code = 0;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
@@ -549,8 +551,10 @@ int extractKeys(REGFI_FILE* f,
 			   key->cell_size, key))
 	{
 	  fprintf(stderr, "ERROR: Couldn't add key to unalloc_keys.\n");
-	  return 20;
+	  error_code = 20;
+	  goto fail;
 	}
+	talloc_steal(unalloc_keys, key);
 	j+=key->cell_size-8;
       }
     }
@@ -560,10 +564,17 @@ int extractKeys(REGFI_FILE* f,
   {
     cur_elem = range_list_get(unalloc_keys, i);
     if(!removeRange(unalloc_cells, cur_elem->offset, cur_elem->length))
-      return 30;
+    {
+      error_code = 30;
+      goto fail;
+    }
   }
 
   return 0;
+
+ fail:
+  regfi_free_key(key);
+  return error_code;
 }
 
 int extractValueLists(REGFI_FILE* f,
@@ -610,8 +621,7 @@ int extractValueLists(REGFI_FILE* f,
 	  { /* We've parsed a values-list which isn't in the unallocated list,
 	     * so prune it.
 	     */
-	    free(nk->values->elements);
-	    free(nk->values);
+	    talloc_free(nk->values);
 	    nk->values = NULL;
 	  }
 	  else
@@ -638,7 +648,7 @@ int extractValueLists(REGFI_FILE* f,
 		  if(!range_list_add(unalloc_linked_values, vk->offset,
 				     vk->cell_size, vk))
 		  {
-		    free(vk);
+		    talloc_free(vk);
 		    return 30;
 		  }
 
@@ -646,7 +656,7 @@ int extractValueLists(REGFI_FILE* f,
 		    return 40;
 		}
 		else
-		  free(vk);
+		  talloc_free(vk);
 	      }
 	    }
 	  }

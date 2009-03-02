@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005,2007 Timothy D. Morgan
+ * Copyright (C) 2005,2007,2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,12 +17,13 @@
  * $Id$
  */
 
+#ifndef _VOID_STACK_H
+#define _VOID_STACK_H
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-
-#ifndef _VOID_STACK_H
-#define _VOID_STACK_H
+#include "talloc.h"
 
 typedef struct _void_stack
 {

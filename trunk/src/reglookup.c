@@ -274,13 +274,14 @@ char* iter2Path(REGFI_ITERATOR* i)
 
 void printValueList(REGFI_ITERATOR* iter, char* prefix)
 {
-  const REGFI_VK_REC* value;
+  REGFI_VK_REC* value;
 
   value = regfi_iterator_first_value(iter);
   while(value != NULL)
   {
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(value, prefix);
+    regfi_free_value(value);
     value = regfi_iterator_next_value(iter);
     printMsgs(iter->f);
   }
@@ -372,7 +373,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
 {
   const REGFI_NK_REC* root = NULL;
   const REGFI_NK_REC* cur = NULL;
-  const REGFI_NK_REC* sub = NULL;
+  REGFI_NK_REC* sub = NULL;
   char* path = NULL;
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
@@ -417,7 +418,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
 	  printMsgs(iter->f);
 	  bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: unexpected NULL for key.\n");
 	}
-
+	
 	sub = regfi_iterator_next_subkey(iter);
       }
       print_this = false;
@@ -432,7 +433,8 @@ void printKeyTree(REGFI_ITERATOR* iter)
 	bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: could not traverse iterator downward.\n");
       }
 
-      cur = sub;
+      cur = regfi_iterator_cur_key(iter);
+      regfi_free_key(sub);
       sub = regfi_iterator_first_subkey(iter);
       print_this = true;
     }
@@ -455,7 +457,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
  */
 int retrievePath(REGFI_ITERATOR* iter, char** path)
 {
-  const REGFI_VK_REC* value;
+  REGFI_VK_REC* value;
   char* tmp_path_joined;
   const char** tmp_path;
   uint32 i;
@@ -510,6 +512,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(value, tmp_path_joined);
 
+    regfi_free_value(value);
     free(tmp_path);
     free(tmp_path_joined);
     return 1;

@@ -223,18 +223,15 @@ typedef struct _regfi_value_list
 } REGFI_VALUE_LIST;
 
 
-/* Key Value */
+/* Value record */
 typedef struct 
 {
   uint32 offset;	/* Real offset of this record's cell in the file */
   uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
 
-  REGFI_HBIN* hbin;	/* pointer to HBIN record (in memory) containing 
-			 * this nk record 
-			 */
   uint8* data;
-  uint16 name_length;
   char*  valuename;
+  uint16 name_length;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   
   uint32 data_size;
@@ -419,15 +416,16 @@ bool                  regfi_iterator_walk_path(REGFI_ITERATOR* i,
 					       const char** path);
 const REGFI_NK_REC*   regfi_iterator_cur_key(REGFI_ITERATOR* i);
 const REGFI_SK_REC*   regfi_iterator_cur_sk(REGFI_ITERATOR* i);
-const REGFI_NK_REC*   regfi_iterator_first_subkey(REGFI_ITERATOR* i);
-const REGFI_NK_REC*   regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
-const REGFI_NK_REC*   regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+
+REGFI_NK_REC*         regfi_iterator_first_subkey(REGFI_ITERATOR* i);
+REGFI_NK_REC*         regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
+REGFI_NK_REC*         regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
 bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
 						const char* value_name);
-const REGFI_VK_REC*   regfi_iterator_first_value(REGFI_ITERATOR* i);
-const REGFI_VK_REC*   regfi_iterator_cur_value(REGFI_ITERATOR* i);
-const REGFI_VK_REC*   regfi_iterator_next_value(REGFI_ITERATOR* i);
+REGFI_VK_REC*         regfi_iterator_first_value(REGFI_ITERATOR* i);
+REGFI_VK_REC*         regfi_iterator_cur_value(REGFI_ITERATOR* i);
+REGFI_VK_REC*         regfi_iterator_next_value(REGFI_ITERATOR* i);
 
 
 /********************************************************/
@@ -470,7 +468,7 @@ REGFI_HBIN*           regfi_parse_hbin(REGFI_FILE* file, uint32 offset,
  * Returns:
  *   A newly allocated NK record structure, or NULL on failure.
  */
-REGFI_NK_REC*         regfi_parse_nk(REGFI_FILE* file, uint32 offset, 
+REGFI_NK_REC*         regfi_parse_nk(REGFI_FILE* file, uint32 offset,
 				     uint32 max_size, bool strict);
 
 REGFI_SUBKEY_LIST*    regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset,
@@ -497,12 +495,16 @@ char*                 regfi_parse_classname(REGFI_FILE* file, uint32 offset,
 					    uint16* name_length, 
 					    uint32 max_size, bool strict);
 
+/* Dispose of previously parsed records */
+void                  regfi_free_key(REGFI_NK_REC* nk);
+void                  regfi_free_value(REGFI_VK_REC* vk);
+
+
 
 /************************************/
 /*    Private Functions             */
 /************************************/
 REGFI_NK_REC*         regfi_rootkey(REGFI_FILE* file);
-void                  regfi_key_free(REGFI_NK_REC* nk);
 void                  regfi_subkeylist_free(REGFI_SUBKEY_LIST* list);
 uint32                regfi_read(int fd, uint8* buf, uint32* length);
 
