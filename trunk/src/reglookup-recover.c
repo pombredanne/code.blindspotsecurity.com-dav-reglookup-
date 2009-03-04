@@ -262,14 +262,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
   char* ret_val;
   uint32 virt_offset, i, stack_size, ret_val_size, ret_val_used;
   uint32 max_length;
-  /* A little hack so we don't have to walk a quoted string twice. */
-  struct name_holder
-  {
-    char* quoted_name;
-    uint32_t length;
-  };
-  struct name_holder* path_element;
-
+  REGFI_BUFFER* path_element;
   
   /* The path_stack size limit should guarantee that we don't recurse forever. */
   virt_offset = nk->parent_off;
@@ -297,12 +290,12 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	else
 	  virt_offset = cur_ancestor->parent_off;
 	
-	path_element = talloc(path_stack, struct name_holder);
+	path_element = talloc(path_stack, REGFI_BUFFER);
 	if(path_element != NULL)
-	  path_element->quoted_name = quote_string(cur_ancestor->keyname, 
+	  path_element->buf = (uint8*)quote_string(cur_ancestor->keyname, 
 						   key_special_chars);
 	  
-	if(path_element == NULL || path_element->quoted_name == NULL 
+	if(path_element == NULL || path_element->buf == NULL 
 	   || !void_stack_push(path_stack, path_element))
 	{
 	  /* XXX: Need to add a warning here */
@@ -315,8 +308,8 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	 * Note that this integer can't overflow since key name lengths are
 	 * 16 bits and the max depth is 512.
 	 */
-	path_element->length = strlen(path_element->quoted_name);
-	ret_val_size += path_element->length + 1;
+	path_element->len = strlen((char*)path_element->buf);
+	ret_val_size += path_element->len + 1;
 
 	regfi_free_key(cur_ancestor);
       }
@@ -337,9 +330,9 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
   {
     path_element = void_stack_pop(path_stack);
     snprintf(ret_val+ret_val_used, ret_val_size-ret_val_used, 
-	     "/%s", path_element->quoted_name);
-    ret_val_used += path_element->length + 1;
-    free(path_element->quoted_name);
+	     "/%s", path_element->buf);
+    ret_val_used += path_element->len + 1;
+    free(path_element->buf);
     talloc_free(path_element);
   }
   void_stack_free(path_stack);
@@ -470,6 +463,7 @@ int extractDataCells(REGFI_FILE* f,
   const range_list_element* cur_elem;
   REGFI_VK_REC* vk;
   const REGFI_HBIN* hbin;
+  REGFI_BUFFER data;
   uint32 i, off, data_offset, data_maxsize;
 
   for(i=0; i<range_list_size(unalloc_values); i++)
@@ -487,9 +481,11 @@ int extractDataCells(REGFI_FILE* f,
 
       if(vk->data_in_offset)
       {
-	vk->data = regfi_parse_data(f, vk->type, vk->data_off,
-				    vk->data_size, 4,
-				    vk->data_in_offset, false);
+	data = regfi_parse_data(f, vk->type, vk->data_off,
+				vk->data_size, 4,
+				vk->data_in_offset, false);
+	vk->data = data.buf;
+	vk->data_size = data.len;
       }
       else if(range_list_has_range(unalloc_cells, off, vk->data_size))
       {
@@ -498,9 +494,12 @@ int extractDataCells(REGFI_FILE* f,
 	{
 	  data_offset = vk->data_off+REGFI_REGF_SIZE;
 	  data_maxsize = hbin->block_size + hbin->file_off - data_offset;
-	  vk->data = regfi_parse_data(f, vk->type, data_offset, 
-				      vk->data_size, data_maxsize, 
-				      vk->data_in_offset, false);
+	  data = regfi_parse_data(f, vk->type, data_offset, 
+				  vk->data_size, data_maxsize, 
+				  vk->data_in_offset, false);
+	  vk->data = data.buf;
+	  vk->data_size = data.len;
+
 	  if(vk->data != NULL)
 	  {
 	    /* XXX: This strict checking prevents partial recovery of data 
@@ -508,6 +507,10 @@ int extractDataCells(REGFI_FILE* f,
 	     *      lengths indicated in VK records are sometimes just plain 
 	     *      wrong.  Need a feedback mechanism to be more fuzzy with 
 	     *      data cell lengths and the ranges removed. 
+	     *
+	     *      The introduction of REGFI_BUFFER in regfi_parse_data has 
+	     *      fixed some of this.  Should review again with respect to 
+	     *      the other issues mentioned above though.
 	     */
 	    /* A data record was recovered. Remove from unalloc_cells. */
 	    if(!removeRange(unalloc_cells, off, vk->data_size))

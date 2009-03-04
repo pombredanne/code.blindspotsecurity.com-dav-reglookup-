@@ -947,6 +947,7 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
   REGFI_VK_REC* ret_val = NULL;
   const REGFI_HBIN* hbin;
   uint32 data_offset, data_maxsize;
+  REGFI_BUFFER data;
 
   hbin = regfi_lookup_hbin(file, offset - REGFI_REGF_SIZE);
   if(!hbin)
@@ -964,9 +965,11 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
   {
     if(ret_val->data_in_offset)
     {
-      ret_val->data = regfi_parse_data(file, ret_val->type, ret_val->data_off,
-				       ret_val->data_size, 4,
-				       ret_val->data_in_offset, strict);
+      data = regfi_parse_data(file, ret_val->type, ret_val->data_off,
+			      ret_val->data_size, 4,
+			      ret_val->data_in_offset, strict);
+      ret_val->data = data.buf;
+      ret_val->data_size = data.len;
     }
     else
     {
@@ -975,9 +978,12 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
       {
 	data_offset = ret_val->data_off+REGFI_REGF_SIZE;
 	data_maxsize = hbin->block_size + hbin->file_off - data_offset;
-	ret_val->data = regfi_parse_data(file, ret_val->type, data_offset, 
-					 ret_val->data_size, data_maxsize, 
-					 ret_val->data_in_offset, strict);
+	data = regfi_parse_data(file, ret_val->type, data_offset, 
+				ret_val->data_size, data_maxsize, 
+				ret_val->data_in_offset, strict);
+	ret_val->data = data.buf;
+	ret_val->data_size = data.len;
+
       }
       else
       {
@@ -991,7 +997,7 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
     if(ret_val->data == NULL)
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse data record"
-			" while parsing VK record at offset 0x%.8X.", 
+			" while parsing VK record at offset 0x%.8X.",
 			ret_val->offset);
     }
     else
@@ -1739,25 +1745,39 @@ REGFI_FILE* regfi_parse_regf(int fd, bool strict)
       goto fail;
     regfi_add_message(ret_val, REGFI_MSG_WARN, "Magic number mismatch "
 		      "(%.2X %.2X %.2X %.2X) while parsing hive header",
-		      ret_val->magic[0],ret_val->magic[1], 
+		      ret_val->magic[0], ret_val->magic[1], 
 		      ret_val->magic[2], ret_val->magic[3]);
   }
-  
-  ret_val->unknown1 = IVAL(file_header, 0x4);
-  ret_val->unknown2 = IVAL(file_header, 0x8);
-
+  ret_val->sequence1 = IVAL(file_header, 0x4);
+  ret_val->sequence2 = IVAL(file_header, 0x8);
   ret_val->mtime.low = IVAL(file_header, 0xC);
   ret_val->mtime.high = IVAL(file_header, 0x10);
-
-  ret_val->unknown3 = IVAL(file_header, 0x14);
-  ret_val->unknown4 = IVAL(file_header, 0x18);
-  ret_val->unknown5 = IVAL(file_header, 0x1C);
-  ret_val->unknown6 = IVAL(file_header, 0x20);
-  
-  ret_val->data_offset = IVAL(file_header, 0x24);
+  ret_val->major_version = IVAL(file_header, 0x14);
+  ret_val->minor_version = IVAL(file_header, 0x18);
+  ret_val->type = IVAL(file_header, 0x1C);
+  ret_val->format = IVAL(file_header, 0x20);
+  ret_val->root_cell = IVAL(file_header, 0x24);
   ret_val->last_block = IVAL(file_header, 0x28);
 
-  ret_val->unknown7 = IVAL(file_header, 0x2C);
+  ret_val->cluster = IVAL(file_header, 0x2C);
+
+  memcpy(ret_val->file_name, file_header+0x30,  REGFI_REGF_NAME_SIZE);
+
+  /* XXX: Should we add a warning if these uuid parsers fail?  Can they? */
+  ret_val->rm_id = winsec_parse_uuid(ret_val, file_header+0x70, 16);
+  ret_val->log_id = winsec_parse_uuid(ret_val, file_header+0x80, 16);
+  ret_val->flags = IVAL(file_header, 0x90);
+  ret_val->tm_id = winsec_parse_uuid(ret_val, file_header+0x94, 16);
+  ret_val->guid_signature = IVAL(file_header, 0xa4);
+
+  memcpy(ret_val->reserved1, file_header+0xa8, REGFI_REGF_RESERVED1_SIZE);
+  memcpy(ret_val->reserved2, file_header+0x200, REGFI_REGF_RESERVED2_SIZE);
+
+  ret_val->thaw_tm_id = winsec_parse_uuid(ret_val, file_header+0xFC8, 16);
+  ret_val->thaw_rm_id = winsec_parse_uuid(ret_val, file_header+0xFD8, 16);
+  ret_val->thaw_log_id = winsec_parse_uuid(ret_val, file_header+0xFE8, 16);
+  ret_val->boot_type = IVAL(file_header, 0x90);
+  ret_val->boot_recover = IVAL(file_header, 0x90);
 
   return ret_val;
 
@@ -2200,16 +2220,16 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
 }
 
 
-uint8* regfi_parse_data(REGFI_FILE* file, 
-			uint32 data_type, uint32 offset,
-			uint32 length, uint32 max_size, 
-			bool data_in_offset, bool strict)
+REGFI_BUFFER regfi_parse_data(REGFI_FILE* file, 
+			      uint32 data_type, uint32 offset,
+			      uint32 length, uint32 max_size, 
+			      bool data_in_offset, bool strict)
 {
-  uint8* ret_val;
+  REGFI_BUFFER ret_val;
   uint32 read_length, cell_length;
   uint8 i;
   bool unalloc;
-
+  
   /* The data is typically stored in the offset if the size <= 4 */
   if(data_in_offset)
   {
@@ -2218,14 +2238,15 @@ uint8* regfi_parse_data(REGFI_FILE* file,
       regfi_add_message(file, REGFI_MSG_ERROR, "Data in offset but length > 4"
 			" while parsing data record at offset 0x%.8X.", 
 			offset);
-      return NULL;
+      goto fail;
     }
 
-    if((ret_val = talloc_array(NULL, uint8_t, length)) == NULL)
-      return NULL;
+    if((ret_val.buf = talloc_array(NULL, uint8_t, length)) == NULL)
+      goto fail;
+    ret_val.len = length;
 
     for(i = 0; i < length; i++)
-      ret_val[i] = (uint8)((offset >> i*8) & 0xFF);
+      ret_val.buf[i] = (uint8)((offset >> i*8) & 0xFF);
   }
   else
   {
@@ -2234,7 +2255,7 @@ uint8* regfi_parse_data(REGFI_FILE* file,
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell while"
 			" parsing data record at offset 0x%.8X.", offset);
-      return NULL;
+      goto fail;
     }
 
     if((cell_length & 0xFFFFFFF8) != cell_length)
@@ -2242,7 +2263,7 @@ uint8* regfi_parse_data(REGFI_FILE* file,
       regfi_add_message(file, REGFI_MSG_WARN, "Cell length not multiple of 8"
 			" while parsing data record at offset 0x%.8X.",
 			offset);
-      return NULL;
+      goto fail;
     }
 
     if(cell_length > max_size)
@@ -2251,7 +2272,7 @@ uint8* regfi_parse_data(REGFI_FILE* file,
 			" while parsing data record at offset 0x%.8X.",
 			offset);
       if(strict)
-	return NULL;
+	goto fail;
       else
 	cell_length = max_size;
     }
@@ -2260,32 +2281,41 @@ uint8* regfi_parse_data(REGFI_FILE* file,
     {
       /* XXX: This strict condition has been triggered in multiple registries.
        *      Not sure the cause, but the data length values are very large,
-       *      such as 53392.
+       *      such as 53392.  For now, we're truncating the size and returning 
+       *      what we can, since this issue is so common.
        */
       regfi_add_message(file, REGFI_MSG_WARN, "Data length (0x%.8X) larger than"
 			" remaining cell length (0x%.8X)"
 			" while parsing data record at offset 0x%.8X.", 
 			length, cell_length - 4, offset);
+      /*
       if(strict)
-	return NULL;
+        goto fail;
       else
-	length = cell_length - 4;
+      */
+      length = cell_length - 4;
     }
 
-    if((ret_val = talloc_array(NULL, uint8_t, length)) == NULL)
-      return NULL;
+    if((ret_val.buf = talloc_array(NULL, uint8_t, length)) == NULL)
+      goto fail;
+    ret_val.len = length;
 
     read_length = length;
-    if((regfi_read(file->fd, ret_val, &read_length) != 0) 
+    if((regfi_read(file->fd, ret_val.buf, &read_length) != 0)
        || read_length != length)
     {
       regfi_add_message(file, REGFI_MSG_ERROR, "Could not read data block while"
 			" parsing data record at offset 0x%.8X.", offset);
-      talloc_free(ret_val);
-      return NULL;
+      talloc_free(ret_val.buf);
+      goto fail;
     }
   }
 
+  return ret_val;
+
+ fail:
+  ret_val.buf = NULL;
+  ret_val.len = 0;
   return ret_val;
 }
 
