@@ -94,6 +94,11 @@
 #define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
 #define REGFI_REGF_SIZE            0x1000 /* "regf" header block size */
 #define REGFI_REGF_MAGIC_SIZE      4
+#define REGFI_REGF_NAME_SIZE       64
+
+#define REGFI_REGF_RESERVED1_SIZE  340
+#define REGFI_REGF_RESERVED2_SIZE  3528
+
 #define REGFI_HBIN_MAGIC_SIZE      4
 #define REGFI_CELL_MAGIC_SIZE      2
 #define REGFI_HBIN_HEADER_SIZE     0x20
@@ -336,28 +341,54 @@ typedef struct
   /* Data parsed from file header */
   /********************************/
   uint8  magic[REGFI_REGF_MAGIC_SIZE];/* "regf" */
-  NTTIME mtime;
-  uint32 data_offset;		/* offset to record in the first (or any?) 
-				 * hbin block 
-				 */
-  uint32 last_block;		/* offset to last hbin block in file */
 
-  uint32 checksum;		/* Stored checksum. */
-  uint32 computed_checksum;     /* Our own calculation of the checksum.
-				 * (XOR of bytes 0x0000 - 0x01FB) 
-				 */
-  
-  /* XXX: Some of these we have some clues about (major/minor version, etc). 
-   *      Should verify and update names accordingly. 
-   */
-  /* unknown data structure values */
-  uint32 unknown1;
-  uint32 unknown2;
-  uint32 unknown3;
-  uint32 unknown4;
-  uint32 unknown5;
-  uint32 unknown6;
-  uint32 unknown7;
+ /* These sequence numbers should match if
+  * the hive was properly synced to disk.
+  */
+  uint32 sequence1;            
+  uint32 sequence2;
+
+  NTTIME mtime;
+  uint32 major_version;  /* XXX: Unverified. Set to 1 in all known hives */
+  uint32 minor_version;  /* XXX: Unverified. Set to 3 or 5 in all known hives */
+  uint32 type;           /* XXX: Unverified.  Set to 0 in all known hives */
+  uint32 format;         /* XXX: Unverified.  Set to 1 in all known hives */
+
+  uint32 root_cell;  /* Offset to root cell in the first (or any?) hbin block */
+  uint32 last_block; /* Offset to last hbin block in file
+		      * (or length of file minus header?) */
+
+  uint32 cluster;    /* XXX: Unverified. Set to 1 in all known hives */
+
+  /* Matches hive's base file name. Stored in UTF-16LE */
+  uint8 file_name[REGFI_REGF_NAME_SIZE];
+
+  WINSEC_UUID* rm_id;       /* XXX: Unverified. */
+  WINSEC_UUID* log_id;      /* XXX: Unverified. */
+  WINSEC_UUID* tm_id;       /* XXX: Unverified. */
+  uint32 flags;             /* XXX: Unverified. */
+  uint32 guid_signature;    /* XXX: Unverified. */
+
+  uint32 checksum;          /* Stored checksum from file */
+  uint32 computed_checksum; /* Our own calculation of the checksum. 
+			     * (XOR of bytes 0x0000 - 0x01FB) */
+
+  WINSEC_UUID* thaw_tm_id;  /* XXX: Unverified. */
+  WINSEC_UUID* thaw_rm_id;  /* XXX: Unverified. */
+  WINSEC_UUID* thaw_log_id; /* XXX: Unverified. */
+  uint32 boot_type;         /* XXX: Unverified. */
+  uint32 boot_recover;      /* XXX: Unverified. */
+
+  /* This seems to include random junk.  Possibly unsanitized memory left over
+   * from when header block was written.  For instance, chunks of nk records 
+   * can be found, though often it's all 0s. */
+  uint8 reserved1[REGFI_REGF_RESERVED1_SIZE];
+
+  /* This is likely reserved and unusued currently.  (Should be all 0s.)
+   * Included here for easier access in looking for hidden data 
+   * or doing research. */
+  uint8 reserved2[REGFI_REGF_RESERVED2_SIZE];
+
 } REGFI_FILE;
 
 
@@ -366,7 +397,7 @@ typedef struct
  *      convert key_positions stack to store just key offsets rather than
  *      whole keys.
  */
-typedef struct 
+typedef struct _regfi_iterator
 {
   REGFI_FILE* f;
   void_stack* key_positions;
@@ -376,7 +407,7 @@ typedef struct
 } REGFI_ITERATOR;
 
 
-typedef struct 
+typedef struct _regfi_iter_position
 {
   REGFI_NK_REC* nk;
   uint32 cur_subkey;
@@ -384,6 +415,13 @@ typedef struct
    * the use in it right now.
    */
 } REGFI_ITER_POSITION;
+
+
+typedef struct _regfi_buffer
+{
+  uint8* buf;
+  uint32_t len;
+} REGFI_BUFFER;
 
 
 /******************************************************************************/
@@ -477,7 +515,7 @@ REGFI_SUBKEY_LIST*    regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset,
 REGFI_VK_REC*         regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
-uint8*                regfi_parse_data(REGFI_FILE* file, 
+REGFI_BUFFER          regfi_parse_data(REGFI_FILE* file, 
 				       uint32 data_type, uint32 offset, 
 				       uint32 length, uint32 max_size, 
 				       bool data_in_offset, bool strict);
