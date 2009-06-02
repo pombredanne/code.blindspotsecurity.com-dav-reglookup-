@@ -11,6 +11,9 @@ things you could look into:
    paths.  Reglookup should take the user path and unquote each path
    component using the \xQQ syntax prior to searching.
 
+ - It might be nice to have a way to filter results by security 
+   descriptor information.  Maybe by MTIME as well.
+
  - Testing, testing, and more testing.  reglookup needs to be tested on 
    NT/XP/2k3/Vista.  A regression test suite would be nice too.  Some 
    thoughts on this include a script which randomly fuzzes an existing
@@ -25,7 +28,9 @@ things you could look into:
    minimal make rules.  If you got any ideas on this, shoot them my way.
 
  - Unicode support still needs improvement.  While parsing strings seems
-   to be decent, UTF-8 output would be nice.
+   to be decent, UTF-8 output would be nice.  Need support for
+   UTF-16LE key and value names.  To do this, the UTF conversion
+   functions need to be moved to regfi.
 
  - The interface between reglookup.c and regfi.c is much better than it
    used to be, but the parsing of data objects needs to be moved into the
@@ -34,16 +39,8 @@ things you could look into:
    happen in the library so that they are accessible to other users of the
    library.
 
- - NK/VK/SK record caching.  Right now, HBIN metadata and SK records are 
-   cached, but it's pretty haphazard, and NK/VK records are repeatedly
-   re-parsed.  A generic caching library has been introduced but needs to 
-   be applied to NK records at a minimum.  Eventually, VK records and 
-   data should also be cached separately and only be parsed when needed, 
-   rather than when a key is loaded up front.  Caching also needs 
-   configurable object limits, preferrably configurable at build-time.
-
- - It might be nice to have a way to filter results by security 
-   descriptor information.  Maybe by MTIME as well.
+ - Develop and solidify regfi API.  Regfi should be better documented and 
+   eventually needs a set of Python wrappers.
 
  - Documentation.  The security descriptor output format needs to be 
    documented.  Also, function contracts should be added to the 
@@ -56,10 +53,5 @@ things you could look into:
    to ASCII under Windows/MingW or other platforms that don't have proper 
    libiconv support yet.  Then a build-time option or autodetection can 
    dictate which version of conversion function is used.
-
- - It appears the registry may actually support UTF-16LE names on keys, 
-   if the key type field is set appropriately.  Once data parsing is 
-   integrated into regfi, then the UTF-16LE handling routines (which 
-   would then be built-in) should be used to properly handle this case.
 
  - Grep through the source for 'XXX', and you'll find more.
