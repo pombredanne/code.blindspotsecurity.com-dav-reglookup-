@@ -95,10 +95,8 @@
 #define REGFI_REGF_SIZE            0x1000 /* "regf" header block size */
 #define REGFI_REGF_MAGIC_SIZE      4
 #define REGFI_REGF_NAME_SIZE       64
-
 #define REGFI_REGF_RESERVED1_SIZE  340
 #define REGFI_REGF_RESERVED2_SIZE  3528
-
 #define REGFI_HBIN_MAGIC_SIZE      4
 #define REGFI_CELL_MAGIC_SIZE      2
 #define REGFI_HBIN_HEADER_SIZE     0x20
@@ -126,42 +124,64 @@
 
 
 /* Flags for the vk records */
+/* XXX: This next flag may be incorrect.  According to Jeffrey Muir,
+*       this may actually indicate that the value name is stored in
+*       UTF-16LE.
+*/
 #define REGFI_VK_FLAG_NAME_PRESENT 0x0001
 #define REGFI_VK_DATA_IN_OFFSET    0x80000000
-#define REGFI_VK_MAX_DATA_LENGTH   1024*1024
+#define REGFI_VK_MAX_DATA_LENGTH   1024*1024  /* XXX: This is arbitrary */
 
 
-/* NK record types */
-/* XXX: This is starting to look like this is a flags field.  
- *      Need to decipher the meaning of each flag.
- */
-#define REGFI_NK_TYPE_LINKKEY      0x0010
-#define REGFI_NK_TYPE_NORMALKEY    0x0020
- /* XXX: Unknown key type that shows up in Vista registries */
-#define REGFI_NK_TYPE_UNKNOWN1     0x1020
- /* XXX: Unknown key types that shows up in W2K3 registries */
-#define REGFI_NK_TYPE_UNKNOWN2     0x4020
-#define REGFI_NK_TYPE_UNKNOWN3     0x0000  /* XXX: This type seems to have UTF-16 names!!! */
-#define REGFI_NK_TYPE_ROOTKEY1     0x002c
- /* XXX: Unknown root key type that shows up in Vista registries */
-#define REGFI_NK_TYPE_ROOTKEY2     0x00ac
-
-#if 0
-/* Initial hypothesis of NK flags: */
-/***********************************/
-#define REGFI_NK_FLAG_LINK         0x0010
-/* The name will be in ASCII if this next bit is set, otherwise UTF-16LE */
-#define REGFI_NK_FLAG_ASCIINAME    0x0020
-/* These next two combine to form the "c" on both known root key types */
-#define REGFI_NK_FLAG_ROOT1        0x0008
-#define REGFI_NK_FLAG_ROOT2        0x0004
+/* Known key flags */
+/*******************/
 /* These next two show up on normal-seeming keys in Vista and W2K3 registries */
 #define REGFI_NK_FLAG_UNKNOWN1     0x4000
 #define REGFI_NK_FLAG_UNKNOWN2     0x1000
+
 /* This next one shows up on root keys in some Vista "software" registries */
 #define REGFI_NK_FLAG_UNKNOWN3     0x0080
-#endif
 
+/* Predefined handle.  Rumor has it that the valuelist count for this key is 
+ * where the handle is stored.
+ * http://msdn.microsoft.com/en-us/library/ms724836(VS.85).aspx
+ */
+#define REGFI_NK_FLAG_PREDEF_KEY   0x0040
+
+/* The name will be in ASCII if this next bit is set, otherwise UTF-16LE */
+#define REGFI_NK_FLAG_ASCIINAME    0x0020
+
+/* Symlink key.  
+ * See: http://www.codeproject.com/KB/system/regsymlink.aspx 
+ */
+#define REGFI_NK_FLAG_LINK         0x0010
+
+/* This key cannot be deleted */
+#define REGFI_NK_FLAG_NO_RM        0x0008
+
+/* Root of a hive */
+#define REGFI_NK_FLAG_ROOT         0x0004
+
+/* Mount point of another hive.  NULL/(default) value indicates which hive 
+ * and where in the hive it points to. 
+ */
+#define REGFI_NK_FLAG_HIVE_LINK    0x0002 
+
+/* These keys shouldn't be stored on disk, according to:
+ * http://geekswithblogs.net/sdorman/archive/2007/12/24/volatile-registry-keys.aspx
+ */
+#define REGFI_NK_FLAG_VOLATILE     0x0001
+
+/* Useful for identifying unknown flag types */
+#define REGFI_NK_KNOWN_FLAGS       (REGFI_NK_FLAG_PREDEF_KEY\
+				    | REGFI_NK_FLAG_ASCIINAME\
+				    | REGFI_NK_FLAG_LINK\
+				    | REGFI_NK_FLAG_NO_RM\
+				    | REGFI_NK_FLAG_ROOT\
+				    | REGFI_NK_FLAG_HIVE_LINK\
+				    | REGFI_NK_FLAG_VOLATILE\
+				    | REGFI_NK_FLAG_UNKNOWN1\
+				    | REGFI_NK_FLAG_UNKNOWN2)
 
 /* HBIN block */
 typedef struct _regfi_hbin 
@@ -349,14 +369,13 @@ typedef struct
   uint32 sequence2;
 
   NTTIME mtime;
-  uint32 major_version;  /* XXX: Unverified. Set to 1 in all known hives */
-  uint32 minor_version;  /* XXX: Unverified. Set to 3 or 5 in all known hives */
+  uint32 major_version;  /* Set to 1 in all known hives */
+  uint32 minor_version;  /* Set to 3 or 5 in all known hives */
   uint32 type;           /* XXX: Unverified.  Set to 0 in all known hives */
   uint32 format;         /* XXX: Unverified.  Set to 1 in all known hives */
 
   uint32 root_cell;  /* Offset to root cell in the first (or any?) hbin block */
-  uint32 last_block; /* Offset to last hbin block in file
-		      * (or length of file minus header?) */
+  uint32 last_block; /* Offset to last hbin block in file */
 
   uint32 cluster;    /* XXX: Unverified. Set to 1 in all known hives */
 
@@ -515,10 +534,14 @@ REGFI_SUBKEY_LIST*    regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset,
 REGFI_VK_REC*         regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
-REGFI_BUFFER          regfi_parse_data(REGFI_FILE* file, 
-				       uint32 data_type, uint32 offset, 
-				       uint32 length, uint32 max_size, 
-				       bool data_in_offset, bool strict);
+REGFI_BUFFER          regfi_load_data(REGFI_FILE* file, 
+				      uint32 data_type, uint32 offset, 
+				      uint32 length, uint32 max_size, 
+				      bool data_in_offset, bool strict);
+
+REGFI_BUFFER          regfi_load_big_data(REGFI_FILE* file, 
+					  uint32 offset, uint32 data_length,
+					  uint32 cell_length, bool strict);
 
 REGFI_SK_REC*         regfi_parse_sk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
