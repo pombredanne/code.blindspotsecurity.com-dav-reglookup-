@@ -284,8 +284,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	virt_offset = REGFI_OFFSET_NONE;
       else
       {
-	if((cur_ancestor->key_type == REGFI_NK_TYPE_ROOTKEY1) 
-	   || (cur_ancestor->key_type == REGFI_NK_TYPE_ROOTKEY2))
+	if(cur_ancestor->key_type & REGFI_NK_FLAG_ROOT)
 	  virt_offset = REGFI_OFFSET_NONE;
 	else
 	  virt_offset = cur_ancestor->parent_off;
@@ -481,9 +480,9 @@ int extractDataCells(REGFI_FILE* f,
 
       if(vk->data_in_offset)
       {
-	data = regfi_parse_data(f, vk->type, vk->data_off,
-				vk->data_size, 4,
-				vk->data_in_offset, false);
+	data = regfi_load_data(f, vk->type, vk->data_off,
+			       vk->data_size, 4,
+			       vk->data_in_offset, false);
 	vk->data = data.buf;
 	vk->data_size = data.len;
       }
@@ -494,21 +493,24 @@ int extractDataCells(REGFI_FILE* f,
 	{
 	  data_offset = vk->data_off+REGFI_REGF_SIZE;
 	  data_maxsize = hbin->block_size + hbin->file_off - data_offset;
-	  data = regfi_parse_data(f, vk->type, data_offset, 
-				  vk->data_size, data_maxsize, 
-				  vk->data_in_offset, false);
+	  data = regfi_load_data(f, vk->type, data_offset, 
+				 vk->data_size, data_maxsize, 
+				 vk->data_in_offset, false);
 	  vk->data = data.buf;
 	  vk->data_size = data.len;
 
 	  if(vk->data != NULL)
 	  {
+	    /* XXX: The following may not make sense now in light of big data
+	     *      records.
+	     */
 	    /* XXX: This strict checking prevents partial recovery of data 
-	     *      cells.  Also, see code for regfi_parse_data and note that
+	     *      cells.  Also, see code for regfi_load_data and note that
 	     *      lengths indicated in VK records are sometimes just plain 
 	     *      wrong.  Need a feedback mechanism to be more fuzzy with 
 	     *      data cell lengths and the ranges removed. 
 	     *
-	     *      The introduction of REGFI_BUFFER in regfi_parse_data has 
+	     *      The introduction of REGFI_BUFFER in regfi_load_data has 
 	     *      fixed some of this.  Should review again with respect to 
 	     *      the other issues mentioned above though.
 	     */
