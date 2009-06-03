@@ -2395,10 +2395,15 @@ REGFI_BUFFER regfi_load_big_data(REGFI_FILE* file,
 	break;
     }
 
-    if(chunk_length-4 > data_left)
+    /* XXX: This should be "chunk_length-4" to account for the 4 byte cell 
+     *      length.  However, it has been observed that some (all?) chunks
+     *      have an additional 4 bytes of 0 at the end of their cells that 
+     *      isn't part of the data, so we're trimming that off too. 
+     */
+    if(chunk_length-8 >= data_left)
       read_length = data_left;
     else
-      read_length = chunk_length-4;
+      read_length = chunk_length-8;
 
     if(regfi_read(file->fd, ret_val.buf+(data_length-data_left), 
 		  &read_length) != 0)
@@ -2414,9 +2419,9 @@ REGFI_BUFFER regfi_load_big_data(REGFI_FILE* file,
 
     data_left -= read_length;
   }
-
   free(indirect_ptrs);
   ret_val.len = data_length-data_left;
+
   return ret_val;
 
  chunk_fail:
