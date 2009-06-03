@@ -25,9 +25,11 @@ install:
 
 #XXX: Used during release only
 release:
-	docbook2x-man --to-stdout reglookup.1.docbook > man/man1/reglookup.1
-	docbook2x-man --to-stdout reglookup-timeline.1.docbook > man/man1/reglookup-timeline.1
-	docbook2x-man --to-stdout reglookup-recover.1.docbook > man/man1/reglookup-recover.1
+	#XXX: The sed filter is a temporary hack to work around a bug in docbook2x-man
+	#     See: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=516165
+	docbook2x-man --to-stdout reglookup.1.docbook | sed 's/.SH DESCRIPTION/\n.SH DESCRIPTION/' > man/man1/reglookup.1
+	docbook2x-man --to-stdout reglookup-timeline.1.docbook | sed 's/.SH DESCRIPTION/\n.SH DESCRIPTION/' > man/man1/reglookup-timeline.1
+	docbook2x-man --to-stdout reglookup-recover.1.docbook | sed 's/.SH DESCRIPTION/\n.SH DESCRIPTION/' > man/man1/reglookup-recover.1
 	cd man/man1 && gzip -9 -f reglookup.1
 	cd man/man1 && gzip -9 -f reglookup-timeline.1
 	cd man/man1 && gzip -9 -f reglookup-recover.1
