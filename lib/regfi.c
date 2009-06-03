@@ -2274,6 +2274,10 @@ REGFI_BUFFER regfi_load_data(REGFI_FILE* file,
 
     if(cell_length - 4 < length)
     {
+      /* XXX: All big data records thus far have been 16 bytes long.  
+       *      Should we check for this precise size instead of just 
+       *      relying upon the above check?
+       */
       if (file->major_version >= 1 && file->minor_version >= 5)
       {
 	/* Attempt to parse a big data record */
