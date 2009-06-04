@@ -1,0 +1,54 @@
+RegLookup Installation
+======================
+
+Prerequisites
+-------------
+
+This package doesn't require much for installation.  Just what typically
+comes with any free operating system.  Be sure you have:
+
+ - GNU Make
+ - GCC
+
+Note that iconv support is required, as specified in IEEE Std 1003.1 
+(POSIX.1-2001).  Some platforms still do not contain support for this 
+natively, in which case you may need to install libiconv from:
+  http://www.gnu.org/software/libiconv/
+
+
+Survival Commands
+-----------------
+
+make
+# and as root
+make install
+
+If GNU Make isn't your default, you may need to run `gmake' instead.
+
+
+Advanced Installation
+---------------------
+To install in a custom directory, simply change one or more of the
+following make variables to suit your needs:
+
+ PREFIX      Top level install directory.  Used as base for rest unless
+             they too are overridden. (This defaults to /usr/local)
+
+ BIN_PREFIX  Location for executable programs to be installed.
+
+ DOC_PREFIX  Location for documentation.
+
+ MAN_PREFIX  A path in the MANPATH.
+
+
+Use the following syntax (with GNU Make) to override a variable:
+
+# as root
+make VAR=value install
+
+
+For more information, see the Makefiles.
+
+Primitive build features have been added to support cross-compiling to
+Windows binaries using MinGW.  For more information on this, see: 
+  doc/mingw-build.txt
