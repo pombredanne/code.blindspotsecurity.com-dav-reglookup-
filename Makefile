@@ -3,7 +3,7 @@
 # This Makefile is used only for packaging releases out of Subversion.
 ################################################################################
 
-SVN_URL=svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup
+SVN_URL=svn+ssh://pascal.sentinelchicken.org/home/projects/subversion/reglookup
 SUB_DIRS=$(wildcard releases/*) trunk
 
 FILES=$(REGLOOKUP)
@@ -11,7 +11,7 @@ FILES=$(REGLOOKUP)
 export
 
 
-RELEASE_NAME=reglookup-test
+RELEASE_NAME=reglookup-trunk
 RELEASE_DEST=.
 
 all:

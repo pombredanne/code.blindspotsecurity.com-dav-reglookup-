@@ -257,27 +257,24 @@ int printCell(REGFI_FILE* f, uint32 offset)
 char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 {
   void_stack* path_stack = void_stack_new(REGFI_MAX_DEPTH);
-  const REGFI_HBIN* hbin;
   REGFI_NK_REC* cur_ancestor;
   char* ret_val;
-  uint32 virt_offset, i, stack_size, ret_val_size, ret_val_used;
-  uint32 max_length;
+  uint32 virt_offset, i, stack_size, ret_val_size, ret_val_used, offset;
+  int32 max_size;
   REGFI_BUFFER* path_element;
   
   /* The path_stack size limit should guarantee that we don't recurse forever. */
   virt_offset = nk->parent_off;
   ret_val_size = 1; /* NUL */
   while(virt_offset != REGFI_OFFSET_NONE)
-  {  
-    hbin = regfi_lookup_hbin(f, virt_offset);
-    if(hbin == NULL)
+  {
+    offset = virt_offset+REGFI_REGF_SIZE;
+    max_size = regfi_calc_maxsize(f, offset);
+    if(max_size < 0)
       virt_offset = REGFI_OFFSET_NONE;
     else
     {
-      max_length = hbin->block_size + hbin->file_off 
-	- (virt_offset+REGFI_REGF_SIZE);
-      cur_ancestor = regfi_parse_nk(f, virt_offset+REGFI_REGF_SIZE, 
-				    max_length, true);
+      cur_ancestor = regfi_parse_nk(f, offset, max_size, true);
       printMsgs(f);
 
       if(cur_ancestor == NULL)
@@ -455,76 +452,132 @@ int extractVKs(REGFI_FILE* f,
 }
 
 
-int extractDataCells(REGFI_FILE* f,
+int extractDataCells(REGFI_FILE* file,
 		     range_list* unalloc_cells,
 		     range_list* unalloc_values)
 {
   const range_list_element* cur_elem;
   REGFI_VK_REC* vk;
-  const REGFI_HBIN* hbin;
+  range_list* bd_cells;
   REGFI_BUFFER data;
-  uint32 i, off, data_offset, data_maxsize;
+  uint32 i, j, offset, cell_length, length;
+  int32 max_size;
+  bool unalloc;
+
+  bd_cells = range_list_new();
+  if(bd_cells == NULL)
+    return 10;
 
   for(i=0; i<range_list_size(unalloc_values); i++)
   {
     cur_elem = range_list_get(unalloc_values, i);
     vk = (REGFI_VK_REC*)cur_elem->data;
     if(vk == NULL)
-      return 40;
+      return 11;
 
-    if(vk->data_size == 0)
-      vk->data = NULL;
-    else
+    length = vk->data_size;
+    vk->data = NULL;
+    if(vk->data_size != 0)
     {
-      off = vk->data_off+REGFI_REGF_SIZE;
+      offset = vk->data_off+REGFI_REGF_SIZE;
 
       if(vk->data_in_offset)
+	data = regfi_parse_little_data(file, vk->data_off, 
+				       length, false);
+      else
       {
-	data = regfi_load_data(f, vk->type, vk->data_off,
-			       vk->data_size, 4,
-			       vk->data_in_offset, false);
-	vk->data = data.buf;
-	vk->data_size = data.len;
-      }
-      else if(range_list_has_range(unalloc_cells, off, vk->data_size))
-      {
-	hbin = regfi_lookup_hbin(f, vk->data_off);
-	if(hbin)
+	max_size = regfi_calc_maxsize(file, offset);
+	if(max_size >= 0 
+	   && regfi_parse_cell(file->fd, offset, NULL, 0,
+			       &cell_length, &unalloc)
+	   && (cell_length & 0x00000007) == 0
+	   && cell_length <= max_size)
 	{
-	  data_offset = vk->data_off+REGFI_REGF_SIZE;
-	  data_maxsize = hbin->block_size + hbin->file_off - data_offset;
-	  data = regfi_load_data(f, vk->type, data_offset, 
-				 vk->data_size, data_maxsize, 
-				 vk->data_in_offset, false);
-	  vk->data = data.buf;
-	  vk->data_size = data.len;
-
-	  if(vk->data != NULL)
+	  if(cell_length - 4 < length)
 	  {
-	    /* XXX: The following may not make sense now in light of big data
-	     *      records.
+	    /* Multi-cell "big data" */
+
+	    /* XXX: All big data records thus far have been 16 bytes long.  
+	     *      Should we check for this precise size instead of just 
+	     *      relying upon the above check?
 	     */
-	    /* XXX: This strict checking prevents partial recovery of data 
-	     *      cells.  Also, see code for regfi_load_data and note that
-	     *      lengths indicated in VK records are sometimes just plain 
-	     *      wrong.  Need a feedback mechanism to be more fuzzy with 
-	     *      data cell lengths and the ranges removed. 
-	     *
-	     *      The introduction of REGFI_BUFFER in regfi_load_data has 
-	     *      fixed some of this.  Should review again with respect to 
-	     *      the other issues mentioned above though.
-	     */
-	    /* A data record was recovered. Remove from unalloc_cells. */
-	    if(!removeRange(unalloc_cells, off, vk->data_size))
-	      return 50;
+	    if (file->major_version >= 1 && file->minor_version >= 5)
+	    {
+	      /* Attempt to parse a big data record */
+	      data = regfi_load_big_data(file, offset, length, 
+					 cell_length, bd_cells, false);
+
+	      /* XXX: if this turns out NULL, should fall back to truncating cell */
+	      if(data.buf != NULL)
+	      {
+		for(j=0; j<range_list_size(bd_cells); j++)
+		{
+		  cur_elem = range_list_get(bd_cells, j);
+		  if(cur_elem == NULL)
+		    return 20;
+		  if(!range_list_has_range(unalloc_cells,
+					   cur_elem->offset, 
+					   cur_elem->length))
+		  {
+		    fprintf(stderr, 
+			    "WARN: Successfully parsed big data at offset"
+			    " 0x%.8X was rejected because some substructure"
+			    " (offset=0x%.8X) is allocated or used in other"
+			    " recovered structures.\n",
+			    offset, cur_elem->offset);
+		    talloc_free(data.buf);
+		    data.buf = NULL;
+		    data.len = 0;
+		    break;
+		  }
+		}
+		
+		if(data.buf != NULL)
+		{
+		  for(j=0; j<range_list_size(bd_cells); j++)
+		  {
+		    cur_elem = range_list_get(bd_cells, j);
+		    if(cur_elem == NULL)
+		      return 21;
+		    
+		    if(!removeRange(unalloc_cells, 
+				    cur_elem->offset,
+				    cur_elem->length))
+		    { return 22; }
+		  }
+		}
+	      }
+
+	    }
+	    else
+	    {
+	      fprintf(stderr, 
+		      "WARN: Data length (0x%.8X)"
+		      " larger than remaining cell length (0x%.8X)"
+		      " while parsing data record at offset 0x%.8X."
+		      " Truncating...\n",
+		      length, cell_length - 4, offset);
+	       length = cell_length - 4;
+	    }
+	  }
+	  
+	  /* Typical 1-cell data */
+	  if(range_list_has_range(unalloc_cells, offset, length))
+	  {
+	    data = regfi_parse_data(file, offset, length, false);
+	    if(data.buf != NULL)
+	      if(!removeRange(unalloc_cells, offset, length))
+		return 30;
 	  }
 	}
-	else
-	  vk->data = NULL;
+
+	vk->data = data.buf;
+	vk->data_size = data.len;
       }
     }
   }
 
+  range_list_free(bd_cells);
   return 0;
 }
 
@@ -589,9 +642,9 @@ int extractValueLists(REGFI_FILE* f,
 {
   REGFI_NK_REC* nk;
   REGFI_VK_REC* vk;
-  const REGFI_HBIN* hbin;
   const range_list_element* cur_elem;
-  uint32 i, j, num_keys, off, values_length, max_length;
+  uint32 i, j, num_keys, off, values_length;
+  int32 max_size;
 
   num_keys=range_list_size(unalloc_keys);
   for(i=0; i<num_keys; i++)
@@ -603,14 +656,12 @@ int extractValueLists(REGFI_FILE* f,
 
     if(nk->num_values && (nk->values_off!=REGFI_OFFSET_NONE))
     {
-      hbin = regfi_lookup_hbin(f, nk->values_off);
-      
-      if(hbin != NULL)
+      off = nk->values_off + REGFI_REGF_SIZE;
+      max_size = regfi_calc_maxsize(f, off);
+      if(max_size >= 0)
       {
-	off = nk->values_off + REGFI_REGF_SIZE;
-	max_length = hbin->block_size + hbin->file_off - off;
 	nk->values = regfi_load_valuelist(f, off, nk->num_values, 
-					  max_length, false);
+					  max_size, false);
 	if(nk->values != NULL && nk->values->elements != NULL)
 	{
 	  /* Number of elements in the value list may be shorter than advertised 

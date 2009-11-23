@@ -14,13 +14,13 @@ things you could look into:
  - It might be nice to have a way to filter results by security 
    descriptor information.  Maybe by MTIME as well.
 
- - Testing, testing, and more testing.  reglookup needs to be tested on 
-   NT/XP/2k3/Vista.  A regression test suite would be nice too.  Some 
-   thoughts on this include a script which randomly fuzzes an existing
-   registry file, and tries to detect crashes of reglookup when parsing
-   it.  Another test script might randomly truncate an existing registry
-   file, which will help improve reglookup's parsing on fragmentary
-   files.
+ - Testing, testing, and more testing.  reglookup needs to be more
+   heavily tested on all recent Windows platforms.  A regression test
+   suite would be nice too.  Some thoughts on this include a script
+   which randomly fuzzes an existing registry file, and tries to detect
+   crashes of reglookup when parsing it.  Another test script might
+   randomly truncate an existing registry file, which will help improve
+   reglookup's parsing on fragmentary files.
 
  - Build system.  I do not wish to use automake/autoconf in this
    project.  I have also now decided that make is painful to use for
@@ -49,9 +49,7 @@ things you could look into:
  - The smb_deps.h and smb_deps.c content is almost eliminated.  Just need
    to integrate parts that are being kept into regfi or other modules.
 
- - Need to figure out a reasonably correct way to convert UTF-16LE charaters
-   to ASCII under Windows/MingW or other platforms that don't have proper 
-   libiconv support yet.  Then a build-time option or autodetection can 
-   dictate which version of conversion function is used.
+ - Consider switching from libiconv to Joachim Metz's libuna for
+   increased portability and easier builds.
 
  - Grep through the source for 'XXX', and you'll find more.

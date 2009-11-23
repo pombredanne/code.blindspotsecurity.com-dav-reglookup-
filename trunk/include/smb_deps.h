@@ -39,23 +39,19 @@
 
 #include "byteorder.h"
 
-#define DEBUG(lvl,body) 0
-
-void* zalloc(size_t size);
-void* zcalloc(size_t size, unsigned int count);
-
 /* From includes.h */
 
+/* XXX: convert all code to use the more standard "*_t" types */
 #define uint8  uint8_t
 #define int16  int8_t
 #define uint16 uint16_t
 #define int32  int32_t
 #define uint32 uint32_t
+#define int64  int64_t
+#define uint64 uint64_t
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
-
-extern int DEBUGLEVEL;
 
 /* End of stuff from includes.h */
 
