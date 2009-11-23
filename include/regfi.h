@@ -104,6 +104,7 @@
 #define REGFI_VK_MIN_LENGTH        0x14
 #define REGFI_SK_MIN_LENGTH        0x14
 #define REGFI_SUBKEY_LIST_MIN_LEN  0x4
+#define REGFI_BIG_DATA_MIN_LENGTH  0xC
 
 
 /* Constants used for validation */
@@ -443,6 +444,8 @@ typedef struct _regfi_buffer
 } REGFI_BUFFER;
 
 
+
+
 /******************************************************************************/
 /*                         Main iterator API                                  */
 /******************************************************************************/
@@ -467,8 +470,6 @@ bool                  regfi_iterator_down(REGFI_ITERATOR* i);
 bool                  regfi_iterator_up(REGFI_ITERATOR* i);
 bool                  regfi_iterator_to_root(REGFI_ITERATOR* i);
 
-bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i, 
-						 const char* subkey_name);
 bool                  regfi_iterator_walk_path(REGFI_ITERATOR* i, 
 					       const char** path);
 const REGFI_NK_REC*   regfi_iterator_cur_key(REGFI_ITERATOR* i);
@@ -477,12 +478,16 @@ const REGFI_SK_REC*   regfi_iterator_cur_sk(REGFI_ITERATOR* i);
 REGFI_NK_REC*         regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 REGFI_NK_REC*         regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
 REGFI_NK_REC*         regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i, 
+						 const char* subkey_name);
 
-bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
-						const char* value_name);
 REGFI_VK_REC*         regfi_iterator_first_value(REGFI_ITERATOR* i);
 REGFI_VK_REC*         regfi_iterator_cur_value(REGFI_ITERATOR* i);
 REGFI_VK_REC*         regfi_iterator_next_value(REGFI_ITERATOR* i);
+bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
+						const char* value_name);
+
+REGFI_DATA*           regfi_iterator_cur_data(REGFI_ITERATOR* i);
 
 
 /********************************************************/
@@ -499,11 +504,19 @@ REGFI_VALUE_LIST*     regfi_load_valuelist(REGFI_FILE* file, uint32 offset,
 					   uint32 num_values, uint32 max_size,
 					   bool strict);
 
+REGFI_BUFFER          regfi_load_data(REGFI_FILE* file, uint32 voffset,
+				      uint32 length, bool data_in_offset,
+				      bool strict);
+
+REGFI_BUFFER          regfi_load_big_data(REGFI_FILE* file, uint32 offset, 
+					  uint32 data_length,uint32 cell_length,
+					  range_list* used_ranges,
+					  bool strict);
+
 /* These are cached so return values don't need to be freed. */
 const REGFI_SK_REC*   regfi_load_sk(REGFI_FILE* file, uint32 offset,
 				    bool strict);
-const REGFI_HBIN*     regfi_lookup_hbin(REGFI_FILE* file, uint32 voffset);
-
+const REGFI_HBIN*     regfi_lookup_hbin(REGFI_FILE* file, uint32 offset);
 
 
 /************************************/
@@ -534,15 +547,6 @@ REGFI_SUBKEY_LIST*    regfi_parse_subkeylist(REGFI_FILE* file, uint32 offset,
 REGFI_VK_REC*         regfi_parse_vk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
-REGFI_BUFFER          regfi_load_data(REGFI_FILE* file, 
-				      uint32 data_type, uint32 offset, 
-				      uint32 length, uint32 max_size, 
-				      bool data_in_offset, bool strict);
-
-REGFI_BUFFER          regfi_load_big_data(REGFI_FILE* file, 
-					  uint32 offset, uint32 data_length,
-					  uint32 cell_length, bool strict);
-
 REGFI_SK_REC*         regfi_parse_sk(REGFI_FILE* file, uint32 offset, 
 				     uint32 max_size, bool strict);
 
@@ -555,6 +559,13 @@ bool                  regfi_parse_cell(int fd, uint32 offset,
 char*                 regfi_parse_classname(REGFI_FILE* file, uint32 offset,
 					    uint16* name_length, 
 					    uint32 max_size, bool strict);
+
+REGFI_BUFFER          regfi_parse_data(REGFI_FILE* file, uint32 offset,
+				       uint32 length, bool strict);
+
+REGFI_BUFFER          regfi_parse_little_data(REGFI_FILE* file, uint32 voffset, 
+					      uint32 length, bool strict);
+
 
 /* Dispose of previously parsed records */
 void                  regfi_free_key(REGFI_NK_REC* nk);
@@ -587,5 +598,6 @@ void                  regfi_add_message(REGFI_FILE* file, uint16 msg_type,
 					const char* fmt, ...);
 REGFI_NK_REC*         regfi_copy_nk(const REGFI_NK_REC* nk);
 REGFI_VK_REC*         regfi_copy_vk(const REGFI_VK_REC* vk);
+int32                 regfi_calc_maxsize(REGFI_FILE* file, uint32 offset);
 
 #endif	/* _REGFI_H */
