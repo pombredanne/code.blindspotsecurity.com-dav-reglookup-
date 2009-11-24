@@ -1103,6 +1103,35 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
     }
   }
 
+  /* Get classname if it exists */
+  if(nk->classname_off != REGFI_OFFSET_NONE)
+  {
+    off = nk->classname_off + REGFI_REGF_SIZE;
+    max_size = regfi_calc_maxsize(file, off);
+    if(max_size >= 0)
+    {
+      nk->classname
+	= regfi_parse_classname(file, off, &nk->classname_length, 
+				max_size, strict);
+    }
+    else
+    {
+      nk->classname = NULL;
+      regfi_add_message(file, REGFI_MSG_WARN, "Could not find hbin for class"
+			" name while parsing NK record at offset 0x%.8X.", 
+			offset);
+    }
+
+    if(nk->classname == NULL)
+    {
+      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse class"
+			" name while parsing NK record at offset 0x%.8X.", 
+			offset);
+    }
+    else
+      talloc_steal(nk, nk->classname);
+  }
+
   return nk;
 }
 
@@ -1149,44 +1178,38 @@ const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32 offset, bool strict)
 
 /******************************************************************************
  ******************************************************************************/
-static bool regfi_find_root_nk(REGFI_FILE* file, uint32 offset,uint32 hbin_size,
-			       uint32* root_offset)
+REGFI_NK_REC* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin)
 {
-  uint8 tmp[4];
-  int32 record_size;
-  uint32 length, hbin_offset = 0;
   REGFI_NK_REC* nk = NULL;
-  bool found = false;
+  uint32 cell_length;
+  uint32 cur_offset = hbin->file_off+REGFI_HBIN_HEADER_SIZE;
+  uint32 hbin_end = hbin->file_off+hbin->block_size;
+  bool unalloc;
 
-  for(record_size=0; !found && (hbin_offset < hbin_size); )
+  while(cur_offset < hbin_end)
   {
-    if(lseek(file->fd, offset+hbin_offset, SEEK_SET) == -1)
-      return false;
-    
-    length = 4;
-    if((regfi_read(file->fd, tmp, &length) != 0) || length != 4)
-      return false;
-    record_size = IVALS(tmp, 0);
-
-    if(record_size < 0)
+    fprintf(stderr, "DEBUG: trying cell offset 0x%.8X\n", cur_offset);
+    if(!regfi_parse_cell(file->fd, cur_offset, NULL, 0, &cell_length, &unalloc))
     {
-      record_size = record_size*(-1);
-      nk = regfi_parse_nk(file, offset+hbin_offset, hbin_size-hbin_offset, true);
+      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell at offset"
+			" 0x%.8X while searching for root key.", cur_offset);
+      return NULL;
+    }
+    
+    if(!unalloc)
+    {
+      nk = regfi_load_key(file, cur_offset, true);
       if(nk != NULL)
       {
 	if(nk->key_type & REGFI_NK_FLAG_ROOT)
-	{
-	  found = true;
-	  *root_offset = nk->offset;
-	}
-	regfi_free_key(nk);
+	  return nk;
       }
     }
 
-    hbin_offset += record_size;
+    cur_offset += cell_length;
   }
 
-  return found;
+  return NULL;
 }
 
 
@@ -1291,8 +1314,8 @@ int regfi_close(REGFI_FILE *file)
 
 
 /******************************************************************************
- * There should be only *one* root key in the registry file based 
- * on my experience.  --jerry
+ * First checks the offset given by the file header, then checks the
+ * rest of the file if that fails.
  ******************************************************************************/
 REGFI_NK_REC* regfi_rootkey(REGFI_FILE *file)
 {
@@ -1303,21 +1326,26 @@ REGFI_NK_REC* regfi_rootkey(REGFI_FILE *file)
   if(!file)
     return NULL;
 
-  /* Scan through the file one HBIN block at a time looking 
-   * for an NK record with a root key type.
-   * This is typically the first NK record in the first HBIN
-   * block (but we're not assuming that generally).
+  root_offset = file->root_cell+REGFI_REGF_SIZE;
+  nk = regfi_load_key(file, root_offset, true);
+  if(nk != NULL)
+  {
+    if(nk->key_type & REGFI_NK_FLAG_ROOT)
+      return nk;
+  }
+
+  regfi_add_message(file, REGFI_MSG_WARN, "File header indicated root key at"
+		    " location 0x%.8X, but no root key found."
+		    " Searching rest of file...", root_offset);
+  
+  /* If the file header gives bad info, scan through the file one HBIN
+   * block at a time looking for an NK record with a root key type.
    */
   num_hbins = range_list_size(file->hbins);
-  for(i=0; i < num_hbins; i++)
+  for(i=0; i < num_hbins && nk == NULL; i++)
   {
     hbin = (REGFI_HBIN*)range_list_get(file->hbins, i)->data;
-    if(regfi_find_root_nk(file, hbin->file_off+REGFI_HBIN_HEADER_SIZE, 
-			  hbin->block_size-REGFI_HBIN_HEADER_SIZE, &root_offset))
-    {
-      nk = regfi_load_key(file, root_offset, true);
-      break;
-    }
+    nk = regfi_find_root_nk(file, hbin);
   }
 
   return nk;
@@ -1835,13 +1863,11 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32 offset, bool strict)
 /*******************************************************************
  *******************************************************************/
 REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset, 
-			    uint32 max_size, bool strict)
+			     uint32 max_size, bool strict)
 {
   uint8 nk_header[REGFI_NK_MIN_LENGTH];
   REGFI_NK_REC* ret_val;
   uint32 length,cell_length;
-  uint32 class_offset;
-  int32 class_maxsize;
   bool unalloc = false;
 
   if(!regfi_parse_cell(file->fd, offset, nk_header, REGFI_NK_MIN_LENGTH,
@@ -1970,35 +1996,6 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
     return NULL;
   }
   ret_val->keyname[ret_val->name_length] = '\0';
-
-  /* XXX: This linking should be moved up to regfi_load_key */
-  if(ret_val->classname_off != REGFI_OFFSET_NONE)
-  {
-    class_offset = ret_val->classname_off + REGFI_REGF_SIZE;
-    class_maxsize = regfi_calc_maxsize(file, class_offset);
-    if(class_maxsize > 0)
-    {
-      ret_val->classname
-	= regfi_parse_classname(file, class_offset, &ret_val->classname_length, 
-				class_maxsize, strict);
-    }
-    else
-    {
-      ret_val->classname = NULL;
-      regfi_add_message(file, REGFI_MSG_WARN, "Could not find hbin for class"
-			" name while parsing NK record at offset 0x%.8X.", 
-			offset);
-    }
-
-    if(ret_val->classname == NULL)
-    {
-      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse class"
-			" name while parsing NK record at offset 0x%.8X.", 
-			offset);
-    }
-    else
-      talloc_steal(ret_val, ret_val->classname);
-  }
 
   return ret_val;
 }
