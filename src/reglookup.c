@@ -633,7 +633,10 @@ int main(int argc, char** argv)
 
   iter = regfi_iterator_new(f);
   if(iter == NULL)
+  {
+    printMsgs(f);
     bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Couldn't create registry iterator.\n");
+  }
 
   if(print_header)
   {
