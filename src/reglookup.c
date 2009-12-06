@@ -49,27 +49,14 @@ REGFI_FILE* f;
 #include "common.c"
 
 
-void printValue(const REGFI_VK_REC* vk, char* prefix)
+void printValue(REGFI_ITERATOR* iter, const REGFI_VK_REC* vk, char* prefix)
 {
+  REGFI_DATA* data;
   char* quoted_value = NULL;
   char* quoted_name = NULL;
   char* conv_error = NULL;
   const char* str_type = NULL;
-  uint32 size = vk->data_size;
 
-  /* Microsoft's documentation indicates that "available memory" is 
-   * the limit on value sizes.  Annoying.  We limit it to 1M which 
-   * should rarely be exceeded, unless the file is corrupt or 
-   * malicious. For more info, see:
-   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
-   */
-  if(size > REGFI_VK_MAX_DATA_LENGTH)
-  {
-    fprintf(stderr, "WARN: value data size %d larger than "
-	    "%d, truncating...\n", size, REGFI_VK_MAX_DATA_LENGTH);
-    size = REGFI_VK_MAX_DATA_LENGTH;
-  }
-  
   quoted_name = quote_string(vk->valuename, key_special_chars);
   if (quoted_name == NULL)
   { /* Value names are NULL when we're looking at the "(default)" value.
@@ -83,16 +70,13 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
       bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
   }
+  
+  data = regfi_iterator_fetch_data(iter, vk);
 
-  if(vk->data == NULL)
+  printMsgs(iter->f);
+  if(data != NULL)
   {
-    if(print_verbose)
-      fprintf(stderr, "INFO: While quoting value for '%s/%s', "
-	      "data pointer was NULL.\n", prefix, quoted_name);
-  }
-  else
-  {
-    quoted_value = data_to_ascii(vk->data, size, vk->type, &conv_error);
+    quoted_value = data_to_ascii(data, &conv_error);
     if(quoted_value == NULL)
     {
       if(conv_error == NULL)
@@ -102,9 +86,10 @@ void printValue(const REGFI_VK_REC* vk, char* prefix)
 	fprintf(stderr, "WARN: Could not quote value for '%s/%s'.  "
 		"Returned error: %s\n", prefix, quoted_name, conv_error);
     }
-    else if(conv_error != NULL && print_verbose)
-      fprintf(stderr, "INFO: While quoting value for '%s/%s', "
+    else if(conv_error != NULL)
+      fprintf(stderr, "WARN: While quoting value for '%s/%s', "
 	      "warning returned: %s\n", prefix, quoted_name, conv_error);
+    regfi_free_data(data);
   }
 
   str_type = regfi_type_val2str(vk->type);
@@ -280,7 +265,7 @@ void printValueList(REGFI_ITERATOR* iter, char* prefix)
   while(value != NULL)
   {
     if(!type_filter_enabled || (value->type == type_filter))
-      printValue(value, prefix);
+      printValue(iter, value, prefix);
     regfi_free_value(value);
     value = regfi_iterator_next_value(iter);
     printMsgs(iter->f);
@@ -510,7 +495,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
       bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Unexpected error before printValue.\n");
 
     if(!type_filter_enabled || (value->type == type_filter))
-      printValue(value, tmp_path_joined);
+      printValue(iter, value, tmp_path_joined);
 
     regfi_free_value(value);
     free(tmp_path);
@@ -631,7 +616,8 @@ int main(int argc, char** argv)
   if(print_verbose)
     regfi_set_message_mask(f, REGFI_MSG_INFO|REGFI_MSG_WARN|REGFI_MSG_ERROR);
 
-  iter = regfi_iterator_new(f);
+  /* XXX: add command line option to choose output encoding */
+  iter = regfi_iterator_new(f, 0);
   if(iter == NULL)
   {
     printMsgs(f);
