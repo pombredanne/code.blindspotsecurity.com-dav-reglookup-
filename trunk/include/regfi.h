@@ -44,6 +44,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <assert.h>
+#include <iconv.h>
 
 #include "talloc.h"
 #include "smb_deps.h"
@@ -249,19 +250,60 @@ typedef struct _regfi_value_list
 } REGFI_VALUE_LIST;
 
 
+typedef struct _regfi_data
+{
+  uint32 type;
+
+  /* Length of the raw data. */
+  uint32 size;
+
+  /* This is always present, representing the raw data cell contents. */
+  uint8* raw;
+
+  /* Represents the length of the interpreted value. Meaning is type-specific.*/
+  uint32 interpreted_size;
+
+  /* These items represent interpreted versions of the raw attribute above. 
+   * Only use the appropriate member according to the type field.  
+   * In the event of an unknown type, use only the raw field.
+   */
+  union _regfi_data_interpreted
+  {
+    uint8* none; /* */
+    uint8* string;
+    uint8* expand_string;
+    uint8* binary; /* */
+    uint32 dword;
+    uint32 dword_be;
+    uint8* link;
+    uint8** multiple_string;
+    uint64 qword;
+
+    /* The following are treated as binary currently, but this may change in
+     * the future as the formats become better understood.
+     */
+    uint8* resource_list;
+    uint8* full_resource_descriptor;
+    uint8* resource_requirements_list;
+  } interpreted;
+} REGFI_DATA;
+
+
 /* Value record */
 typedef struct 
 {
   uint32 offset;	/* Real offset of this record's cell in the file */
   uint32 cell_size;	/* ((start_offset - end_offset) & 0xfffffff8) */
 
-  uint8* data;
+  REGFI_DATA* data;     /* XXX: deprecated */
+
   char*  valuename;
   uint16 name_length;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   
-  uint32 data_size;
-  uint32 data_off;      /* offset of data cell (virtual) */
+  uint32 data_size;     /* As reported in the VK record.  May be different than
+			 * That obtained while parsing the data cell itself. */
+  uint32 data_off;      /* Offset of data cell (virtual) */
   uint32 type;
   uint8  magic[REGFI_CELL_MAGIC_SIZE];
   uint16 flag;
@@ -422,6 +464,7 @@ typedef struct _regfi_iterator
   REGFI_FILE* f;
   void_stack* key_positions;
   REGFI_NK_REC* cur_key;
+  const char* string_encoding;
   uint32 cur_subkey;
   uint32 cur_value;
 } REGFI_ITERATOR;
@@ -445,6 +488,7 @@ typedef struct _regfi_buffer
 
 
 
+
 /******************************************************************************/
 /*                         Main iterator API                                  */
 /******************************************************************************/
@@ -461,9 +505,32 @@ int                   regfi_close(REGFI_FILE* r);
  *   A newly allocated char* which must be free()d by the caller.
  */
 char*                 regfi_get_messages(REGFI_FILE* file);
+
 void                  regfi_set_message_mask(REGFI_FILE* file, uint16 mask);
 
-REGFI_ITERATOR*       regfi_iterator_new(REGFI_FILE* fh);
+
+/* regfi_iterator_new: Creates a new iterator for the provided registry file.
+ *
+ * Arguments:
+ *   file            -- The opened registry file the iterator should be
+ *                      created for.
+ *   output_encoding -- An integer representing the output string encoding.
+ *                      These integers currently map to a specific set of 
+ *                      iconv(3) encodings.
+ *                      The following values are currently accepted:
+ *                      0 - default (currently US-ASCII//TRANSLIT)
+ *                      1 - US-ASCII//TRANSLIT
+ *                      2 - UTF-8//TRANSLIT
+ *
+ *                      XXX: This encoding only applies to specific data 
+ *                           strings currently, but should apply to key 
+ *                           names and value names in the future.
+ *
+ * Returns:
+ *   A newly allocated REGFI_ITERATOR. Must be free()d with regfi_iterator_free.
+ */
+REGFI_ITERATOR*       regfi_iterator_new(REGFI_FILE* file,
+					 uint32 output_encoding);
 void                  regfi_iterator_free(REGFI_ITERATOR* i);
 bool                  regfi_iterator_down(REGFI_ITERATOR* i);
 bool                  regfi_iterator_up(REGFI_ITERATOR* i);
@@ -486,7 +553,8 @@ REGFI_VK_REC*         regfi_iterator_next_value(REGFI_ITERATOR* i);
 bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
 						const char* value_name);
 
-REGFI_DATA*           regfi_iterator_cur_data(REGFI_ITERATOR* i);
+REGFI_DATA*           regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
+						const REGFI_VK_REC* value);
 
 
 /********************************************************/
@@ -511,6 +579,10 @@ REGFI_BUFFER          regfi_load_big_data(REGFI_FILE* file, uint32 offset,
 					  uint32 data_length,uint32 cell_length,
 					  range_list* used_ranges,
 					  bool strict);
+bool                  regfi_interpret_data(REGFI_FILE* file, 
+					   const char* string_encoding,
+					   uint32 type, REGFI_DATA* data);
+void                  regfi_free_data(REGFI_DATA* data);
 
 /* These are cached so return values don't need to be freed. */
 const REGFI_SK_REC*   regfi_load_sk(REGFI_FILE* file, uint32 offset,
@@ -598,5 +670,9 @@ void                  regfi_add_message(REGFI_FILE* file, uint16 msg_type,
 REGFI_NK_REC*         regfi_copy_nk(const REGFI_NK_REC* nk);
 REGFI_VK_REC*         regfi_copy_vk(const REGFI_VK_REC* vk);
 int32                 regfi_calc_maxsize(REGFI_FILE* file, uint32 offset);
+int32                 regfi_conv_charset(const char* output_charset, 
+					 uint8* input, char* output, 
+					 uint32 input_len, uint32 output_max);
+REGFI_DATA*           regfi_buffer_to_data(REGFI_BUFFER raw_data);
 
 #endif	/* _REGFI_H */

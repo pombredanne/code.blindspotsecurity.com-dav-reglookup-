@@ -110,26 +110,7 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
   char* quoted_raw = "";
   char* conv_error = NULL;
   const char* str_type = NULL;
-  uint32 size = vk->data_size;
 
-  /* Microsoft's documentation indicates that "available memory" is 
-   * the limit on value sizes.  Annoying.  We limit it to 1M which 
-   * should rarely be exceeded, unless the file is corrupt or 
-   * malicious. For more info, see:
-   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
-   */
-  /* XXX: Should probably do something different here for this tool.
-   *      Also, It would be really nice if this message somehow included the
-   *      name of the current value we're having trouble with, since
-   *      stderr/stdout don't always sync nicely.
-   */
-  if(size > REGFI_VK_MAX_DATA_LENGTH)
-  {
-    fprintf(stderr, "WARN: value data size %d larger than "
-	    "%d, truncating...\n", size, REGFI_VK_MAX_DATA_LENGTH);
-    size = REGFI_VK_MAX_DATA_LENGTH;
-  }
-  
   quoted_name = quote_string(vk->valuename, key_special_chars);
   if (quoted_name == NULL)
   { /* Value names are NULL when we're looking at the "(default)" value.
@@ -143,8 +124,16 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
       bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
     quoted_name[0] = '\0';
   }
+  /* XXX: Add command line option to choose output encoding */
+  if(vk->data != NULL 
+     && !regfi_interpret_data(f, "US-ASCII//TRANSLIT", vk->type, vk->data))
+  {
+    fprintf(stderr, "WARN: Error occurred while interpreting data for VK record"
+	    " at offset 0x%.8X.\n", vk->offset);
+  }
+  printMsgs(f);
 
-  quoted_value = data_to_ascii(vk->data, size, vk->type, &conv_error);
+  quoted_value = data_to_ascii(vk->data, &conv_error);
   if(quoted_value == NULL)
   {
     quoted_value = malloc(1*sizeof(char));
@@ -468,6 +457,8 @@ int extractDataCells(REGFI_FILE* file,
   if(bd_cells == NULL)
     return 10;
 
+  data.buf = NULL;
+  data.len = 0;
   for(i=0; i<range_list_size(unalloc_values); i++)
   {
     cur_elem = range_list_get(unalloc_values, i);
@@ -570,9 +561,11 @@ int extractDataCells(REGFI_FILE* file,
 		return 30;
 	  }
 	}
-
-	vk->data = data.buf;
-	vk->data_size = data.len;
+	/* XXX: Need to come up with a different way to link these so the
+	 *      vk->data item can be removed from the structure.
+	 */
+	vk->data = regfi_buffer_to_data(data);
+	talloc_steal(vk, vk->data);
       }
     }
   }

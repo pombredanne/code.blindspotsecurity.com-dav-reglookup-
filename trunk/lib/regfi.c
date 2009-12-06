@@ -957,7 +957,6 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
 REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
 {
   REGFI_VK_REC* ret_val = NULL;
-  REGFI_BUFFER data;
   int32 max_size;
 
   max_size = regfi_calc_maxsize(file, offset);
@@ -968,24 +967,7 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
   if(ret_val == NULL)
     return NULL;
 
-  if(ret_val->data_size == 0)
-    ret_val->data = NULL;
-  else
-  {
-    data = regfi_load_data(file, ret_val->data_off, ret_val->data_size,
-			   ret_val->data_in_offset, strict);
-    ret_val->data = data.buf;
-    ret_val->data_size = data.len;
-
-    if(ret_val->data == NULL)
-    {
-      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse data record"
-			" while parsing VK record at offset 0x%.8X.",
-			ret_val->offset, ret_val->valuename);
-    }
-    else
-      talloc_steal(ret_val, ret_val->data);
-  }
+  /* XXX: convert valuename to proper encoding if necessary */
 
   return ret_val;
 }
@@ -1188,7 +1170,6 @@ REGFI_NK_REC* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin)
 
   while(cur_offset < hbin_end)
   {
-    fprintf(stderr, "DEBUG: trying cell offset 0x%.8X\n", cur_offset);
     if(!regfi_parse_cell(file->fd, cur_offset, NULL, 0, &cell_length, &unalloc))
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell at offset"
@@ -1382,14 +1363,14 @@ void regfi_subkeylist_free(REGFI_SUBKEY_LIST* list)
 
 /******************************************************************************
  *****************************************************************************/
-REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* fh)
+REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file, uint32 output_encoding)
 {
   REGFI_NK_REC* root;
   REGFI_ITERATOR* ret_val = talloc(NULL, REGFI_ITERATOR);
   if(ret_val == NULL)
     return NULL;
 
-  root = regfi_rootkey(fh);
+  root = regfi_rootkey(file);
   if(root == NULL)
   {
     talloc_free(ret_val);
@@ -1404,11 +1385,25 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* fh)
   }
   talloc_steal(ret_val, ret_val->key_positions);
 
-  ret_val->f = fh;
+  ret_val->f = file;
   ret_val->cur_key = root;
   ret_val->cur_subkey = 0;
   ret_val->cur_value = 0;
-
+  
+  switch (output_encoding)
+  {
+  case 0:
+  case 1:
+    ret_val->string_encoding = "US-ASCII//TRANSLIT";
+    break;
+  case 2:
+    ret_val->string_encoding = "UTF-8//TRANSLIT";
+    break;
+  default:
+    talloc_free(ret_val);
+    return NULL;
+  }
+  
   return ret_val;
 }
 
@@ -1687,9 +1682,287 @@ REGFI_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
 }
 
 
+/******************************************************************************
+ *****************************************************************************/
+REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
+				      const REGFI_VK_REC* value)
+{
+  REGFI_DATA* ret_val = NULL;
+  REGFI_BUFFER raw_data;
+
+  if(value->data_size != 0)
+  {
+    raw_data = regfi_load_data(i->f, value->data_off, value->data_size,
+			      value->data_in_offset, true);
+    if(raw_data.buf == NULL)
+    {
+      regfi_add_message(i->f, REGFI_MSG_WARN, "Could not parse data record"
+			" while parsing VK record at offset 0x%.8X.",
+			value->offset);
+    }
+    else
+    {
+      ret_val = regfi_buffer_to_data(raw_data);
+
+      if(ret_val == NULL)
+      {
+	regfi_add_message(i->f, REGFI_MSG_WARN, "Error occurred in converting"
+			  " data buffer to data structure while interpreting "
+			  "data for VK record at offset 0x%.8X.",
+			  value->offset);
+	talloc_free(raw_data.buf);
+	return NULL;
+      }
+
+      if(!regfi_interpret_data(i->f, i->string_encoding, value->type, ret_val))
+      {
+	regfi_add_message(i->f, REGFI_MSG_INFO, "Error occurred while"
+			  " interpreting data for VK record at offset 0x%.8X.",
+			  value->offset);
+      }
+    }
+  }
+  
+  return ret_val;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+void regfi_free_data(REGFI_DATA* data)
+{
+  talloc_free(data);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+REGFI_DATA* regfi_buffer_to_data(REGFI_BUFFER raw_data)
+{
+  REGFI_DATA* ret_val;
+
+  if(raw_data.buf == NULL)
+    return NULL;
+
+  ret_val = talloc(NULL, REGFI_DATA);
+  if(ret_val == NULL)
+    return NULL;
+  
+  talloc_steal(ret_val, raw_data.buf);
+  ret_val->raw = raw_data.buf;
+  ret_val->size = raw_data.len;
+  ret_val->interpreted_size = 0;
+  ret_val->interpreted.qword = 0;
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_interpret_data(REGFI_FILE* file, const char* string_encoding,
+			  uint32 type, REGFI_DATA* data)
+{
+  uint8** tmp_array;
+  uint8* tmp_str;
+  int32 tmp_size;
+  uint32 i, j, array_size;
+
+  if(data == NULL)
+    return false;
+
+  switch (type)
+  {
+  case REG_SZ:
+  case REG_EXPAND_SZ:
+  /* REG_LINK is a symbolic link, stored as a unicode string. */
+  case REG_LINK:
+    tmp_str = talloc_array(NULL, uint8, data->size);
+    if(tmp_str == NULL)
+    {
+      data->interpreted.string = NULL;
+      data->interpreted_size = 0;
+      return false;
+    }
+      
+    tmp_size = regfi_conv_charset(string_encoding, 
+				  data->raw, (char*)tmp_str, 
+				  data->size, data->size);
+    if(tmp_size < 0)
+    {
+      regfi_add_message(file, REGFI_MSG_INFO, "Error occurred while"
+			" converting data of type %d to %s.  Error message: %s",
+			type, string_encoding, strerror(-tmp_size));
+      talloc_free(tmp_str);
+      data->interpreted.string = NULL;
+      data->interpreted_size = 0;
+      return false;
+    }
+
+    tmp_str = talloc_realloc(NULL, tmp_str, uint8, tmp_size);
+    data->interpreted.string = tmp_str;
+    data->interpreted_size = tmp_size;
+    talloc_steal(data, tmp_str);
+    break;
+
+  case REG_DWORD:
+    if(data->size < 4)
+    {
+      data->interpreted.dword = 0;
+      data->interpreted_size = 0;
+      return false;
+    }
+    data->interpreted.dword = IVAL(data->raw, 0);
+    data->interpreted_size = 4;
+    break;
+
+  case REG_DWORD_BE:
+    if(data->size < 4)
+    {
+      data->interpreted.dword_be = 0;
+      data->interpreted_size = 0;
+      return false;
+    }
+    data->interpreted.dword_be = RIVAL(data->raw, 0);
+    data->interpreted_size = 4;
+    break;
+
+  case REG_QWORD:
+    if(data->size < 8)
+    {
+      data->interpreted.qword = 0;
+      data->interpreted_size = 0;
+      return false;
+    }
+    data->interpreted.qword = 
+      (uint64)IVAL(data->raw, 0) + (((uint64)IVAL(data->raw, 4))<<32);
+    data->interpreted_size = 8;
+    break;
+    
+  case REG_MULTI_SZ:
+    tmp_str = talloc_array(NULL, uint8, data->size);
+    if(tmp_str == NULL)
+    {
+      data->interpreted.multiple_string = NULL;
+      data->interpreted_size = 0;
+      return false;
+    }
+
+    /* Attempt to convert entire string from UTF-16LE to output encoding,
+     * then parse and quote fields individually.
+     */
+    tmp_size = regfi_conv_charset(string_encoding, 
+				  data->raw, (char*)tmp_str,
+				  data->size, data->size);
+    if(tmp_size < 0)
+    {
+      regfi_add_message(file, REGFI_MSG_INFO, "Error occurred while"
+			" converting data of type %d to %s.  Error message: %s",
+			type, string_encoding, strerror(-tmp_size));
+      talloc_free(tmp_str);
+      data->interpreted.multiple_string = NULL;
+      data->interpreted_size = 0;
+      return false;
+    }
+
+    array_size = tmp_size+1;
+    tmp_array = talloc_array(NULL, uint8*, array_size);
+    if(tmp_array == NULL)
+    {
+      talloc_free(tmp_str);
+      data->interpreted.string = NULL;
+      data->interpreted_size = 0;
+      return false;
+    }
+    
+    tmp_array[0] = tmp_str;
+    for(i=0,j=1; i < tmp_size && j < array_size-1; i++)
+    {
+      if(tmp_str[i] == '\0' && (i+1 < tmp_size))
+	tmp_array[j++] = tmp_str+i+1;
+    }
+    tmp_array[j] = NULL;
+    tmp_array = talloc_realloc(NULL, tmp_array, uint8*, j+1);
+    data->interpreted.multiple_string = tmp_array;
+    /* XXX: how meaningful is this?  should we store number of strings instead? */
+    data->interpreted_size = tmp_size;
+    talloc_steal(tmp_array, tmp_str);
+    talloc_steal(data, tmp_array);
+    break;
+
+  /* XXX: Dont know how to interpret these yet, just treat as binary */
+  case REG_NONE:
+    data->interpreted.none = data->raw;
+    data->interpreted_size = data->size;
+    break;
+
+  case REG_RESOURCE_LIST:
+    data->interpreted.resource_list = data->raw;
+    data->interpreted_size = data->size;
+    break;
+
+  case REG_FULL_RESOURCE_DESCRIPTOR:
+    data->interpreted.full_resource_descriptor = data->raw;
+    data->interpreted_size = data->size;
+    break;
+
+  case REG_RESOURCE_REQUIREMENTS_LIST:
+    data->interpreted.resource_requirements_list = data->raw;
+    data->interpreted_size = data->size;
+    break;
+
+  case REG_BINARY:
+    data->interpreted.binary = data->raw;
+    data->interpreted_size = data->size;
+    break;
+
+  default:
+    data->interpreted.qword = 0;
+    data->interpreted_size = 0;
+    return false;
+  }
+
+  data->type = type;
+  return true;
+}
+
+
+
+/*******************************************************************
+ * Convert from UTF-16LE to specified character set. 
+ * On error, returns a negative errno code.
+ *******************************************************************/
+int32 regfi_conv_charset(const char* output_charset, 
+			 uint8* input, char* output, 
+			 uint32 input_len, uint32 output_max)
+{
+  iconv_t conv_desc;
+  char* inbuf = (char*)input;
+  char* outbuf = output;
+  size_t in_len = (size_t)input_len;
+  size_t out_len = (size_t)(output_max-1);
+  int ret;
+
+  /* Set up conversion descriptor. */
+  conv_desc = iconv_open(output_charset, "UTF-16LE");
+
+  ret = iconv(conv_desc, &inbuf, &in_len, &outbuf, &out_len);
+  if(ret == -1)
+  {
+    iconv_close(conv_desc);
+    return -errno;
+  }
+  *outbuf = '\0';
+
+  iconv_close(conv_desc);  
+  return output_max-out_len-1;
+}
+
+
+
 /*******************************************************************
  * Computes the checksum of the registry file header.
- * buffer must be at least the size of an regf header (4096 bytes).
+ * buffer must be at least the size of a regf header (4096 bytes).
  *******************************************************************/
 static uint32 regfi_compute_header_checksum(uint8* buffer)
 {
@@ -2186,7 +2459,7 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
 /******************************************************************************
  *
  ******************************************************************************/
-REGFI_BUFFER regfi_load_data(REGFI_FILE* file, uint32 voffset, 
+REGFI_BUFFER regfi_load_data(REGFI_FILE* file, uint32 voffset,
 			     uint32 length, bool data_in_offset,
 			     bool strict)
 {
@@ -2195,6 +2468,27 @@ REGFI_BUFFER regfi_load_data(REGFI_FILE* file, uint32 voffset,
   int32 max_size;
   bool unalloc;
   
+  /* Microsoft's documentation indicates that "available memory" is 
+   * the limit on value sizes.  Annoying.  We limit it to 1M which 
+   * should rarely be exceeded, unless the file is corrupt or 
+   * malicious. For more info, see:
+   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
+   */
+  /*
+XXX
+  if(size > REGFI_VK_MAX_DATA_LENGTH)
+  {
+    *error_msg = (char*)malloc(82);
+    if(*error_msg == NULL)
+      return NULL;
+    
+    sprintf(*error_msg, "WARN: value data size %d larger than "
+	    "%d, truncating...", size, REGFI_VK_MAX_DATA_LENGTH);
+    size = REGFI_VK_MAX_DATA_LENGTH;
+  }
+
+  */
+
   if(data_in_offset)
     return regfi_parse_little_data(file, voffset, length, strict);
   else
@@ -2288,7 +2582,7 @@ REGFI_BUFFER regfi_parse_data(REGFI_FILE* file, uint32 offset,
     return ret_val;
   }
 
-  if((ret_val.buf = talloc_array(NULL, uint8_t, length)) == NULL)
+  if((ret_val.buf = talloc_array(NULL, uint8, length)) == NULL)
     return ret_val;
   ret_val.len = length;
   
@@ -2328,7 +2622,7 @@ REGFI_BUFFER regfi_parse_little_data(REGFI_FILE* file, uint32 voffset,
     return ret_val;
   }
 
-  if((ret_val.buf = talloc_array(NULL, uint8_t, length)) == NULL)
+  if((ret_val.buf = talloc_array(NULL, uint8, length)) == NULL)
     return ret_val;
   ret_val.len = length;
   

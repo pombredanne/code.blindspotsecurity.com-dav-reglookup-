@@ -159,7 +159,6 @@ static int uni_to_ascii(unsigned char* uni, char* ascii,
   size_t out_len = (size_t)(ascii_max-1);
   int ret;
 
-  /* Set up conversion descriptor. */
   conv_desc = iconv_open("US-ASCII//TRANSLIT", "UTF-16LE");
 
   ret = iconv(conv_desc, &inbuf, &in_len, &outbuf, &out_len);
@@ -228,172 +227,159 @@ static char* quote_unicode(unsigned char* uni, uint32 length,
  * is the responsibility of the caller to free both a non-NULL return
  * value, and a non-NULL (*error_msg).
  */
-/* XXX: Part of this function's logic should be pushed into the regfi API.
- *      The structures should be parsed and stored with VK records and only 
- *      escaped/encoded later in reglookup and reglookup-recover.
- */
-static char* data_to_ascii(unsigned char* datap, uint32 len, uint32 type, 
-			   char** error_msg)
+static char* data_to_ascii(REGFI_DATA* data, char** error_msg)
 {
-  char* asciip;
-  char* ascii;
-  char* ascii_tmp;
+  char* ret_val;
   char* cur_quoted;
-  char* tmp_err = NULL;
-  const char* delim;
-  uint32 i;
-  uint32 cur_str_len;
-  uint32 ascii_max;
-  uint32 str_rem, alen;
-  int ret_err;
+  char* tmp_ptr;
+  char* delim;
+  uint32 ret_val_left, i, tmp_len;
 
-  if(datap == NULL)
+  if(data == NULL || data->size == 0)
   {
-    *error_msg = (char*)malloc(24);
+    *error_msg = (char*)malloc(37);
     if(*error_msg == NULL)
       return NULL;
-    strcpy(*error_msg, "Data pointer was NULL.");
+    strcpy(*error_msg, "Data pointer was NULL or size was 0.");
     return NULL;
   }
   *error_msg = NULL;
 
-  switch (type) 
+
+  if(data->interpreted_size == 0)
+  {
+    *error_msg = (char*)malloc(51);
+    if(*error_msg == NULL)
+      return NULL;
+    strcpy(*error_msg, "Data could not be interpreted, quoting raw buffer.");
+    return quote_buffer(data->raw, data->size, common_special_chars);
+  }
+
+  switch (data->type) 
   {
   case REG_SZ:
-  case REG_EXPAND_SZ:
-    /* REG_LINK is a symbolic link, stored as a unicode string. */
-  case REG_LINK:
-    /* Sometimes values have binary stored in them.  If the unicode
-     * conversion fails, just quote it raw.
-     */
-    cur_quoted = quote_unicode(datap, len, common_special_chars, &tmp_err);
-    if(cur_quoted == NULL)
-    {
-      if(tmp_err == NULL && (*error_msg = (char*)malloc(49)) != NULL)
+    ret_val = quote_string((char*)data->interpreted.string, common_special_chars);
+    if(ret_val == NULL && (*error_msg = (char*)malloc(49)) != NULL)
 	strcpy(*error_msg, "Buffer could not be quoted due to unknown error.");
-      else if((*error_msg = (char*)malloc(42+strlen(tmp_err))) != NULL)
-      {
-	sprintf(*error_msg, "Buffer could not be quoted due to error: %s", 
-		tmp_err);
-	free(tmp_err);
-      }
-    }
-    else if (tmp_err != NULL)
-      *error_msg = tmp_err;
-    return cur_quoted;
+
+    return ret_val;
+    break;
+
+    
+  case REG_EXPAND_SZ:
+    ret_val = quote_string((char*)data->interpreted.expand_string, 
+			   common_special_chars);
+    if(ret_val == NULL && (*error_msg = (char*)malloc(49)) != NULL)
+	strcpy(*error_msg, "Buffer could not be quoted due to unknown error.");
+
+    return ret_val;
+    break;
+
+  case REG_LINK:
+    ret_val = quote_string((char*)data->interpreted.link, common_special_chars);
+    if(ret_val == NULL && (*error_msg = (char*)malloc(49)) != NULL)
+	strcpy(*error_msg, "Buffer could not be quoted due to unknown error.");
+
+    return ret_val;
     break;
 
   case REG_DWORD:
-    ascii_max = sizeof(char)*(8+2+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
+    ret_val = malloc(sizeof(char)*(8+2+1));
+    if(ret_val == NULL)
       return NULL;
 
-    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
-	     datap[3], datap[2], datap[1], datap[0]);
-    return ascii;
+    sprintf(ret_val, "0x%.8X", data->interpreted.dword);
+    return ret_val;
     break;
 
   case REG_DWORD_BE:
-    ascii_max = sizeof(char)*(8+2+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
+    ret_val = malloc(sizeof(char)*(8+2+1));
+    if(ret_val == NULL)
       return NULL;
 
-    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X", 
-	     datap[0], datap[1], datap[2], datap[3]);
-    return ascii;
+    sprintf(ret_val, "0x%.8X", data->interpreted.dword_be);
+    return ret_val;
     break;
 
   case REG_QWORD:
-    ascii_max = sizeof(char)*(16+2+1);
-    ascii = malloc(ascii_max);
-    if(ascii == NULL)
+    ret_val = malloc(sizeof(char)*(16+2+1));
+    if(ret_val == NULL)
       return NULL;
 
-    snprintf(ascii, ascii_max, "0x%.2X%.2X%.2X%.2X%.2X%.2X%.2X%.2X",
-	     datap[7], datap[6], datap[5], datap[4],
-	     datap[3], datap[2], datap[1], datap[0]);
-    return ascii;
+    sprintf(ret_val, "0x%.16llX", 
+	    (long long unsigned int)data->interpreted.qword);
+    return ret_val;
     break;
-    
+
   case REG_MULTI_SZ:
-    ascii_max = sizeof(char)*(len*4+1);
-    ascii_tmp = malloc(ascii_max);
-    if(ascii_tmp == NULL)
+    ret_val_left = data->interpreted_size*4+1;
+    ret_val = malloc(ret_val_left);
+    if(ret_val == NULL)
       return NULL;
 
-    /* Attempt to convert entire string from UTF-16LE to ASCII, 
-     * then parse and quote fields individually.
-     * If this fails, simply quote entire buffer as binary. 
-     */
-    ret_err = uni_to_ascii(datap, ascii_tmp, len, ascii_max);
-    if(ret_err < 0)
+    tmp_ptr = ret_val;
+    tmp_ptr[0] = '\0';
+    delim = "";
+    for(i=0; data->interpreted.multiple_string[i] != NULL; i++)
     {
-      tmp_err = strerror(-ret_err);
-      *error_msg = (char*)malloc(61+strlen(tmp_err));
-      if(*error_msg == NULL)
+      cur_quoted = quote_string((char*)data->interpreted.multiple_string[i],
+				subfield_special_chars);
+      if(cur_quoted != NULL && cur_quoted[0] != '\0')
       {
-	free(ascii_tmp);
-	return NULL;
+	tmp_len = snprintf(tmp_ptr, ret_val_left, "%s%s",delim, cur_quoted);
+	tmp_ptr += tmp_len;
+	ret_val_left -= tmp_len;
+	free(cur_quoted);
       }
-
-      sprintf(*error_msg, "MULTI_SZ unicode conversion"
-	      " failed with '%s'. Quoting as binary.", tmp_err);
-      ascii = quote_buffer(datap, len, subfield_special_chars);
-    }
-    else
-    {
-      ascii = malloc(ascii_max);
-      if(ascii == NULL)
-      {
-	free(ascii_tmp);
-	return NULL;
-      }
-      asciip = ascii;
-      asciip[0] = '\0';
-      str_rem = ascii_max;
-      delim = "";
-      for(i=0; i<ret_err; i+=cur_str_len+1)
-      {
-	cur_str_len = strlen(ascii_tmp+i);
-	if(ascii_tmp[i] != '\0')
-	{
-	  cur_quoted = quote_string(ascii_tmp+i, subfield_special_chars);
-	  if(cur_quoted != NULL)
-	  {
-	    alen = snprintf(asciip, str_rem, "%s%s", delim, cur_quoted);
-	    asciip += alen;
-	    str_rem -= alen;
-	    free(cur_quoted);
-	  }
-	}
-	delim = "|";
-      }
+      delim = "|";
     }
 
-    free(ascii_tmp);
-    return ascii;
+    return ret_val;
     break;
 
-  /* XXX: Dont know what to do with these yet, just print as binary... */
+    
+  case REG_NONE:
+    return quote_buffer(data->interpreted.none, data->interpreted_size,
+			common_special_chars);
+
+    break;
+
+  case REG_RESOURCE_LIST:
+    return quote_buffer(data->interpreted.resource_list, data->interpreted_size,
+			common_special_chars);
+
+    break;
+
+  case REG_FULL_RESOURCE_DESCRIPTOR:
+    return quote_buffer(data->interpreted.full_resource_descriptor, 
+			data->interpreted_size, common_special_chars);
+
+    break;
+
+  case REG_RESOURCE_REQUIREMENTS_LIST:
+    return quote_buffer(data->interpreted.resource_requirements_list,
+			data->interpreted_size, common_special_chars);
+
+    break;
+
+  case REG_BINARY:
+    return quote_buffer(data->interpreted.binary, data->interpreted_size,
+			common_special_chars);
+
+    break;
+
   default:
+    /* This shouldn't happen, since the regfi routines won't interpret 
+     * unknown types, but just as a safety measure against library changes... 
+     */
     *error_msg = (char*)malloc(65);
     if(*error_msg == NULL)
       return NULL;
     sprintf(*error_msg,
 	    "Unrecognized registry data type (0x%.8X); quoting as binary.",
-	    type);
-    
-  case REG_NONE:
-  case REG_RESOURCE_LIST:
-  case REG_FULL_RESOURCE_DESCRIPTOR:
-  case REG_RESOURCE_REQUIREMENTS_LIST:
-
-  case REG_BINARY:
-    return quote_buffer(datap, len, common_special_chars);
-    break;
+	    data->type);
+    return quote_buffer(data->raw, data->size, common_special_chars);
   }
-
+    
   return NULL;
 }
