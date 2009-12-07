@@ -190,6 +190,7 @@ void freePath(char** path)
 char* iter2Path(REGFI_ITERATOR* i)
 {
   const REGFI_ITER_POSITION* cur;
+  const REGFI_NK_REC* tmp_key;
   uint32 buf_left = 127;
   uint32 buf_len = buf_left+1;
   uint32 name_len = 0;
@@ -197,7 +198,6 @@ char* iter2Path(REGFI_ITERATOR* i)
   char* buf;
   char* new_buf;
   char* name;
-  const char* cur_name;
   void_stack_iterator* iter;
   
   buf = (char*)malloc((buf_len)*sizeof(char));
@@ -225,13 +225,18 @@ char* iter2Path(REGFI_ITERATOR* i)
   {
     cur = void_stack_iterator_next(iter);
     if (cur == NULL)
-      cur_name = i->cur_key->keyname;
+      tmp_key = i->cur_key;
     else
-      cur_name = cur->nk->keyname;
+      tmp_key = cur->nk;
+
+    if(tmp_key->keyname == NULL)
+      name = quote_buffer(i->cur_key->keyname_raw, i->cur_key->name_length,
+			  key_special_chars);
+    else
+      name = quote_string(tmp_key->keyname, key_special_chars);
 
     buf[buf_len-buf_left-1] = '/';
     buf_left -= 1;
-    name = quote_string(cur_name, key_special_chars);
     name_len = strlen(name);
     if(name_len+1 > buf_left)
     {
@@ -616,7 +621,7 @@ int main(int argc, char** argv)
     regfi_set_message_mask(f, REGFI_MSG_INFO|REGFI_MSG_WARN|REGFI_MSG_ERROR);
 
   /* XXX: add command line option to choose output encoding */
-  iter = regfi_iterator_new(f, 0);
+  iter = regfi_iterator_new(f, REGFI_ENCODING_ASCII);
   if(iter == NULL)
   {
     printMsgs(f);
