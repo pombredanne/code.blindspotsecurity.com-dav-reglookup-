@@ -57,7 +57,11 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK_REC* vk, char* prefix)
   char* conv_error = NULL;
   const char* str_type = NULL;
 
-  quoted_name = quote_string(vk->valuename, key_special_chars);
+  if(vk->valuename == NULL)
+    quoted_name = quote_buffer(vk->valuename_raw, vk->name_length, 
+			       key_special_chars);
+  else
+    quoted_name = quote_string(vk->valuename, key_special_chars);
   if (quoted_name == NULL)
   { /* Value names are NULL when we're looking at the "(default)" value.
      * Currently we just return a 0-length string to try an eliminate 

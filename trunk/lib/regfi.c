@@ -972,10 +972,12 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32 offset,
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
+REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, 
+			       REGFI_ENCODING output_encoding, bool strict)
 {
   REGFI_VK_REC* ret_val = NULL;
-  int32 max_size;
+  int32 max_size, tmp_size;
+  REGFI_ENCODING from_encoding;
 
   max_size = regfi_calc_maxsize(file, offset);
   if(max_size < 0)
@@ -985,7 +987,39 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset, bool strict)
   if(ret_val == NULL)
     return NULL;
 
-  /* XXX: convert valuename to proper encoding if necessary */
+  from_encoding = (ret_val->flags & REGFI_VK_FLAG_ASCIINAME)
+    ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
+
+  if(from_encoding == output_encoding)
+  {
+    ret_val->valuename_raw = talloc_realloc(ret_val, ret_val->valuename_raw,
+					    uint8, ret_val->name_length+1);
+    ret_val->valuename_raw[ret_val->name_length] = '\0';
+    ret_val->valuename = (char*)ret_val->valuename_raw;
+  }
+  else
+  {
+    ret_val->valuename = talloc_array(ret_val, char, ret_val->name_length+1);
+    if(ret_val->valuename == NULL)
+    {
+      regfi_free_value(ret_val);
+      return NULL;
+    }
+
+    tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
+				  regfi_encoding_int2str(output_encoding),
+				  ret_val->valuename_raw, ret_val->valuename,
+				  ret_val->name_length, ret_val->name_length+1);
+    if(tmp_size < 0)
+    {
+      regfi_add_message(file, REGFI_MSG_WARN, "Error occurred while converting"
+			" valuename to encoding %s.  Error message: %s",
+			regfi_encoding_int2str(output_encoding), 
+			strerror(-tmp_size));
+      talloc_free(ret_val->valuename);
+      ret_val->valuename = NULL;
+    }
+  }
 
   return ret_val;
 }
@@ -1684,7 +1718,8 @@ REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
     if(i->cur_value < i->cur_key->values->num_values)
     {
       voffset = i->cur_key->values->elements[i->cur_value];
-      ret_val = regfi_load_value(i->f, voffset+REGFI_REGF_SIZE, true);
+      ret_val = regfi_load_value(i->f, voffset+REGFI_REGF_SIZE, 
+				 i->string_encoding, true);
     }
   }
 
@@ -2466,6 +2501,7 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
   ret_val->cell_size = cell_length;
   ret_val->data = NULL;
   ret_val->valuename = NULL;
+  ret_val->valuename_raw = NULL;
   
   if(ret_val->cell_size > max_size)
     ret_val->cell_size = max_size & 0xFFFFFFF8;
@@ -2501,10 +2537,10 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
   ret_val->data_in_offset = (bool)(raw_data_size & REGFI_VK_DATA_IN_OFFSET);
   ret_val->data_off = IVAL(vk_header, 0x8);
   ret_val->type = IVAL(vk_header, 0xC);
-  ret_val->flag = SVAL(vk_header, 0x10);
+  ret_val->flags = SVAL(vk_header, 0x10);
   ret_val->unknown1 = SVAL(vk_header, 0x12);
 
-  if(ret_val->flag & REGFI_VK_FLAG_NAME_PRESENT)
+  if(ret_val->name_length > 0)
   {
     if(ret_val->name_length + REGFI_VK_MIN_LENGTH + 4 > ret_val->cell_size)
     {
@@ -2525,15 +2561,15 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
     if(cell_length < ret_val->name_length + REGFI_VK_MIN_LENGTH + 4)
       cell_length+=8;
 
-    ret_val->valuename = talloc_array(ret_val, char, ret_val->name_length+1);
-    if(ret_val->valuename == NULL)
+    ret_val->valuename_raw = talloc_array(ret_val, uint8, ret_val->name_length);
+    if(ret_val->valuename_raw == NULL)
     {
       talloc_free(ret_val);
       return NULL;
     }
 
     length = ret_val->name_length;
-    if((regfi_read(file->fd, (uint8*)ret_val->valuename, &length) != 0)
+    if((regfi_read(file->fd, (uint8*)ret_val->valuename_raw, &length) != 0)
        || length != ret_val->name_length)
     {
       regfi_add_message(file, REGFI_MSG_ERROR, "Could not read value name"
@@ -2541,8 +2577,6 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32 offset,
       talloc_free(ret_val);
       return NULL;
     }
-    ret_val->valuename[ret_val->name_length] = '\0';
-
   }
   else
     cell_length = REGFI_VK_MIN_LENGTH + 4;

@@ -136,11 +136,7 @@ typedef uint8 REGFI_ENCODING;
 
 
 /* Flags for the vk records */
-/* XXX: This next flag may be incorrect.  According to Jeffrey Muir,
-*       this may actually indicate that the value name is stored in
-*       UTF-16LE.
-*/
-#define REGFI_VK_FLAG_NAME_PRESENT 0x0001
+#define REGFI_VK_FLAG_ASCIINAME    0x0001
 #define REGFI_VK_DATA_IN_OFFSET    0x80000000
 #define REGFI_VK_MAX_DATA_LENGTH   1024*1024  /* XXX: This is arbitrary */
 
@@ -330,7 +326,7 @@ typedef struct
   uint32 data_off;      /* Offset of data cell (virtual) */
   uint32 type;
   uint8  magic[REGFI_CELL_MAGIC_SIZE];
-  uint16 flag;
+  uint16 flags;
   uint16 unknown1;
   bool data_in_offset;
 } REGFI_VK_REC;
@@ -590,6 +586,7 @@ REGFI_NK_REC*         regfi_load_key(REGFI_FILE* file, uint32 offset,
 				     REGFI_ENCODING output_encoding, 
 				     bool strict);
 REGFI_VK_REC*         regfi_load_value(REGFI_FILE* file, uint32 offset, 
+				       REGFI_ENCODING output_encoding, 
 				       bool strict);
 REGFI_SUBKEY_LIST*    regfi_load_subkeylist(REGFI_FILE* file, uint32 offset,
 					    uint32 num_keys, uint32 max_size,
