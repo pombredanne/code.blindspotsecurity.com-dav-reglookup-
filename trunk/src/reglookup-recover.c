@@ -126,7 +126,7 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
   }
   /* XXX: Add command line option to choose output encoding */
   if(vk->data != NULL 
-     && !regfi_interpret_data(f, "US-ASCII//TRANSLIT", vk->type, vk->data))
+     && !regfi_interpret_data(f, REGFI_ENCODING_ASCII, vk->type, vk->data))
   {
     fprintf(stderr, "WARN: Error occurred while interpreting data for VK record"
 	    " at offset 0x%.8X.\n", vk->offset);
@@ -270,7 +270,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	virt_offset = REGFI_OFFSET_NONE;
       else
       {
-	if(cur_ancestor->key_type & REGFI_NK_FLAG_ROOT)
+	if(cur_ancestor->flags & REGFI_NK_FLAG_ROOT)
 	  virt_offset = REGFI_OFFSET_NONE;
 	else
 	  virt_offset = cur_ancestor->parent_off;

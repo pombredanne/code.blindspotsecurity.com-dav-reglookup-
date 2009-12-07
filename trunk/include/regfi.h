@@ -60,6 +60,16 @@
 #define REGFI_MSG_WARN  0x0004
 #define REGFI_MSG_ERROR 0x0010
 
+typedef uint8 REGFI_ENCODING;
+/* regfi library supported character encodings */
+#define REGFI_ENCODING_ASCII   0
+#define REGFI_ENCODING_UTF8    1
+#define REGFI_ENCODING_DEFAULT REGFI_ENCODING_ASCII
+/* UTF16LE is not supported for output */
+#define REGFI_ENCODING_UTF16LE 2
+
+#define REGFI_NUM_ENCODINGS    3
+
 /* Windows is lame */
 #ifdef O_BINARY
 #define REGFI_OPEN_FLAGS O_RDONLY|O_BINARY
@@ -359,7 +369,7 @@ typedef struct
   REGFI_SUBKEY_LIST* subkeys;
   
   /* header information */
-  uint16 key_type;
+  uint16 flags;
   uint8  magic[REGFI_CELL_MAGIC_SIZE];
   NTTIME mtime;
   uint16 name_length;
@@ -478,7 +488,7 @@ typedef struct _regfi_iterator
   REGFI_FILE* f;
   void_stack* key_positions;
   REGFI_NK_REC* cur_key;
-  const char* string_encoding;
+  REGFI_ENCODING string_encoding;
   uint32 cur_subkey;
   uint32 cur_value;
 } REGFI_ITERATOR;
@@ -528,13 +538,13 @@ void                  regfi_set_message_mask(REGFI_FILE* file, uint16 mask);
  * Arguments:
  *   file            -- The opened registry file the iterator should be
  *                      created for.
- *   output_encoding -- An integer representing the output string encoding.
- *                      These integers currently map to a specific set of 
- *                      iconv(3) encodings.
+ *   output_encoding -- Character encoding that strings should be returned in.
+ *                      Only supply the REGFI_ENCODING_* constants, as others 
+ *                      will be rejected.
  *                      The following values are currently accepted:
- *                      0 - default (currently US-ASCII//TRANSLIT)
- *                      1 - US-ASCII//TRANSLIT
- *                      2 - UTF-8//TRANSLIT
+ *                      REGFI_ENCODING_DEFAULT (currently REGFI_ENCODING_ASCII)
+ *                      REGFI_ENCODING_ASCII
+ *                      REGFI_ENCODING_UTF8
  *
  *                      XXX: This encoding only applies to specific data 
  *                           strings currently, but should apply to key 
@@ -544,7 +554,7 @@ void                  regfi_set_message_mask(REGFI_FILE* file, uint16 mask);
  *   A newly allocated REGFI_ITERATOR. Must be free()d with regfi_iterator_free.
  */
 REGFI_ITERATOR*       regfi_iterator_new(REGFI_FILE* file,
-					 uint32 output_encoding);
+					 REGFI_ENCODING output_encoding);
 void                  regfi_iterator_free(REGFI_ITERATOR* i);
 bool                  regfi_iterator_down(REGFI_ITERATOR* i);
 bool                  regfi_iterator_up(REGFI_ITERATOR* i);
@@ -577,6 +587,7 @@ REGFI_DATA*           regfi_iterator_fetch_data(REGFI_ITERATOR* i,
 /* Middle-layer structure loading, linking, and caching */
 /********************************************************/
 REGFI_NK_REC*         regfi_load_key(REGFI_FILE* file, uint32 offset, 
+				     REGFI_ENCODING output_encoding, 
 				     bool strict);
 REGFI_VK_REC*         regfi_load_value(REGFI_FILE* file, uint32 offset, 
 				       bool strict);
@@ -596,7 +607,7 @@ REGFI_BUFFER          regfi_load_big_data(REGFI_FILE* file, uint32 offset,
 					  range_list* used_ranges,
 					  bool strict);
 bool                  regfi_interpret_data(REGFI_FILE* file, 
-					   const char* string_encoding,
+					   REGFI_ENCODING string_encoding,
 					   uint32 type, REGFI_DATA* data);
 void                  regfi_free_classname(REGFI_CLASSNAME* classname);
 void                  regfi_free_data(REGFI_DATA* data);
@@ -665,7 +676,8 @@ void                  regfi_free_value(REGFI_VK_REC* vk);
 /************************************/
 /*    Private Functions             */
 /************************************/
-REGFI_NK_REC*         regfi_rootkey(REGFI_FILE* file);
+REGFI_NK_REC*         regfi_rootkey(REGFI_FILE* file, 
+				    REGFI_ENCODING output_encoding);
 void                  regfi_subkeylist_free(REGFI_SUBKEY_LIST* list);
 uint32                regfi_read(int fd, uint8* buf, uint32* length);
 
@@ -688,7 +700,8 @@ void                  regfi_add_message(REGFI_FILE* file, uint16 msg_type,
 REGFI_NK_REC*         regfi_copy_nk(const REGFI_NK_REC* nk);
 REGFI_VK_REC*         regfi_copy_vk(const REGFI_VK_REC* vk);
 int32                 regfi_calc_maxsize(REGFI_FILE* file, uint32 offset);
-int32                 regfi_conv_charset(const char* output_charset, 
+int32                 regfi_conv_charset(const char* input_charset, 
+					 const char* output_charset,
 					 uint8* input, char* output, 
 					 uint32 input_len, uint32 output_max);
 REGFI_DATA*           regfi_buffer_to_data(REGFI_BUFFER raw_data);
