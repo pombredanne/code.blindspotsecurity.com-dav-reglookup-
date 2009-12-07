@@ -28,22 +28,14 @@ things you could look into:
    minimal make rules.  If you got any ideas on this, shoot them my way.
 
  - Unicode support still needs improvement.  While parsing strings seems
-   to be decent, UTF-8 output would be nice.  Need support for
-   UTF-16LE key and value names.  To do this, the UTF conversion
-   functions need to be moved to regfi.
-
- - The interface between reglookup.c and regfi.c is much better than it
-   used to be, but the parsing of data objects needs to be moved into the
-   library.  The quoting syntax should stay in reglookup/reglookup-recover
-   but the basic parsing of data types into proper structures should 
-   happen in the library so that they are accessible to other users of the
-   library.
+   to be decent, UTF-8 output would be nice.
 
  - Develop and solidify regfi API.  Regfi should be better documented and 
-   eventually needs a set of Python wrappers.
+   eventually needs a set of higher-language wrappers, starting with Python
+   and possibly moving on to Perl as well.
 
- - Documentation.  The security descriptor output format needs to be 
-   documented.  Also, function contracts should be added to the 
+ - Documentation.  The security descriptor output format needs to be
+   documented.  Also, function contracts should be added to the
    lower-level functions of regfi.c.
 
  - The smb_deps.h and smb_deps.c content is almost eliminated.  Just need
