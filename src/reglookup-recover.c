@@ -65,7 +65,7 @@ char* getQuotedData(int fd, uint32 offset, uint32 length)
   return quoted_buf;
 }
 
-
+/* XXX: Somewhere in here, need to start looking for and handling classnames */
 void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
 {
   char mtime[20];

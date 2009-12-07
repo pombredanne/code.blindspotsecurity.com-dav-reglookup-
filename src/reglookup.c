@@ -281,12 +281,12 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
   char* sacl = NULL;
   char* dacl = NULL;
   char* quoted_classname;
-  char* error_msg = NULL;
   char mtime[20];
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
   const REGFI_SK_REC* sk;
   const REGFI_NK_REC* k = regfi_iterator_cur_key(iter);
+  REGFI_CLASSNAME* classname;
 
   *tmp_time = nt_time_to_unix(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
@@ -307,32 +307,31 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
     if(dacl == NULL)
       dacl = empty_str;
 
-    if(k->classname != NULL)
+    classname = regfi_iterator_fetch_classname(iter, k);
+    printMsgs(iter->f);
+    if(classname != NULL)
     {
-      quoted_classname = quote_unicode((uint8*)k->classname, k->classname_length,
-				       key_special_chars, &error_msg);
+      if(classname->interpreted == NULL)
+      {
+	fprintf(stderr, "WARN: Could not convert class name"
+		" charset for key '%s'.  Quoting raw...\n", full_path);
+	quoted_classname = quote_buffer(classname->raw, classname->size,
+					key_special_chars);
+      }
+      else
+	quoted_classname = quote_string(classname->interpreted, 
+					key_special_chars);
+
       if(quoted_classname == NULL)
       {
-	if(error_msg == NULL)
-	  fprintf(stderr, "ERROR: Could not quote classname"
-		  " for key '%s' due to unknown error.\n", full_path);
-	else
-	{
-	  fprintf(stderr, "ERROR: Could not quote classname"
-		  " for key '%s' due to error: %s\n", full_path, error_msg);
-	  free(error_msg);
-	}
-      }
-      else if (error_msg != NULL)
-      {
-	if(print_verbose)
-	  fprintf(stderr, "INFO: While converting classname"
-		  " for key '%s': %s.\n", full_path, error_msg);
-	free(error_msg);
+	fprintf(stderr, "ERROR: Could not quote classname"
+		" for key '%s' due to unknown error.\n", full_path);
+	quoted_classname = empty_str;
       }
     }
     else
       quoted_classname = empty_str;
+    regfi_free_classname(classname);
 
     printMsgs(iter->f);
     printf("%s,KEY,,%s,%s,%s,%s,%s,%s\n", full_path, mtime, 
