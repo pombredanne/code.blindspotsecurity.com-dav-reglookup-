@@ -1085,35 +1085,6 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset, bool strict)
     }
   }
 
-  /* Get classname if it exists */
-  if(nk->classname_off != REGFI_OFFSET_NONE)
-  {
-    off = nk->classname_off + REGFI_REGF_SIZE;
-    max_size = regfi_calc_maxsize(file, off);
-    if(max_size >= 0)
-    {
-      nk->classname
-	= regfi_parse_classname(file, off, &nk->classname_length, 
-				max_size, strict);
-    }
-    else
-    {
-      nk->classname = NULL;
-      regfi_add_message(file, REGFI_MSG_WARN, "Could not find hbin for class"
-			" name while parsing NK record at offset 0x%.8X.", 
-			offset);
-    }
-
-    if(nk->classname == NULL)
-    {
-      regfi_add_message(file, REGFI_MSG_WARN, "Could not parse class"
-			" name while parsing NK record at offset 0x%.8X.", 
-			offset);
-    }
-    else
-      talloc_steal(nk, nk->classname);
-  }
-
   return nk;
 }
 
@@ -1684,6 +1655,69 @@ REGFI_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
+REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i, 
+						const REGFI_NK_REC* key)
+{
+  REGFI_CLASSNAME* ret_val;
+  uint8* raw;
+  char* interpreted;
+  uint32 offset;
+  int32 conv_size, max_size;
+  uint16 parse_length;
+
+  if(key->classname_off == REGFI_OFFSET_NONE || key->classname_length == 0)
+    return NULL;
+
+  offset = key->classname_off + REGFI_REGF_SIZE;
+  max_size = regfi_calc_maxsize(i->f, offset);
+  if(max_size <= 0)
+    return NULL;
+
+  parse_length = key->classname_length;
+  raw = regfi_parse_classname(i->f, offset, &parse_length, max_size, true);
+  
+  if(raw == NULL)
+  {
+    regfi_add_message(i->f, REGFI_MSG_WARN, "Could not parse class"
+		      " name at offset 0x%.8X for key record at offset 0x%.8X.",
+		      offset, key->offset);
+    return NULL;
+  }
+
+  ret_val = talloc(NULL, REGFI_CLASSNAME);
+  if(ret_val == NULL)
+    return NULL;
+
+  ret_val->raw = raw;
+  ret_val->size = parse_length;
+  talloc_steal(ret_val, raw);
+
+  interpreted = talloc_array(NULL, char, parse_length);
+
+  conv_size = regfi_conv_charset(i->string_encoding, 
+				 raw, interpreted,
+				 parse_length, parse_length);
+  if(conv_size < 0)
+  {
+    regfi_add_message(i->f, REGFI_MSG_WARN, "Error occurred while"
+		      " converting classname to charset %s.  Error message: %s",
+		      i->string_encoding, strerror(-conv_size));
+    talloc_free(interpreted);
+    ret_val->interpreted = NULL;
+  }
+  else
+  {
+    interpreted = talloc_realloc(NULL, interpreted, char, conv_size);
+    ret_val->interpreted = interpreted;
+    talloc_steal(ret_val, interpreted);
+  }
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
 REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
 				      const REGFI_VK_REC* value)
 {
@@ -1726,6 +1760,13 @@ REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i,
   return ret_val;
 }
 
+
+/******************************************************************************
+ *****************************************************************************/
+void regfi_free_classname(REGFI_CLASSNAME* classname)
+{
+  talloc_free(classname);
+}
 
 /******************************************************************************
  *****************************************************************************/
@@ -2274,10 +2315,10 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32 offset,
 }
 
 
-char* regfi_parse_classname(REGFI_FILE* file, uint32 offset, 
-			    uint16* name_length, uint32 max_size, bool strict)
+uint8* regfi_parse_classname(REGFI_FILE* file, uint32 offset, 
+			     uint16* name_length, uint32 max_size, bool strict)
 {
-  char* ret_val = NULL;
+  uint8* ret_val = NULL;
   uint32 length;
   uint32 cell_length;
   bool unalloc = false;
@@ -2319,11 +2360,11 @@ char* regfi_parse_classname(REGFI_FILE* file, uint32 offset,
       *name_length = cell_length - 4;
     }
     
-    ret_val = talloc_array(NULL, char, *name_length);
+    ret_val = talloc_array(NULL, uint8, *name_length);
     if(ret_val != NULL)
     {
       length = *name_length;
-      if((regfi_read(file->fd, (uint8*)ret_val, &length) != 0)
+      if((regfi_read(file->fd, ret_val, &length) != 0)
 	 || length != *name_length)
       {
 	regfi_add_message(file, REGFI_MSG_ERROR, "Could not read class name"
@@ -2474,20 +2515,13 @@ REGFI_BUFFER regfi_load_data(REGFI_FILE* file, uint32 voffset,
    * malicious. For more info, see:
    *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
    */
-  /*
-XXX
-  if(size > REGFI_VK_MAX_DATA_LENGTH)
+  /* XXX: add way to skip this check at user discression. */
+  if(length > REGFI_VK_MAX_DATA_LENGTH)
   {
-    *error_msg = (char*)malloc(82);
-    if(*error_msg == NULL)
-      return NULL;
-    
-    sprintf(*error_msg, "WARN: value data size %d larger than "
-	    "%d, truncating...", size, REGFI_VK_MAX_DATA_LENGTH);
-    size = REGFI_VK_MAX_DATA_LENGTH;
+    regfi_add_message(file, REGFI_MSG_WARN, "Value data size %d larger than "
+		      "%d, truncating...", length, REGFI_VK_MAX_DATA_LENGTH);
+    length = REGFI_VK_MAX_DATA_LENGTH;
   }
-
-  */
 
   if(data_in_offset)
     return regfi_parse_little_data(file, voffset, length, strict);

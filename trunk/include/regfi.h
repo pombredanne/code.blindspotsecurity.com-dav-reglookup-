@@ -250,6 +250,19 @@ typedef struct _regfi_value_list
 } REGFI_VALUE_LIST;
 
 
+typedef struct _regfi_classname
+{
+  /* As converted to requested character encoding. */
+  char* interpreted;
+
+  /* Represents raw buffer read from classname cell. */
+  uint8* raw;
+
+  /* Length of the raw data. May be shorter than that indicated by parent key.*/
+  uint16 size;
+} REGFI_CLASSNAME;
+
+
 typedef struct _regfi_data
 {
   uint32 type;
@@ -298,6 +311,7 @@ typedef struct
   REGFI_DATA* data;     /* XXX: deprecated */
 
   char*  valuename;
+  uint8* valuename_raw;
   uint16 name_length;
   uint32 hbin_off;	/* offset from beginning of this hbin block */
   
@@ -350,8 +364,8 @@ typedef struct
   NTTIME mtime;
   uint16 name_length;
   uint16 classname_length;
-  char* classname;
   char* keyname;
+  uint8* keyname_raw;
   uint32 parent_off;	            /* pointer to parent key */
   uint32 classname_off;
   
@@ -553,6 +567,8 @@ REGFI_VK_REC*         regfi_iterator_next_value(REGFI_ITERATOR* i);
 bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
 						const char* value_name);
 
+REGFI_CLASSNAME*      regfi_iterator_fetch_classname(REGFI_ITERATOR* i, 
+						     const REGFI_NK_REC* key);
 REGFI_DATA*           regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
 						const REGFI_VK_REC* value);
 
@@ -582,7 +598,9 @@ REGFI_BUFFER          regfi_load_big_data(REGFI_FILE* file, uint32 offset,
 bool                  regfi_interpret_data(REGFI_FILE* file, 
 					   const char* string_encoding,
 					   uint32 type, REGFI_DATA* data);
+void                  regfi_free_classname(REGFI_CLASSNAME* classname);
 void                  regfi_free_data(REGFI_DATA* data);
+
 
 /* These are cached so return values don't need to be freed. */
 const REGFI_SK_REC*   regfi_load_sk(REGFI_FILE* file, uint32 offset,
@@ -627,7 +645,7 @@ bool                  regfi_parse_cell(int fd, uint32 offset,
 				       uint8* hdr, uint32 hdr_len,
 				       uint32* cell_length, bool* unalloc);
 
-char*                 regfi_parse_classname(REGFI_FILE* file, uint32 offset,
+uint8*                regfi_parse_classname(REGFI_FILE* file, uint32 offset,
 					    uint16* name_length, 
 					    uint32 max_size, bool strict);
 
