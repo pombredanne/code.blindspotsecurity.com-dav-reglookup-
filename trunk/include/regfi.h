@@ -95,11 +95,22 @@ typedef uint8 REGFI_ENCODING;
 /* Not a real type in the registry */
 #define REG_KEY                    0x7FFFFFFF
 
-#define REGFI_MAX_DEPTH		   512
 #define REGFI_OFFSET_NONE          0xffffffff
 
-/* XXX: This is totally arbitrary right now. */
+
+/* This maximum depth is described here:
+ * http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
+ */
+#define REGFI_MAX_DEPTH		   512
+
+/* This limit defines the maximum number of levels deep that ri subkey list
+ * trees can go.
+ */
+/* XXX: This is totally arbitrary right now.
+ *      The actual limit may need to be discovered by experimentation.
+ */
 #define REGFI_MAX_SUBKEY_DEPTH     255
+
 
 /* Header sizes and magic number lengths for various records */
 #define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
@@ -474,11 +485,6 @@ typedef struct
 } REGFI_FILE;
 
 
-/* XXX: Should move all caching (SK records, HBINs, NKs, etc) to a single
- *      structure, probably REGFI_FILE.  Once key caching is in place, 
- *      convert key_positions stack to store just key offsets rather than
- *      whole keys.
- */
 typedef struct _regfi_iterator
 {
   REGFI_FILE* f;
