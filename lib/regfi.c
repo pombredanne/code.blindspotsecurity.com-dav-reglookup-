@@ -987,6 +987,15 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32 offset,
   if(ret_val == NULL)
     return NULL;
 
+  /* XXX: Registry value names are supposedly limited to 16383 characters 
+   *      according to:
+   *      http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
+   *      Might want to emit a warning if this is exceeded.  
+   *      It is expected that "characters" could be variable width.
+   *      Also, it may be useful to use this information to limit false positives
+   *      when recovering deleted VK records.
+   */
+
   from_encoding = (ret_val->flags & REGFI_VK_FLAG_ASCIINAME)
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
 
@@ -1075,6 +1084,13 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32 offset,
     return NULL;
   }
 
+  /* XXX: Registry key names are supposedly limited to 255 characters according to:
+   *      http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
+   *      Might want to emit a warning if this is exceeded.  
+   *      It is expected that "characters" could be variable width.
+   *      Also, it may be useful to use this information to limit false positives
+   *      when recovering deleted NK records.
+   */
   from_encoding = (nk->flags & REGFI_NK_FLAG_ASCIINAME) 
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
 
@@ -2605,10 +2621,16 @@ REGFI_BUFFER regfi_load_data(REGFI_FILE* file, uint32 voffset,
   bool unalloc;
   
   /* Microsoft's documentation indicates that "available memory" is 
-   * the limit on value sizes.  Annoying.  We limit it to 1M which 
-   * should rarely be exceeded, unless the file is corrupt or 
-   * malicious. For more info, see:
-   *   http://msdn2.microsoft.com/en-us/library/ms724872.aspx
+   * the limit on value sizes for the more recent registry format version.
+   * This is not only annoying, but it's probably also incorrect, since clearly
+   * value data sizes are limited to 2^31 (high bit used as a flag) and even 
+   * with big data records, the apparent max size is:
+   *   16344 * 2^16 = 1071104040 (~1GB).
+   *
+   * We choose to limit it to 1M which was the limit in older versions and 
+   * should rarely be exceeded unless the file is corrupt or malicious. 
+   * For more info, see:
+   *   http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
    */
   /* XXX: add way to skip this check at user discression. */
   if(length > REGFI_VK_MAX_DATA_LENGTH)
