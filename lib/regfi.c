@@ -1270,18 +1270,12 @@ REGFI_NK_REC* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
 }
 
 
-/*******************************************************************
- * Open the registry file and then read in the REGF block to get the
- * first hbin offset.
- *******************************************************************/
+/******************************************************************************
+ ******************************************************************************/
 REGFI_FILE* regfi_open(const char* filename)
 {
-  struct stat sbuf;
-  REGFI_FILE* rb;
-  REGFI_HBIN* hbin = NULL;
-  uint32 hbin_off, file_length, cache_secret;
+  REGFI_FILE* ret_val;
   int fd;
-  bool rla;
 
   /* open an existing file */
   if ((fd = open(filename, REGFI_OPEN_FLAGS)) == -1)
@@ -1289,7 +1283,26 @@ REGFI_FILE* regfi_open(const char* filename)
     /* fprintf(stderr, "regfi_open: failure to open %s (%s)\n", filename, strerror(errno));*/
     return NULL;
   }
-  
+
+  ret_val = regfi_alloc(fd);
+
+  if(ret_val == NULL)
+    close(fd);
+
+  return ret_val;
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+REGFI_FILE* regfi_alloc(int fd)
+{
+  struct stat sbuf;
+  REGFI_FILE* rb;
+  REGFI_HBIN* hbin = NULL;
+  uint32 hbin_off, file_length, cache_secret;
+  bool rla;
+
   /* Determine file length.  Must be at least big enough 
    * for the header and one hbin. 
    */
@@ -1299,11 +1312,10 @@ REGFI_FILE* regfi_open(const char* filename)
   if(file_length < REGFI_REGF_SIZE+REGFI_HBIN_ALLOC)
     return NULL;
 
-  /* read in an existing file */
+  /* Read file header */
   if ((rb = regfi_parse_regf(fd, true)) == NULL) 
   {
-    /* fprintf(stderr, "regfi_open: Failed to read initial REGF block\n"); */
-    close(fd);
+    /* fprintf(stderr, "regfi_alloc: Failed to read initial REGF block\n"); */
     return NULL;
   }
   rb->file_length = file_length;  
@@ -1311,8 +1323,7 @@ REGFI_FILE* regfi_open(const char* filename)
   rb->hbins = range_list_new();
   if(rb->hbins == NULL)
   {
-    /* fprintf(stderr, "regfi_open: Failed to create HBIN list.\n"); */
-    close(fd);
+    /* fprintf(stderr, "regfi_alloc: Failed to create HBIN list.\n"); */
     talloc_free(rb);
     return NULL;
   }
@@ -1349,7 +1360,7 @@ REGFI_FILE* regfi_open(const char* filename)
 
 /******************************************************************************
  ******************************************************************************/
-int regfi_close(REGFI_FILE *file)
+int regfi_close(REGFI_FILE* file)
 {
   int fd;
 
@@ -1360,13 +1371,20 @@ int regfi_close(REGFI_FILE *file)
   fd = file->fd;
   file->fd = -1;
 
-  range_list_free(file->hbins);
+  regfi_free(file);
 
-  if(file->sk_cache != NULL)
-    lru_cache_destroy(file->sk_cache);
+  return close(fd);
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+void regfi_free(REGFI_FILE *file)
+{
+  if(file->last_message != NULL)
+    free(last_message);
 
   talloc_free(file);
-  return close(fd);
 }
 
 
@@ -2076,10 +2094,10 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
 }
 
 
-/*******************************************************************
+/******************************************************************************
  * Convert from UTF-16LE to specified character set. 
  * On error, returns a negative errno code.
- *******************************************************************/
+ *****************************************************************************/
 int32 regfi_conv_charset(const char* input_charset, const char* output_charset,
 			 uint8* input, char* output, 
 			 uint32 input_len, uint32 output_max)
@@ -2900,7 +2918,7 @@ uint32* regfi_parse_big_data_indirect(REGFI_FILE* file, uint32 offset,
 range_list* regfi_parse_big_data_cells(REGFI_FILE* file, uint32* offsets,
 				       uint16 num_chunks, bool strict)
 {
-  uint32 cell_length, chunk_offset, data_left;
+  uint32 cell_length, chunk_offset;
   range_list* ret_val;
   uint16 i;
   bool unalloc;
@@ -2910,7 +2928,7 @@ range_list* regfi_parse_big_data_cells(REGFI_FILE* file, uint32* offsets,
   if(ret_val == NULL)
     goto fail;
   
-  for(i=0; (i<num_chunks) && (data_left>0); i++)
+  for(i=0; i<num_chunks; i++)
   {
     chunk_offset = offsets[i]+REGFI_REGF_SIZE;
     if(!regfi_parse_cell(file->fd, chunk_offset, NULL, 0,
