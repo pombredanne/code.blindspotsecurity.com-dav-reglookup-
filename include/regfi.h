@@ -158,7 +158,13 @@ typedef uint8 REGFI_ENCODING;
 #define REGFI_NK_FLAG_UNKNOWN1     0x4000
 #define REGFI_NK_FLAG_UNKNOWN2     0x1000
 
-/* This next one shows up on root keys in some Vista "software" registries */
+/* This next one shows up in some Vista "software" registries */
+/* XXX: This shows up in the following two SOFTWARE keys in Vista:
+ *   /Wow6432Node/Microsoft
+ *   /Wow6432Node/Microsoft/Cryptography
+ *  
+ * It comes along with UNKNOWN2 and ASCIINAME for a total flags value of 0x10A0
+ */
 #define REGFI_NK_FLAG_UNKNOWN3     0x0080
 
 /* Predefined handle.  Rumor has it that the valuelist count for this key is 
@@ -200,7 +206,8 @@ typedef uint8 REGFI_ENCODING;
 				    | REGFI_NK_FLAG_HIVE_LINK\
 				    | REGFI_NK_FLAG_VOLATILE\
 				    | REGFI_NK_FLAG_UNKNOWN1\
-				    | REGFI_NK_FLAG_UNKNOWN2)
+				    | REGFI_NK_FLAG_UNKNOWN2\
+                                    | REGFI_NK_FLAG_UNKNOWN3)
 
 /* HBIN block */
 typedef struct _regfi_hbin 
@@ -719,15 +726,16 @@ const REGFI_SK_REC*   regfi_iterator_cur_sk(REGFI_ITERATOR* i);
 
 
 /* regfi_iterator_first_subkey: Sets the internal subkey index to the first
- *                              subkey referenced by the current key.
+ *                              subkey referenced by the current key and returns
+ *                              that key.
  *
  * Arguments:
  *   i            -- the iterator
  *
  * Returns:
- *   A read-only key structure for the newly referenced first subkey, 
- *   or NULL on failure.  Failure may be due to a lack of any subkeys or other
- *   errors.
+ *   A newly allocated key structure for the newly referenced first subkey, or
+ *   NULL on failure.  Failure may be due to a lack of any subkeys or other
+ *   errors.  Newly allocated keys must be freed with regfi_free_key.
  */
 REGFI_NK_REC*         regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 
@@ -743,18 +751,120 @@ REGFI_NK_REC*         regfi_iterator_first_subkey(REGFI_ITERATOR* i);
  *   regfi_free_key.
  */
 REGFI_NK_REC*         regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
+
+
+/* regfi_iterator_next_subkey: Increments the internal subkey index to the next
+ *                             key in the subkey-list and returns the subkey
+ *                             for that index.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *
+ * Returns:
+ *   A newly allocated key structure for the next subkey or NULL on
+ *   failure.  Newly allocated keys must be freed with
+ *   regfi_free_key.
+ */
 REGFI_NK_REC*         regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+
+
+/* regfi_iterator_find_subkey: Searches for a subkey with a given name under the
+ *                             current key.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *   subkey_name  -- subkey name to search for
+ *
+ * Returns:
+ *   True if such a subkey was found, false otherwise.  If a subkey is found,
+ *   the current subkey index is set to that subkey.  Otherwise, the subkey
+ *   index remains at the same location as before the call.
+ */
 bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i, 
 						 const char* subkey_name);
 
+/* regfi_iterator_first_value: Sets the internal value index to the first
+ *                             value referenced by the current key and returns
+ *                             that value.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *
+ * Returns:
+ *   A newly allocated value structure for the newly referenced first value, 
+ *   or NULL on failure.  Failure may be due to a lack of any values or other
+ *   errors.  Newly allocated keys must be freed with regfi_free_value.
+ */
 REGFI_VK_REC*         regfi_iterator_first_value(REGFI_ITERATOR* i);
+
+
+/* regfi_iterator_cur_value: Returns the currently indexed value.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *
+ * Returns:
+ *   A newly allocated value structure for the currently referenced value, 
+ *   or NULL on failure.  Newly allocated values must be freed with 
+ *   regfi_free_value.
+ */
 REGFI_VK_REC*         regfi_iterator_cur_value(REGFI_ITERATOR* i);
+
+
+/* regfi_iterator_next_value: Increments the internal value index to the next
+ *                            value in the value-list and returns the value
+ *                            for that index.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *
+ * Returns:
+ *   A newly allocated key structure for the next value or NULL on failure.
+ *   Newly allocated keys must be freed with regfi_free_value.
+ */
 REGFI_VK_REC*         regfi_iterator_next_value(REGFI_ITERATOR* i);
+
+
+/* regfi_iterator_find_value: Searches for a value with a given name under the
+ *                            current key.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *   value_name   -- value name to search for
+ *
+ * Returns:
+ *   True if such a value was found, false otherwise.  If a value is found,
+ *   the current value index is set to that value.  Otherwise, the value
+ *   index remains at the same location as before the call.
+ */
 bool                  regfi_iterator_find_value(REGFI_ITERATOR* i, 
 						const char* value_name);
 
+
+/* regfi_iterator_fetch_classname: Retrieves classname for a given key.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *   key          -- the key whose classname is desired
+ *
+ * Returns:
+ *   Returns a newly allocated classname structure, or NULL on failure.
+ *   Classname structures must be freed with regfi_free_classname.
+ */
 REGFI_CLASSNAME*      regfi_iterator_fetch_classname(REGFI_ITERATOR* i, 
 						     const REGFI_NK_REC* key);
+
+
+/* regfi_iterator_fetch_data: Retrieves data for a given value.
+ *
+ * Arguments:
+ *   i            -- the iterator
+ *   value        -- the value whose data is desired
+ *
+ * Returns:
+ *   Returns a newly allocated data structure, or NULL on failure.
+ *   Data structures must be freed with regfi_free_data.
+ */
 REGFI_DATA*           regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
 						const REGFI_VK_REC* value);
 
