@@ -1382,7 +1382,7 @@ int regfi_close(REGFI_FILE* file)
 void regfi_free(REGFI_FILE *file)
 {
   if(file->last_message != NULL)
-    free(last_message);
+    free(file->last_message);
 
   talloc_free(file);
 }
@@ -1707,6 +1707,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
 {
   REGFI_VK_REC* cur;
   bool found = false;
+  uint32 old_value = i->cur_value;
 
   /* XXX: cur->valuename can be NULL in the registry.  
    *      Should we allow for a way to search for that? 
@@ -1726,8 +1727,15 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
       cur = regfi_iterator_next_value(i);
     }
   }
+  
+  if(found == false)
+  {
+    i->cur_value = old_value;
+    return false;
+  }
 
-  return found;
+  regfi_free_value(cur);
+  return true;
 }
 
 
