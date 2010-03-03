@@ -1,7 +1,5 @@
-/**
- * @file
- *
- * Copyright (C) 2008-2009 Timothy D. Morgan
+/*
+ * Copyright (C) 2008-2010 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +15,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
  *
  * $Id$
+ */
+
+/**
+ * @file
  */
 
 #include "range_list.h"

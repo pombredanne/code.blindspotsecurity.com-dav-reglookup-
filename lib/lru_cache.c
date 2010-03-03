@@ -1,6 +1,4 @@
-/**
- * @file
- *
+/*
  * Copyright (C) 2008-2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
@@ -17,6 +15,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
  *
  * $Id$
+ */
+
+/**
+ * @file
  */
 
 #include "lru_cache.h"

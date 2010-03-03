@@ -1,7 +1,5 @@
-/**
- * @file
- *
- * Copyright (C) 2005,2007,2009 Timothy D. Morgan
+/*
+ * Copyright (C) 2005,2007,2009-2010 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +17,14 @@
  * $Id$
  */
 
+/** 
+ *@file
+ * 
+ * This is a very simple implementation of a stack which stores chunks of
+ * memory of any type.
+ */
+
+
 #ifndef _VOID_STACK_H
 #define _VOID_STACK_H
 
@@ -27,6 +33,7 @@
 #include <string.h>
 #include "talloc.h"
 
+/** XXX: document this. */
 typedef struct _void_stack
 {
   void** elements;
@@ -34,6 +41,8 @@ typedef struct _void_stack
   unsigned short top;
 } void_stack;
 
+
+/** XXX: document this. */
 typedef struct _void_stack_iterator
 {
   const void_stack* stack;
@@ -41,149 +50,120 @@ typedef struct _void_stack_iterator
 } void_stack_iterator;
 
 
-/* void_stack_new(): 
- *  Allocates a new void_stack.
+/** Allocates a new void_stack.
  *
- * Arguments:
- *  max_size -- the maxiumum number of elements 
- *              which may be pushed onto the stack.
+ * @param max_size the maxiumum number of elements 
+ *                 which may be pushed onto the stack.
  *
- * Returns: 
- *  a pointer to the newly allocated void_stack, or NULL if an error occurred.
+ * @return a pointer to the newly allocated void_stack, 
+ *         or NULL if an error occurred.
  */
 void_stack* void_stack_new(unsigned short max_size);
 
 
-/* void_stack_copy(): 
- *  Makes a shallow copy of void_stack.
+/** Makes a shallow copy of void_stack.
  *
- * Arguments:
- *  v -- the stack to make a copy of.
+ * @param v the stack to make a copy of.
  *
- * Returns:
- *  a pointer to the duplicate void_stack, or NULL If an error occurred.
+ * @return a pointer to the duplicate void_stack, or NULL if an error occurred.
  */
 void_stack* void_stack_copy(const void_stack* v);
 
 
-/* void_stack_copy_reverse(): 
- *  Makes a shallow copy of void_stack in reverse order.
+/** Makes a shallow copy of void_stack in reverse order.
  *
- * Arguments:
- *  v -- the stack to make a copy of.
+ * @param v the stack to make a copy of.
  *
- * Returns:
- *  a pointer to the duplicate void_stack (which will be in reverse order),
- *  or NULL If an error occurred.
+ * @return a pointer to the duplicate void_stack 
+ *         (which will be in reverse order), or NULL if an error occurred.
  */
 void_stack* void_stack_copy_reverse(const void_stack* v);
 
 
-/* void_stack_free(): 
- *  Frees the memory associated with a void_stack, but not the elements held
+/** Frees the memory associated with a void_stack, but not the elements held
  *  on the stack.
  *
- * Arguments:
- *  stack -- the stack to be free()d.
+ * @param stack the stack to be free()d.
  */
 void void_stack_free(void_stack* stack);
 
 
-/* void_stack_free_deep(): 
- *  Frees the memory associated with a void_stack and the elements referenced 
- *  by the stack.  Do not use this function if the elements of the stack 
- *  are also free()d elsewhere, or contain pointers to other memory which 
- *  cannot be otherwise free()d.
+/** Frees the memory associated with a void_stack and the elements referenced 
+ *  by the stack.  
  *
- * Arguments:
- *  stack -- the stack to be free()d.
+ * Do not use this function if the elements of the stack 
+ * are also free()d elsewhere, or contain pointers to other memory which 
+ * cannot be otherwise free()d.
+ *
+ * @param stack the stack to be free()d.
  */
 void void_stack_free_deep(void_stack* stack);
 
 
-/* void_stack_size(): 
- *  Query the current number of elements on a void_stack()
+/** Query the current number of elements on a void_stack()
  *
- * Arguments:
- *  stack -- the void_stack to query
+ * @param stack the void_stack to query
  *
- * Returns:
- *  the number of elements currently on the stack.
+ * @return the number of elements currently on the stack.
  */
 unsigned short void_stack_size(const void_stack* stack);
 
 
-/* void_stack_pop():
- *  Removes the top element on a void_stack and returns a reference to it.
+/** Removes the top element on a void_stack and returns a reference to it.
  *
- * Arguments:
- *  stack -- the void_stack to pop
+ * @param stack the void_stack to pop
  *
- * Returns:
- *  a pointer to the popped stack element, or NULL if no elements exist on 
- *  the stack.
+ * @return a pointer to the popped stack element, or NULL if no elements exist
+ *         on the stack.
  */
 void* void_stack_pop(void_stack* stack);
 
 
-/* void_stack_push():
- *  Puts a new element on the top of a void_stack.
+/** Puts a new element on the top of a void_stack.
  *
- * Arguments:
- *  stack -- the void_stack being modified.
+ * @param stack the void_stack being modified.
+ * @param e the element to be added
  *
- *  e     -- the element to be added
- *
- * Returns:
- *  true if the element was successfully added, false otherwise.
+ * @return true if the element was successfully added, false otherwise.
  */
 bool void_stack_push(void_stack* stack, void* e);
 
 
-/* void_stack_cur():
- *  Returns a pointer to the current element on the top of the stack.
+/** Returns a pointer to the current element on the top of the stack.
  *
- * Arguments:
- *  stack -- the void_stack being queried.
+ * @param stack the void_stack being queried.
  *
- * Returns:
- *  a pointer to the current element on the top of the stack, or NULL if no
- *  elements exist in the stack.
+ * @return a pointer to the current element on the top of the stack, or NULL if
+ *         no elements exist in the stack.
  */
 const void* void_stack_cur(const void_stack* stack);
 
 
-/* void_stack_iterator_new():
- *  Creates a new iterator for the specified void_stack.
+/** Creates a new iterator for the specified void_stack.
  *
- * Arguments:
- *  stack -- the void_stack to be referenced by the new iterator
+ * @param stack the void_stack to be referenced by the new iterator
  *
- * Returns:
- *  a new void_stack_iterator, or NULL if an error occurred.
+ * @return a new void_stack_iterator, or NULL if an error occurred.
  */
 void_stack_iterator* void_stack_iterator_new(const void_stack* stack);
 
 
-/* void_stack_iterator_free():
- *  Frees a void_stack_iterator.  Does not affect the void_stack referenced
- *  by the iterator.
+/** Frees a void_stack_iterator.
  *
- * Arguments:
- *  iter -- the void_stack_iterator to be free()d.
+ * Does not affect the void_stack referenced by the iterator.
+ *
+ * @param iter the void_stack_iterator to be free()d.
  */
 void void_stack_iterator_free(void_stack_iterator* iter);
 
 
-/* void_stack_iterator_next():
- *  Returns a pointer to the the next element in the stack.  Iterates over 
- *  elements starting in order from the oldest element (bottom of the stack).
+/** Returns a pointer to the the next element in the stack.
  *
- * Arguments:
- *  iter -- the void_stack_iterator used to lookup the next element.
+ * Iterates over elements starting in order from the oldest element (bottom of the stack).
  *
- * Returns:
- *  a pointer to the next element.
+ * @param iter the void_stack_iterator used to lookup the next element.
+ *
+ * @return a pointer to the next element.
  */
 const void* void_stack_iterator_next(void_stack_iterator* iter);
 

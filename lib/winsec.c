@@ -1,10 +1,6 @@
-/**
- * @file
- * This file contains refactored Samba code used to interpret Windows
- * Security Descriptors. See:
- *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/
+/*
  *
- * Copyright (C) 2005-2006,2009 Timothy D. Morgan
+ * Copyright (C) 2005-2006,2009-2010 Timothy D. Morgan
  * Copyright (C) 1992-2005 Samba development team 
  *               (see individual files under Subversion for details.)
  *
@@ -23,6 +19,8 @@
  *
  * $Id$
  */
+
+/** @file */
 
 #include "winsec.h"
 

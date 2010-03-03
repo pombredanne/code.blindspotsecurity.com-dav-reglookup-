@@ -1,13 +1,5 @@
-/** @file
- * This file contains refactored Samba code used to interpret Windows
- * Security Descriptors. See:
- *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/
- *
- * Revisions have been made based on information provided by Microsoft
- * at: 
- *    http://msdn.microsoft.com/en-us/library/cc230366(PROT.10).aspx
- *
- * Copyright (C) 2005,2009 Timothy D. Morgan
+/* 
+ * Copyright (C) 2005,2009-2010 Timothy D. Morgan
  * Copyright (C) 1992-2005 Samba development team 
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -24,6 +16,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Id$
+ */
+
+/**
+ * @file
+ *
+ * A small library for interpreting Windows Security Descriptors.
+ * This library was originally based on Samba source from:
+ *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/
+ *
+ * The library has been heavily rewritten and improved based on information
+ * provided by Microsoft at: 
+ *    http://msdn.microsoft.com/en-us/library/cc230366%28PROT.10%29.aspx
  */
 
 #ifndef _WINSEC_H
@@ -69,103 +73,240 @@
 #define WINSEC_ACE_TYPE_SYSTEM_ALARM_OBJECT    0x8
 
 
+/** XXX: document this. */
 typedef struct _winsec_uuid
 {
-       uint32_t time_low;
-       uint16_t time_mid;
-       uint16_t time_hi_and_version;
-       uint8_t  clock_seq[2];
-       uint8_t  node[6];
+  /** XXX: document this. */
+  uint32_t time_low;
+
+  /** XXX: document this. */
+  uint16_t time_mid;
+
+  /** XXX: document this. */
+  uint16_t time_hi_and_version;
+
+  /** XXX: document this. */
+  uint8_t  clock_seq[2];
+
+  /** XXX: document this. */
+  uint8_t  node[6];
 } WINSEC_UUID;
 
 
+/** XXX: document this. */
 typedef struct _winsec_sid
 {
-  uint8_t  sid_rev_num;             /* SID revision number */
-  uint8_t  num_auths;               /* Number of sub-authorities */
-  uint8_t  id_auth[6];              /* Identifier Authority */
-  /*
-   *  Pointer to sub-authorities.
-   *
+  /** SID revision number */
+  uint8_t  sid_rev_num;
+
+  /** Number of sub-authorities */
+  uint8_t  num_auths;
+
+  /** Identifier Authority */
+  uint8_t  id_auth[6];
+
+  /** Pointer to sub-authorities.
+   * 
    * @note The values in these uint32_t's are in *native* byteorder, not
    * neccessarily little-endian...... JRA.
    */
-  /* XXX: Make this dynamically allocated? */
-  uint32_t sub_auths[WINSEC_MAX_SUBAUTHS];
+  uint32_t sub_auths[WINSEC_MAX_SUBAUTHS];   /* XXX: Make this dynamically allocated? */
 } WINSEC_DOM_SID;
 
 
+/** XXX: document this. */
 typedef struct _winsec_ace
 {
-	uint8_t type;  /* xxxx_xxxx_ACE_TYPE - e.g allowed / denied etc */
-	uint8_t flags; /* xxxx_INHERIT_xxxx - e.g OBJECT_INHERIT_ACE */
-	uint16_t size;
-	uint32_t access_mask;
+  /** xxxx_xxxx_ACE_TYPE - e.g allowed / denied etc */
+  uint8_t type;
 
-	/* this stuff may be present when type is XXXX_TYPE_XXXX_OBJECT */
-	uint32_t  obj_flags;   /* xxxx_ACE_OBJECT_xxxx e.g present/inherited present etc */
-	WINSEC_UUID* obj_guid;  /* object GUID */
-	WINSEC_UUID* inh_guid;  /* inherited object GUID */		
-        /* eof object stuff */
+  /** xxxx_INHERIT_xxxx - e.g OBJECT_INHERIT_ACE */
+  uint8_t flags;
 
-	WINSEC_DOM_SID* trustee;
+  /** XXX: finish documenting */
+  uint16_t size;
+
+  /** XXX: finish documenting */
+  uint32_t access_mask;
+  
+  /* This stuff may be present when type is XXXX_TYPE_XXXX_OBJECT */
+
+  /** xxxx_ACE_OBJECT_xxxx e.g present/inherited present etc */
+  uint32_t  obj_flags;
+
+  /** Object GUID */
+  WINSEC_UUID* obj_guid;
+
+  /** Inherited object GUID */
+  WINSEC_UUID* inh_guid;
+
+  /* eof object stuff */
+  
+  /** XXX: finish documenting */
+  WINSEC_DOM_SID* trustee;
 
 } WINSEC_ACE;
 
+
+/** XXX: document this. */
 typedef struct _winsec_acl
 {
-	uint16_t revision; /* 0x0003 */
-	uint16_t size;     /* size in bytes of the entire ACL structure */
-	uint32_t num_aces; /* number of Access Control Entries */
+  /** 0x0003 */
+  uint16_t revision;
 
-	WINSEC_ACE** aces;
+  /** Size, in bytes, of the entire ACL structure */
+  uint16_t size;
+
+  /** Number of Access Control Entries */
+  uint32_t num_aces;
+  
+  /** XXX: document this. */
+  WINSEC_ACE** aces;
 
 } WINSEC_ACL;
 
+
+/** XXX: document this. */
 typedef struct _winsec_desc
 {
-	uint8_t revision; /* 0x01 */
-	uint8_t sbz1;     /* "If the Control field has the RM flag set,
-			   *  then this field contains the resource
-			   *  manager (RM) control value. ... Otherwise,
-			   *  this field is reserved and MUST be set to
-			   *  zero." -- Microsoft.  See reference above.
-			   */
-	uint16_t control; /* WINSEC_DESC_* flags */
+  /** 0x01 */
+  uint8_t revision;
 
-	uint32_t off_owner_sid; /* offset to owner sid */
-	uint32_t off_grp_sid  ; /* offset to group sid */
-	uint32_t off_sacl     ; /* offset to system list of permissions */
-	uint32_t off_dacl     ; /* offset to list of permissions */
+  /** XXX: better explain this
+   *
+   * "If the Control field has the RM flag set, then this field contains the
+   *  resource manager (RM) control value. ... Otherwise, this field is reserved
+   *  and MUST be set to zero." -- Microsoft.
+   *  See:
+   *   http://msdn.microsoft.com/en-us/library/cc230371%28PROT.10%29.aspx
+   */
+  uint8_t sbz1;
 
-	WINSEC_DOM_SID* owner_sid; 
-	WINSEC_DOM_SID* grp_sid;
-	WINSEC_ACL* sacl;       /* system ACL */
-	WINSEC_ACL* dacl;       /* user ACL */
+  /** WINSEC_DESC_* flags */
+  uint16_t control;
+  
+  /** Offset to owner sid */
+  uint32_t off_owner_sid;
+
+  /** Offset to group sid */
+  uint32_t off_grp_sid;
+
+  /** Offset to system list of permissions */
+  uint32_t off_sacl;
+
+  /** Offset to list of permissions */
+  uint32_t off_dacl;
+
+  /** XXX: document this */
+  WINSEC_DOM_SID* owner_sid; 
+
+  /** XXX: document this */
+  WINSEC_DOM_SID* grp_sid;
+
+  /** System ACL */
+  WINSEC_ACL* sacl;
+
+  /** User ACL */
+  WINSEC_ACL* dacl;
 
 } WINSEC_DESC;
 
+
+/**
+ *
+ * XXX: finish documenting
+ */
 WINSEC_DESC* winsec_parse_descriptor(const uint8_t* buf, uint32_t buf_len);
+
+
+/**
+ *
+ * XXX: finish documenting
+ */
 void winsec_free_descriptor(WINSEC_DESC* desc);
 
+/**
+ *
+ * XXX: finish documenting
+ */
 WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
 			       const uint8_t* buf, uint32_t buf_len);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 WINSEC_ACL* winsec_parse_acl(void* talloc_ctx, 
 			     const uint8_t* buf, uint32_t buf_len);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 WINSEC_ACE* winsec_parse_ace(void* talloc_ctx, 
 			     const uint8_t* buf, uint32_t buf_len);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 WINSEC_DOM_SID* winsec_parse_dom_sid(void* talloc_ctx, 
 				     const uint8_t* buf, uint32_t buf_len);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 WINSEC_UUID* winsec_parse_uuid(void* talloc_ctx, 
 			       const uint8_t* buf, uint32_t buf_len);
 
+
+/**
+ *
+ * XXX: finish documenting
+ */
 size_t winsec_sid_size(const WINSEC_DOM_SID* sid);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 int winsec_sid_compare_auth(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 int winsec_sid_compare(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 bool winsec_sid_equal(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 bool winsec_desc_equal(WINSEC_DESC* s1, WINSEC_DESC* s2);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 bool winsec_acl_equal(WINSEC_ACL* s1, WINSEC_ACL* s2);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 bool winsec_ace_equal(WINSEC_ACE* s1, WINSEC_ACE* s2);
+
+/**
+ *
+ * XXX: finish documenting
+ */
 bool winsec_ace_object(uint8_t type);
 
 #endif /* _WINSEC_H */

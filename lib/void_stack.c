@@ -1,10 +1,5 @@
-/**
- * @file
- *
- * This is a really simple implementation of a stack which stores chunks
- * of memory of any type.
- *
- * Copyright (C) 2005,2007,2009 Timothy D. Morgan
+/*
+ * Copyright (C) 2005,2007,2009-2010 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +16,11 @@
  *
  * $Id$
  */
+
+/**  
+ * @file
+ */
+
 
 #include "void_stack.h"
 
