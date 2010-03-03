@@ -1,7 +1,5 @@
-/**
- * @file
- *
- * Copyright (C) 2008-2009 Timothy D. Morgan
+/*
+ * Copyright (C) 2008-2010 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +16,14 @@
  *
  * $Id$
  */
+
+/**
+ * @file
+ *
+ * A data structure which approximates a least recently used (LRU) cache.
+ * Implemented as a basic randomized hash table.
+ */
+
 
 #ifndef LRU_CACHE_H
 #define LRU_CACHE_H
@@ -43,6 +49,8 @@ struct lru_cache_element
   lru_cache_element* newer;
 };
 
+
+/** XXX: document this. */
 typedef struct _lru_cache
 {
   uint32_t secret;
@@ -56,26 +64,47 @@ typedef struct _lru_cache
 } lru_cache;
 
 
+/**
+ * XXX: finish documenting.
+ */
 lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret);
+
+
+/**
+ * XXX: finish documenting.
+ */
 lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys, 
 				uint32_t secret, bool talloc_data);
+
+
+/**
+ * XXX: finish documenting.
+ */
 void lru_cache_destroy(lru_cache* ht);
 
-/* 
- * 
+
+/**
+ * XXX: finish documenting.
  */
 bool lru_cache_update(lru_cache* ht, const void* index, 
 		      uint32_t index_len, void* data);
 
-/* Returns pointer to data previously stored at index.
- * If no data was found at index, NULL is returned.
+/**
+ * XXX: finish documenting.
+ *
+ * @return A pointer to data previously stored at index.
+ *         If no data was found at index, NULL is returned.
  */
 void* lru_cache_find(lru_cache* ht, const void* index, 
 		     uint32_t index_len);
 
-/* Removes entry from table at index.
- * Returns pointer to data that was there previously.  
- * Returns NULL if no entry is at index.
+/**
+ * XXX: finish documenting.
+ *
+ * Removes entry from table at index.
+ *
+ * @return A pointer to data that was there previously or NULL if no entry is
+ *         at index.
  */
 bool lru_cache_remove(lru_cache* ht, const void* index, 
 		      uint32_t index_len);

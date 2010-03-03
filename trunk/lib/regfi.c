@@ -1,10 +1,5 @@
 /*
- * Branched from Samba project Subversion repository, version #7470:
- *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/registry/regfio.c?rev=7470&view=auto
- *
- * Windows NT (and later) registry parsing library
- *
- * Copyright (C) 2005-2009 Timothy D. Morgan
+ * Copyright (C) 2005-2010 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,7 +18,18 @@
  * $Id$
  */
 
-/** @file */
+/** 
+ * @file
+ *
+ * Windows NT (and later) read-only registry library
+ *
+ * See @ref regfi.h for more information.
+ *
+ * Branched from Samba project Subversion repository, version #7470:
+ *   http://viewcvs.samba.org/cgi-bin/viewcvs.cgi/trunk/source/registry/regfio.c?rev=7470&view=auto
+ *
+ * Since then, it has been heavily rewritten, simplified, and improved.
+ */
 
 #include "regfi.h"
 
@@ -2543,7 +2549,6 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32_t offset,
 
   ret_val->offset = offset;
   ret_val->cell_size = cell_length;
-  ret_val->data = NULL;
   ret_val->valuename = NULL;
   ret_val->valuename_raw = NULL;
   

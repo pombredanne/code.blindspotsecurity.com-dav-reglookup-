@@ -10,6 +10,10 @@
   (The file 'winntreg.txt' included in this distribution is derived from this.)
   http://home.eunet.no/~pnordahl/ntpasswd/WinReg.txt
 
+- Nigel Williams.  Much of the same information as provided in 'winntreg.txt',
+  but with some code:
+  http://www.wednesday.demon.co.uk/dosreg.html
+
 - Some useful information on how Windows reads from and writes to registry
   hives:
   http://www.microsoft.com/technet/archive/winntas/tips/winntmag/inreg.mspx
