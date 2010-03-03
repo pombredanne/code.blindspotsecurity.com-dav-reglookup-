@@ -1,4 +1,6 @@
-/*
+/**
+ * @file
+ *
  * Copyright (C) 2005,2007,2009 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify

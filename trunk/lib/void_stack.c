@@ -1,7 +1,8 @@
-/*
+/**
+ * @file
+ *
  * This is a really simple implementation of a stack which stores chunks
- * of memory of any type.  It still needs work to eliminate memory
- * leaks. 
+ * of memory of any type.
  *
  * Copyright (C) 2005,2007,2009 Timothy D. Morgan
  *

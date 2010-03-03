@@ -7,7 +7,7 @@ SVN_URL=svn+ssh://pascal.sentinelchicken.org/home/projects/subversion/reglookup
 SUB_DIRS=$(wildcard releases/*) trunk
 
 FILES=$(REGLOOKUP)
-.PHONY: all $(SUB_DIRS) clean
+.PHONY: all $(SUB_DIRS) clean doc
 export
 
 
@@ -30,5 +30,9 @@ $(SUB_DIRS):
 	mv .release/$(RELEASE_NAME).tar.gz $(RELEASE_DEST)
 
 
+doc:
+	doxygen doc/Doxyfile.regfi
+
 clean:
 	rm -rf .release
+	rm -rf doc/regfi
