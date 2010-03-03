@@ -159,7 +159,7 @@ static char* data_to_ascii(REGFI_DATA* data, char** error_msg)
   char* cur_quoted;
   char* tmp_ptr;
   char* delim;
-  uint32 ret_val_left, i, tmp_len;
+  uint32_t ret_val_left, i, tmp_len;
 
   if(data == NULL || data->size == 0)
   {

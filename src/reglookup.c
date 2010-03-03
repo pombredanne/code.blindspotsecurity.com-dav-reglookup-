@@ -131,7 +131,7 @@ char** splitPath(const char* s)
   const char* cur = s;
   char* next = NULL;
   char* copy;
-  uint32 ret_cur = 0;
+  uint32_t ret_cur = 0;
 
   ret_val = (char**)malloc((REGFI_MAX_DEPTH+1+1)*sizeof(char**));
   if (ret_val == NULL)
@@ -178,7 +178,7 @@ char** splitPath(const char* s)
 
 void freePath(char** path)
 {
-  uint32 i;
+  uint32_t i;
 
   if(path == NULL)
     return;
@@ -195,10 +195,10 @@ char* iter2Path(REGFI_ITERATOR* i)
 {
   const REGFI_ITER_POSITION* cur;
   const REGFI_NK_REC* tmp_key;
-  uint32 buf_left = 127;
-  uint32 buf_len = buf_left+1;
-  uint32 name_len = 0;
-  uint32 grow_amt;
+  uint32_t buf_left = 127;
+  uint32_t buf_len = buf_left+1;
+  uint32_t name_len = 0;
+  uint32_t grow_amt;
   char* buf;
   char* new_buf;
   char* name;
@@ -244,7 +244,7 @@ char* iter2Path(REGFI_ITERATOR* i)
     name_len = strlen(name);
     if(name_len+1 > buf_left)
     {
-      grow_amt = (uint32)(buf_len/2);
+      grow_amt = (uint32_t)(buf_len/2);
       buf_len += name_len+1+grow_amt-buf_left;
       if((new_buf = realloc(buf, buf_len)) == NULL)
       {
@@ -297,7 +297,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
   const REGFI_NK_REC* k = regfi_iterator_cur_key(iter);
   REGFI_CLASSNAME* classname;
 
-  *tmp_time = nt_time_to_unix(&k->mtime);
+  *tmp_time = regfi_nt2unix_time(&k->mtime);
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
 
@@ -453,7 +453,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
   REGFI_VK_REC* value;
   char* tmp_path_joined;
   const char** tmp_path;
-  uint32 i;
+  uint32_t i;
   
   if(path == NULL)
     return -1;
@@ -556,7 +556,7 @@ int main(int argc, char** argv)
   char** path = NULL;
   REGFI_ITERATOR* iter;
   int retr_path_ret;
-  uint32 argi, arge;
+  uint32_t argi, arge;
 
   /* Process command line arguments */
   if(argc < 2)

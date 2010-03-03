@@ -32,7 +32,14 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
-#include "smb_deps.h" /* MAX macro */
+
+#ifndef MAX
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#endif
+
+#ifndef MIN
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#endif
 
 /*
   this uses a little trick to allow __LINE__ to be stringified

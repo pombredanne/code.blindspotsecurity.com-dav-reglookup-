@@ -1,4 +1,5 @@
-/*
+/**
+ * @file
  * This file contains refactored Samba code used to interpret Windows
  * Security Descriptors. See:
  *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/

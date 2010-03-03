@@ -39,16 +39,16 @@ char* registry_file = NULL;
 #include "common.c"
 
 
-char* getQuotedData(int fd, uint32 offset, uint32 length)
+char* getQuotedData(int fd, uint32_t offset, uint32_t length)
 {
-  uint8* buf;
+  uint8_t* buf;
   char* quoted_buf;
-  uint32 len;
+  uint32_t len;
 
   if((lseek(fd, offset, SEEK_SET)) == -1)
     return NULL;
 
-  buf = (uint8*)malloc(length);
+  buf = (uint8_t*)malloc(length);
   if(buf == NULL)
     return NULL;
 
@@ -74,7 +74,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
   char* quoted_name = NULL;
   char* quoted_raw = "";
 
-  *tmp_time = nt_time_to_unix(&nk->mtime);
+  *tmp_time = regfi_nt2unix_time(&nk->mtime);
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
 
@@ -216,10 +216,10 @@ void printSK(REGFI_FILE* f, REGFI_SK_REC* sk)
 }
 
 
-int printCell(REGFI_FILE* f, uint32 offset)
+int printCell(REGFI_FILE* f, uint32_t offset)
 {
   char* quoted_buf;
-  uint32 cell_length;
+  uint32_t cell_length;
   bool unalloc;
 
   if(!regfi_parse_cell(f->fd, offset, NULL, 0, &cell_length, &unalloc))
@@ -248,8 +248,8 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
   void_stack* path_stack = void_stack_new(REGFI_MAX_DEPTH);
   REGFI_NK_REC* cur_ancestor;
   char* ret_val;
-  uint32 virt_offset, i, stack_size, ret_val_size, ret_val_used, offset;
-  int32 max_size;
+  uint32_t virt_offset, i, stack_size, ret_val_size, ret_val_used, offset;
+  int32_t max_size;
   REGFI_BUFFER* path_element;
   
   /* The path_stack size limit should guarantee that we don't recurse forever. */
@@ -277,7 +277,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	
 	path_element = talloc(path_stack, REGFI_BUFFER);
 	if(path_element != NULL)
-	  path_element->buf = (uint8*)quote_string(cur_ancestor->keyname, 
+	  path_element->buf = (uint8_t*)quote_string(cur_ancestor->keyname, 
 						   key_special_chars);
 	  
 	if(path_element == NULL || path_element->buf == NULL 
@@ -342,9 +342,9 @@ static void usage(void)
 }
 
 
-bool removeRange(range_list* rl, uint32 offset, uint32 length)
+bool removeRange(range_list* rl, uint32_t offset, uint32_t length)
 {
-  int32 rm_idx;
+  int32_t rm_idx;
   const range_list_element* cur_elem;
 
   rm_idx = range_list_find(rl, offset);
@@ -404,7 +404,7 @@ int extractVKs(REGFI_FILE* f,
 {
   const range_list_element* cur_elem;
   REGFI_VK_REC* vk;
-  uint32 i, j;
+  uint32_t i, j;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
@@ -449,8 +449,8 @@ int extractDataCells(REGFI_FILE* file,
   REGFI_VK_REC* vk;
   range_list* bd_cells;
   REGFI_BUFFER data;
-  uint32 i, j, offset, cell_length, length;
-  int32 max_size;
+  uint32_t i, j, offset, cell_length, length;
+  int32_t max_size;
   bool unalloc;
 
   bd_cells = range_list_new();
@@ -582,7 +582,7 @@ int extractKeys(REGFI_FILE* f,
 {
   const range_list_element* cur_elem;
   REGFI_NK_REC* key;
-  uint32 i, j;
+  uint32_t i, j;
   int error_code = 0;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -636,8 +636,8 @@ int extractValueLists(REGFI_FILE* f,
   REGFI_NK_REC* nk;
   REGFI_VK_REC* vk;
   const range_list_element* cur_elem;
-  uint32 i, j, num_keys, off, values_length;
-  int32 max_size;
+  uint32_t i, j, num_keys, off, values_length;
+  int32_t max_size;
 
   num_keys=range_list_size(unalloc_keys);
   for(i=0; i<num_keys; i++)
@@ -662,7 +662,7 @@ int extractValueLists(REGFI_FILE* f,
 	   * only throw out the whole value list if it bleeds into an already 
 	   * parsed structure.
 	   */
-	  values_length = (nk->values->num_values+1)*sizeof(uint32);
+	  values_length = (nk->values->num_values+1)*sizeof(uint32_t);
 	  if(values_length != (values_length & 0xFFFFFFF8))
 	    values_length = (values_length & 0xFFFFFFF8) + 8;
 
@@ -726,7 +726,7 @@ int extractSKs(REGFI_FILE* f,
 {
   const range_list_element* cur_elem;
   REGFI_SK_REC* sk;
-  uint32 i, j;
+  uint32_t i, j;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
   {
@@ -777,7 +777,7 @@ int main(int argc, char** argv)
   char* tmp_path;
   REGFI_NK_REC* tmp_key;
   REGFI_VK_REC* tmp_value;
-  uint32 argi, arge, i, j, ret, num_unalloc_keys;
+  uint32_t argi, arge, i, j, ret, num_unalloc_keys;
   
   /* Process command line arguments */
   if(argc < 2)

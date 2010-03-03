@@ -1,4 +1,4 @@
-/*
+/** @file
  * This file contains refactored Samba code used to interpret Windows
  * Security Descriptors. See:
  *   http://websvn.samba.org/cgi-bin/viewcvs.cgi/trunk/source/
@@ -40,8 +40,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "smb_deps.h"
 #include "talloc.h"
+#include "byteorder.h"
 
 
 /* This is the maximum number of subauths in a SID, as defined here:
@@ -71,11 +71,11 @@
 
 typedef struct _winsec_uuid
 {
-       uint32 time_low;
-       uint16 time_mid;
-       uint16 time_hi_and_version;
-       uint8  clock_seq[2];
-       uint8  node[6];
+       uint32_t time_low;
+       uint16_t time_mid;
+       uint16_t time_hi_and_version;
+       uint8_t  clock_seq[2];
+       uint8_t  node[6];
 } WINSEC_UUID;
 
 
