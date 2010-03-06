@@ -1,7 +1,8 @@
 /*
  * A utility to read a Windows NT and later registry files.
  *
- * Copyright (C) 2005-2009 Timothy D. Morgan
+ * Copyright (C) 2005-2010 Timothy D. Morgan
+ * Copyright (C) 2010 Tobias Mueller (portions of '-i' code)
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,6 +31,7 @@
 #include "void_stack.h"
 
 /* Globals, influenced by command line parameters */
+bool print_value_mtime = false;
 bool print_verbose = false;
 bool print_security = false;
 bool print_header = true;
@@ -56,6 +58,9 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK_REC* vk, char* prefix)
   char* quoted_name = NULL;
   char* conv_error = NULL;
   const char* str_type = NULL;
+  char mtime[20];
+  time_t tmp_time[1];
+  struct tm* tmp_time_s = NULL;
 
   if(vk->valuename == NULL)
     quoted_name = quote_buffer(vk->valuename_raw, vk->name_length, 
@@ -96,24 +101,33 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK_REC* vk, char* prefix)
     regfi_free_data(data);
   }
 
+  if(print_value_mtime)
+  {
+    *tmp_time = regfi_nt2unix_time(&iter->cur_key->mtime);
+    tmp_time_s = gmtime(tmp_time);
+    strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
+  }
+  else
+    mtime[0] = '\0';
+
   str_type = regfi_type_val2str(vk->type);
   if(print_security)
   {
     if(str_type == NULL)
-      printf("%s/%s,0x%.8X,%s,,,,,\n", prefix, quoted_name,
-	     vk->type, quoted_value);
+      printf("%s/%s,0x%.8X,%s,%s,,,,\n", prefix, quoted_name,
+	     vk->type, quoted_value, mtime);
     else
-      printf("%s/%s,%s,%s,,,,,\n", prefix, quoted_name,
-	     str_type, quoted_value);
+      printf("%s/%s,%s,%s,%s,,,,\n", prefix, quoted_name,
+	     str_type, quoted_value, mtime);
   }
   else
   {
     if(str_type == NULL)
-      printf("%s/%s,0x%.8X,%s,\n", prefix, quoted_name,
-	     vk->type, quoted_value);
+      printf("%s/%s,0x%.8X,%s,%s\n", prefix, quoted_name,
+	     vk->type, quoted_value, mtime);
     else
-      printf("%s/%s,%s,%s,\n", prefix, quoted_name,
-	     str_type, quoted_value);
+      printf("%s/%s,%s,%s,%s\n", prefix, quoted_name,
+	     str_type, quoted_value, mtime);
   }
 
   if(quoted_value != NULL)
@@ -547,6 +561,7 @@ static void usage(void)
   fprintf(stderr, "\t-S\t disables security descriptor output. (default)\n");
   fprintf(stderr, "\t-p\t restrict output to elements below this path.\n");
   fprintf(stderr, "\t-t\t restrict results to this specific data type.\n");
+  fprintf(stderr, "\t-i\t includes parent key modification times with child values.\n");
   fprintf(stderr, "\n");
 }
 
@@ -604,6 +619,8 @@ int main(int argc, char** argv)
       print_security = false;
     else if (strcmp("-v", argv[argi]) == 0)
       print_verbose = true;
+    else if (strcmp("-i", argv[argi]) == 0)
+      print_value_mtime = true;
     else
     {
       usage();

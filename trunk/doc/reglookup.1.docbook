@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+???<?xml version="1.0" encoding="UTF-8"?>
 <refentry id='reglookup.1'>
   <!--  $Id$ -->
   <refmeta>
@@ -81,6 +81,24 @@
         <listitem>
 	  <para>
 	    Enables the printing of a column header row. (default)
+	  </para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+    
+    <variablelist remap='IP'>
+      <varlistentry>
+        <term>
+          <option>-i</option>
+        </term>
+        <listitem>
+	  <para>
+	    Printed values inherit the timestamp of their parent key, which is
+            printed along with them.  Note that this timestamp is not
+            necessarily meaningful for any given value values because timestamps
+            are saved on keys only and you cannot tell which value has been
+            modified since a change to any value of a given key would update the
+            time stamp.
 	  </para>
         </listitem>
       </varlistentry>
