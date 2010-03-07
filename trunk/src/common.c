@@ -178,7 +178,7 @@ static char* data_to_ascii(REGFI_DATA* data, char** error_msg)
     if(*error_msg == NULL)
       return NULL;
     strcpy(*error_msg, "Data could not be interpreted, quoting raw buffer.");
-    return quote_buffer(data->raw, data->size, common_special_chars);
+    return quote_buffer(data->raw, data->size, subfield_special_chars);
   }
 
   switch (data->type) 

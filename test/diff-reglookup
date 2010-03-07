@@ -1,0 +1,43 @@
+#!/bin/sh
+
+mkdir -p tmp
+TMP_DIR=tmp
+OUTPUT_DIR=tmp
+
+OLD=reglookup
+NEW=../trunk/build/bin/reglookup
+
+
+compareOneFile()
+{
+  $OLD $OPTS $F > $TMP_DIR/old.csv 
+  $NEW $OPTS $F > $TMP_DIR/new.csv 
+  diff -ud $TMP_DIR/old.csv $TMP_DIR/new.csv > $OUTPUT_DIR/$PREFIX-${BNAME}.diff  
+  SIZE=`stat -c '%s' $OUTPUT_DIR/$PREFIX-${BNAME}.diff`
+  if [ "x$SIZE" = "x0" ]; then
+    rm $OUTPUT_DIR/$PREFIX-${BNAME}.diff
+  fi
+}
+
+for F in hives/*; do
+{
+  BNAME=`basename $F`
+
+  PREFIX=basic
+  OPTS=''
+  compareOneFile
+
+  PREFIX=security
+  OPTS='-s'
+  compareOneFile
+
+  PREFIX=type
+  OPTS='-t MULTI_SZ'
+  compareOneFile
+
+  PREFIX=security+type
+  OPTS='-s -t KEY'
+  compareOneFile
+} done
+
+rm $TMP_DIR/old.csv $TMP_DIR/new.csv
