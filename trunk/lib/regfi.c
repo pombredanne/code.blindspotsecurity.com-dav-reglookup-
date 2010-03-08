@@ -2802,8 +2802,8 @@ REGFI_BUFFER regfi_parse_data(REGFI_FILE* file, uint32_t offset,
 REGFI_BUFFER regfi_parse_little_data(REGFI_FILE* file, uint32_t voffset,
 				     uint32_t length, bool strict)
 {
-  REGFI_BUFFER ret_val;
   uint8_t i;
+  REGFI_BUFFER ret_val;
 
   ret_val.buf = NULL;
   ret_val.len = 0;
