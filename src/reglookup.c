@@ -62,11 +62,7 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK_REC* vk, char* prefix)
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
 
-  if(vk->valuename == NULL)
-    quoted_name = quote_buffer(vk->valuename_raw, vk->name_length, 
-			       key_special_chars);
-  else
-    quoted_name = quote_string(vk->valuename, key_special_chars);
+  quoted_name = get_quoted_valuename(vk);
   if (quoted_name == NULL)
   { /* Value names are NULL when we're looking at the "(default)" value.
      * Currently we just return a 0-length string to try an eliminate 
@@ -247,11 +243,7 @@ char* iter2Path(REGFI_ITERATOR* i)
     else
       tmp_key = cur->nk;
 
-    if(tmp_key->keyname == NULL)
-      name = quote_buffer(i->cur_key->keyname_raw, i->cur_key->name_length,
-			  key_special_chars);
-    else
-      name = quote_string(tmp_key->keyname, key_special_chars);
+    name = get_quoted_keyname(tmp_key);
 
     buf[buf_len-buf_left-1] = '/';
     buf_left -= 1;
