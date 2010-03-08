@@ -1,7 +1,7 @@
 /*
  * This program attempts to recover deleted data structures in a registry hive.
  *
- * Copyright (C) 2008-2009 Timothy D. Morgan
+ * Copyright (C) 2008-2010 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -571,12 +571,12 @@ int extractDataCells(REGFI_FILE* file,
 		return 30;
 	  }
 	}
-	/* XXX: Need to come up with a different way to link these so the
-	 *      vk->data item can be removed from the structure.
-	 */
-	vk->data = regfi_buffer_to_data(data);
-	talloc_steal(vk, vk->data);
       }
+      /* XXX: Need to come up with a different way to link these so the
+       *      vk->data item can be removed from the structure.
+       */
+      vk->data = regfi_buffer_to_data(data);
+      talloc_steal(vk, vk->data);
     }
   }
 
