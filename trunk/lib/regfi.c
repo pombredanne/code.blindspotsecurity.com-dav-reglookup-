@@ -977,6 +977,53 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
 }
 
 
+void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK_REC* vk, 
+			       REGFI_ENCODING output_encoding, bool strict)
+{
+  /* XXX: Registry value names are supposedly limited to 16383 characters 
+   *      according to:
+   *      http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
+   *      Might want to emit a warning if this is exceeded.  
+   *      It is expected that "characters" could be variable width.
+   *      Also, it may be useful to use this information to limit false positives
+   *      when recovering deleted VK records.
+   */
+  int32_t tmp_size;
+  REGFI_ENCODING from_encoding = (vk->flags & REGFI_VK_FLAG_ASCIINAME)
+    ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
+
+  if(from_encoding == output_encoding)
+  {
+    vk->valuename_raw = talloc_realloc(vk, vk->valuename_raw,
+					    uint8_t, vk->name_length+1);
+    vk->valuename_raw[vk->name_length] = '\0';
+    vk->valuename = (char*)vk->valuename_raw;
+  }
+  else
+  {
+    vk->valuename = talloc_array(vk, char, vk->name_length+1);
+    if(vk->valuename == NULL)
+    {
+      regfi_free_value(vk);
+      return;
+    }
+
+    tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
+				  regfi_encoding_int2str(output_encoding),
+				  vk->valuename_raw, vk->valuename,
+				  vk->name_length, vk->name_length+1);
+    if(tmp_size < 0)
+    {
+      regfi_add_message(file, REGFI_MSG_WARN, "Error occurred while converting"
+			" valuename to encoding %s.  Error message: %s",
+			regfi_encoding_int2str(output_encoding), 
+			strerror(-tmp_size));
+      talloc_free(vk->valuename);
+      vk->valuename = NULL;
+    }
+  }
+}
+
 
 /******************************************************************************
  ******************************************************************************/
@@ -984,8 +1031,7 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32_t offset,
 			       REGFI_ENCODING output_encoding, bool strict)
 {
   REGFI_VK_REC* ret_val = NULL;
-  int32_t max_size, tmp_size;
-  REGFI_ENCODING from_encoding;
+  int32_t max_size;
 
   max_size = regfi_calc_maxsize(file, offset);
   if(max_size < 0)
@@ -995,48 +1041,7 @@ REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32_t offset,
   if(ret_val == NULL)
     return NULL;
 
-  /* XXX: Registry value names are supposedly limited to 16383 characters 
-   *      according to:
-   *      http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
-   *      Might want to emit a warning if this is exceeded.  
-   *      It is expected that "characters" could be variable width.
-   *      Also, it may be useful to use this information to limit false positives
-   *      when recovering deleted VK records.
-   */
-
-  from_encoding = (ret_val->flags & REGFI_VK_FLAG_ASCIINAME)
-    ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
-
-  if(from_encoding == output_encoding)
-  {
-    ret_val->valuename_raw = talloc_realloc(ret_val, ret_val->valuename_raw,
-					    uint8_t, ret_val->name_length+1);
-    ret_val->valuename_raw[ret_val->name_length] = '\0';
-    ret_val->valuename = (char*)ret_val->valuename_raw;
-  }
-  else
-  {
-    ret_val->valuename = talloc_array(ret_val, char, ret_val->name_length+1);
-    if(ret_val->valuename == NULL)
-    {
-      regfi_free_value(ret_val);
-      return NULL;
-    }
-
-    tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
-				  regfi_encoding_int2str(output_encoding),
-				  ret_val->valuename_raw, ret_val->valuename,
-				  ret_val->name_length, ret_val->name_length+1);
-    if(tmp_size < 0)
-    {
-      regfi_add_message(file, REGFI_MSG_WARN, "Error occurred while converting"
-			" valuename to encoding %s.  Error message: %s",
-			regfi_encoding_int2str(output_encoding), 
-			strerror(-tmp_size));
-      talloc_free(ret_val->valuename);
-      ret_val->valuename = NULL;
-    }
-  }
+  regfi_interpret_valuename(file, ret_val, output_encoding, strict);
 
   return ret_val;
 }
@@ -1068,30 +1073,9 @@ REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32_t offset,
 }
 
 
-
-/******************************************************************************
- *
- ******************************************************************************/
-REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset, 
+void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK_REC* nk, 
 			     REGFI_ENCODING output_encoding, bool strict)
 {
-  REGFI_NK_REC* nk;
-  uint32_t off;
-  int32_t max_size, tmp_size;
-  REGFI_ENCODING from_encoding;
-
-  max_size = regfi_calc_maxsize(file, offset);
-  if (max_size < 0) 
-    return NULL;
-
-  /* get the initial nk record */
-  if((nk = regfi_parse_nk(file, offset, max_size, true)) == NULL)
-  {
-    regfi_add_message(file, REGFI_MSG_ERROR, "Could not load NK record at"
-		      " offset 0x%.8X.", offset);
-    return NULL;
-  }
-
   /* XXX: Registry key names are supposedly limited to 255 characters according to:
    *      http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
    *      Might want to emit a warning if this is exceeded.  
@@ -1099,9 +1083,10 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
    *      Also, it may be useful to use this information to limit false positives
    *      when recovering deleted NK records.
    */
-  from_encoding = (nk->flags & REGFI_NK_FLAG_ASCIINAME) 
+  int32_t tmp_size;
+  REGFI_ENCODING from_encoding = (nk->flags & REGFI_NK_FLAG_ASCIINAME) 
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
-
+  
   if(from_encoding == output_encoding)
   {
     nk->keyname_raw = talloc_realloc(nk, nk->keyname_raw, uint8_t, nk->name_length+1);
@@ -1114,7 +1099,7 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
     if(nk->keyname == NULL)
     {
       regfi_free_key(nk);
-      return NULL;
+      return;
     }
 
     tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
@@ -1131,7 +1116,32 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
       nk->keyname = NULL;
     }
   }
+}
 
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset, 
+			     REGFI_ENCODING output_encoding, bool strict)
+{
+  REGFI_NK_REC* nk;
+  uint32_t off;
+  int32_t max_size;
+
+  max_size = regfi_calc_maxsize(file, offset);
+  if (max_size < 0) 
+    return NULL;
+
+  /* get the initial nk record */
+  if((nk = regfi_parse_nk(file, offset, max_size, true)) == NULL)
+  {
+    regfi_add_message(file, REGFI_MSG_ERROR, "Could not load NK record at"
+		      " offset 0x%.8X.", offset);
+    return NULL;
+  }
+
+  regfi_interpret_keyname(file, nk, output_encoding, strict);
 
   /* get value list */
   if(nk->num_values && (nk->values_off!=REGFI_OFFSET_NONE)) 

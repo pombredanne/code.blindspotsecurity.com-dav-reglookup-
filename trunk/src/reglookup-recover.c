@@ -78,7 +78,10 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
   tmp_time_s = gmtime(tmp_time);
   strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
 
-  quoted_name = quote_string(nk->keyname, key_special_chars);
+  /* XXX: Add command line option to choose output encoding */
+  regfi_interpret_keyname(f, nk, REGFI_ENCODING_ASCII, true);
+
+  quoted_name = get_quoted_keyname(nk);
   if (quoted_name == NULL)
   {
     quoted_name = malloc(1*sizeof(char));
@@ -103,7 +106,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
 }
 
 
-void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
+void printValue(REGFI_FILE* f, REGFI_VK_REC* vk, const char* prefix)
 {
   char* quoted_value = NULL;
   char* quoted_name = NULL;
@@ -111,7 +114,10 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
   char* conv_error = NULL;
   const char* str_type = NULL;
 
-  quoted_name = quote_string(vk->valuename, key_special_chars);
+  /* XXX: Add command line option to choose output encoding */
+  regfi_interpret_valuename(f, vk, REGFI_ENCODING_ASCII, true);
+  
+  quoted_name = get_quoted_valuename(vk);
   if (quoted_name == NULL)
   { /* Value names are NULL when we're looking at the "(default)" value.
      * Currently we just return a 0-length string to try an eliminate 
@@ -119,11 +125,11 @@ void printValue(REGFI_FILE* f, const REGFI_VK_REC* vk, const char* prefix)
      * in the output allows one to differentiate between the parent key and
      * this value.
      */
-    quoted_name = malloc(1*sizeof(char));
+    quoted_name = strdup("");
     if(quoted_name == NULL)
       bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Could not allocate sufficient memory.\n");
-    quoted_name[0] = '\0';
   }
+
   /* XXX: Add command line option to choose output encoding */
   if(vk->data != NULL 
      && !regfi_interpret_data(f, REGFI_ENCODING_ASCII, vk->type, vk->data))
@@ -277,9 +283,13 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
 	
 	path_element = talloc(path_stack, REGFI_BUFFER);
 	if(path_element != NULL)
-	  path_element->buf = (uint8_t*)quote_string(cur_ancestor->keyname, 
-						   key_special_chars);
+	{
+	  /* XXX: Add command line option to choose output encoding */
+	  regfi_interpret_keyname(f, cur_ancestor, REGFI_ENCODING_ASCII, true);
 	  
+	  path_element->buf = (uint8_t*)get_quoted_keyname(cur_ancestor);
+	}
+ 
 	if(path_element == NULL || path_element->buf == NULL 
 	   || !void_stack_push(path_stack, path_element))
 	{
@@ -928,7 +938,10 @@ int main(int argc, char** argv)
     printKey(f, tmp_key, parent_paths[i]);
     if(tmp_key->num_values > 0 && tmp_key->values != NULL)
     {
-      tmp_name = quote_string(tmp_key->keyname, key_special_chars);
+      /* XXX: Add command line option to choose output encoding */
+      regfi_interpret_keyname(f, tmp_key, REGFI_ENCODING_ASCII, true);
+
+      tmp_name = get_quoted_keyname(tmp_key);
       tmp_path = (char*)malloc(strlen(parent_paths[i])+strlen(tmp_name)+2);
       if(tmp_path == NULL)
       {

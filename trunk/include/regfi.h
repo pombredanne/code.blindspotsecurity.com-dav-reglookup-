@@ -1441,4 +1441,10 @@ void                  regfi_unix2nt_time(REGFI_NTTIME* nt, time_t t);
 time_t                regfi_nt2unix_time(const REGFI_NTTIME* nt);
 
 
+void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK_REC* nk, 
+			     REGFI_ENCODING output_encoding, bool strict);
+void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK_REC* vk, 
+			       REGFI_ENCODING output_encoding, bool strict);
+
+
 #endif	/* _REGFI_H */
