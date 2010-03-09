@@ -4,8 +4,8 @@ mkdir -p tmp
 TMP_DIR=tmp
 OUTPUT_DIR=tmp
 
-OLD=reglookup
-NEW=../trunk/build/bin/reglookup
+OLD=reglookup-recover
+NEW=../trunk/build/bin/reglookup-recover
 
 
 compareOneFile()
@@ -27,22 +27,15 @@ compareOneFile()
 
 for F in hives/*; do
 {
+
   BNAME=`basename $F`
 
   CASE=basic
   OPTS=''
   compareOneFile
 
-  CASE=security
-  OPTS='-s'
-  compareOneFile
-
-  CASE=type
-  OPTS='-t MULTI_SZ'
-  compareOneFile
-
-  CASE=security+type
-  OPTS='-s -t KEY'
+  CASE=raw
+  OPTS='-r'
   compareOneFile
 } done
 
