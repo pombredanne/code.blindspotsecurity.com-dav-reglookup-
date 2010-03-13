@@ -421,10 +421,31 @@ char* regfi_get_group(WINSEC_DESC *sec_desc)
 }
 
 
+off_t regfi_raw_seek(REGFI_RAW_FILE* self, off_t offset, int whence)
+{
+  return lseek(*(int*)self->state, offset, whence);
+}
+
+ssize_t regfi_raw_read(REGFI_RAW_FILE* self, void* buf, size_t count)
+{
+  return read(*(int*)self->state, buf, count);
+}
+
+
+/*****************************************************************************
+ * Convenience function to wrap up the ugly callback stuff
+ *****************************************************************************/
+off_t regfi_seek(REGFI_RAW_FILE* file_cb, off_t offset, int whence)
+{
+  return file_cb->seek(file_cb, offset, whence);
+}
+
+
 /*****************************************************************************
  * This function is just like read(2), except that it continues to
  * re-try reading from the file descriptor if EINTR or EAGAIN is received.  
- * regfi_read will attempt to read length bytes from fd and write them to buf.
+ * regfi_read will attempt to read length bytes from the file and write them to
+ * buf.
  *
  * On success, 0 is returned.  Upon failure, an errno code is returned.
  *
@@ -432,14 +453,14 @@ char* regfi_get_group(WINSEC_DESC *sec_desc)
  * parameter by reference.  If both the return value and length parameter are 
  * returned as 0, then EOF was encountered immediately
  *****************************************************************************/
-uint32_t regfi_read(int fd, uint8_t* buf, uint32_t* length)
+uint32_t regfi_read(REGFI_RAW_FILE* file_cb, uint8_t* buf, uint32_t* length)
 {
   uint32_t rsize = 0;
   uint32_t rret = 0;
 
   do
   {
-    rret = read(fd, buf + rsize, *length - rsize);
+    rret = file_cb->read(file_cb, buf + rsize, *length - rsize);
     if(rret > 0)
       rsize += rret;
   }while(*length - rsize > 0 
@@ -456,18 +477,18 @@ uint32_t regfi_read(int fd, uint8_t* buf, uint32_t* length)
 /*****************************************************************************
  *
  *****************************************************************************/
-bool regfi_parse_cell(int fd, uint32_t offset, uint8_t* hdr, uint32_t hdr_len,
-		      uint32_t* cell_length, bool* unalloc)
+bool regfi_parse_cell(REGFI_RAW_FILE* file_cb, uint32_t offset, uint8_t* hdr, 
+		      uint32_t hdr_len, uint32_t* cell_length, bool* unalloc)
 {
   uint32_t length;
   int32_t raw_length;
   uint8_t tmp[4];
 
-  if(lseek(fd, offset, SEEK_SET) == -1)
+  if(regfi_seek(file_cb, offset, SEEK_SET) == -1)
     return false;
 
   length = 4;
-  if((regfi_read(fd, tmp, &length) != 0) || length != 4)
+  if((regfi_read(file_cb, tmp, &length) != 0) || length != 4)
     return false;
   raw_length = IVALS(tmp, 0);
 
@@ -488,7 +509,7 @@ bool regfi_parse_cell(int fd, uint32_t offset, uint8_t* hdr, uint32_t hdr_len,
   if(hdr_len > 0)
   {
     length = hdr_len;
-    if((regfi_read(fd, hdr, &length) != 0) || length != hdr_len)
+    if((regfi_read(file_cb, hdr, &length) != 0) || length != hdr_len)
       return false;
   }
 
@@ -633,7 +654,7 @@ REGFI_SUBKEY_LIST* regfi_parse_subkeylist(REGFI_FILE* file, uint32_t offset,
   bool unalloc;
   bool recursive_type;
 
-  if(!regfi_parse_cell(file->fd, offset, buf, REGFI_SUBKEY_LIST_MIN_LEN, 
+  if(!regfi_parse_cell(file->cb, offset, buf, REGFI_SUBKEY_LIST_MIN_LEN,
 		       &cell_length, &unalloc))
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell while "
@@ -703,7 +724,7 @@ REGFI_SUBKEY_LIST* regfi_parse_subkeylist(REGFI_FILE* file, uint32_t offset,
     goto fail;
 
   read_len = length;
-  if(regfi_read(file->fd, elements, &read_len) != 0 || read_len != length)
+  if(regfi_read(file->cb, elements, &read_len) != 0 || read_len!=length)
     goto fail;
 
   if(elem_size == sizeof(uint32_t))
@@ -801,7 +822,7 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32_t offset, uint32_t max_siz
   uint8_t sk_header[REGFI_SK_MIN_LENGTH];
   bool unalloc = false;
 
-  if(!regfi_parse_cell(file->fd, offset, sk_header, REGFI_SK_MIN_LENGTH,
+  if(!regfi_parse_cell(file->cb, offset, sk_header, REGFI_SK_MIN_LENGTH,
 		       &cell_length, &unalloc))
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Could not parse SK record cell"
@@ -867,7 +888,7 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32_t offset, uint32_t max_siz
     goto fail;
 
   length = ret_val->desc_size;
-  if(regfi_read(file->fd, sec_desc_buf, &length) != 0 
+  if(regfi_read(file->cb, sec_desc_buf, &length) != 0 
      || length != ret_val->desc_size)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to read security"
@@ -903,7 +924,7 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
   uint32_t i, cell_length, length, read_len;
   bool unalloc;
 
-  if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
+  if(!regfi_parse_cell(file->cb, offset, NULL, 0, &cell_length, &unalloc))
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to read cell header"
 		      " while parsing value list at offset 0x%.8X.", offset);
@@ -942,7 +963,7 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
   ret_val->num_values = num_values;
 
   length = read_len;
-  if((regfi_read(file->fd, (uint8_t*)ret_val->elements, &length) != 0) 
+  if((regfi_read(file->cb, (uint8_t*)ret_val->elements, &length) != 0) 
      || length != read_len)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to read value pointers"
@@ -1264,7 +1285,7 @@ REGFI_NK_REC* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
 
   while(cur_offset < hbin_end)
   {
-    if(!regfi_parse_cell(file->fd, cur_offset, NULL, 0, &cell_length, &unalloc))
+    if(!regfi_parse_cell(file->cb, cur_offset, NULL, 0, &cell_length, &unalloc))
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell at offset"
 			" 0x%.8X while searching for root key.", cur_offset);
@@ -1288,60 +1309,70 @@ REGFI_NK_REC* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
 }
 
 
-/******************************************************************************
- ******************************************************************************/
-REGFI_FILE* regfi_open(const char* filename)
-{
-  REGFI_FILE* ret_val;
-  int fd;
-
-  /* open an existing file */
-  if ((fd = open(filename, REGFI_OPEN_FLAGS)) == -1)
-  {
-    /* fprintf(stderr, "regfi_open: failure to open %s (%s)\n", filename, strerror(errno));*/
-    return NULL;
-  }
-
-  ret_val = regfi_alloc(fd);
-
-  if(ret_val == NULL)
-    close(fd);
-
-  return ret_val;
-}
-
 
 /******************************************************************************
  ******************************************************************************/
 REGFI_FILE* regfi_alloc(int fd)
 {
-  struct stat sbuf;
+  REGFI_FILE* ret_val;
+  REGFI_RAW_FILE* file_cb = talloc(NULL, REGFI_RAW_FILE);
+  if(file_cb == NULL) 
+    return NULL;
+
+  file_cb->state = (void*)talloc(file_cb, int);
+  if(file_cb->state == NULL)
+    goto fail;
+  *(int*)file_cb->state = fd;
+  
+  file_cb->cur_off = 0;
+  file_cb->size = 0;
+  file_cb->read = &regfi_raw_read;
+  file_cb->seek = &regfi_raw_seek;
+  
+  ret_val = regfi_alloc_cb(file_cb);
+  if(ret_val == NULL)
+    goto fail;
+
+  /* In this case, we want file_cb to be freed when ret_val is */
+  talloc_steal(ret_val, file_cb);
+  return ret_val;
+
+ fail:
+    talloc_free(file_cb);
+    return NULL;
+}
+
+
+
+REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
+{
   REGFI_FILE* rb;
   REGFI_HBIN* hbin = NULL;
-  uint32_t hbin_off, file_length, cache_secret;
+  uint32_t hbin_off, cache_secret;
+  int32_t file_length;
   bool rla;
 
-  /* Determine file length.  Must be at least big enough 
-   * for the header and one hbin. 
+  /* Determine file length.  Must be at least big enough for the header
+   * and one hbin.
    */
-  if (fstat(fd, &sbuf) == -1)
-    return NULL;
-  file_length = sbuf.st_size;
+  file_length = file_cb->seek(file_cb, 0, SEEK_END);
   if(file_length < REGFI_REGF_SIZE+REGFI_HBIN_ALLOC)
     return NULL;
+  file_cb->seek(file_cb, 0, SEEK_SET);
 
   /* Read file header */
-  if ((rb = regfi_parse_regf(fd, true)) == NULL) 
+  if ((rb = regfi_parse_regf(file_cb, true)) == NULL) 
   {
-    /* fprintf(stderr, "regfi_alloc: Failed to read initial REGF block\n"); */
+    /* fprintf(stderr, "regfi_alloc_cb: Failed to read initial REGF block\n");*/
     return NULL;
   }
   rb->file_length = file_length;  
+  rb->cb = file_cb;
 
   rb->hbins = range_list_new();
   if(rb->hbins == NULL)
   {
-    /* fprintf(stderr, "regfi_alloc: Failed to create HBIN list.\n"); */
+    /* fprintf(stderr, "regfi_alloc_cb: Failed to create HBIN list.\n"); */
     talloc_free(rb);
     return NULL;
   }
@@ -1373,25 +1404,6 @@ REGFI_FILE* regfi_alloc(int fd)
 
   /* success */
   return rb;
-}
-
-
-/******************************************************************************
- ******************************************************************************/
-int regfi_close(REGFI_FILE* file)
-{
-  int fd;
-
-  /* nothing to do if there is no open file */
-  if ((file == NULL) || (file->fd == -1))
-    return 0;
-
-  fd = file->fd;
-  file->fd = -1;
-
-  regfi_free(file);
-
-  return close(fd);
 }
 
 
@@ -2182,7 +2194,7 @@ static uint32_t regfi_compute_header_checksum(uint8_t* buffer)
 /*******************************************************************
  * XXX: Add way to return more detailed error information.
  *******************************************************************/
-REGFI_FILE* regfi_parse_regf(int fd, bool strict)
+REGFI_FILE* regfi_parse_regf(REGFI_RAW_FILE* file_cb, bool strict)
 {
   uint8_t file_header[REGFI_REGF_SIZE];
   uint32_t length;
@@ -2192,13 +2204,13 @@ REGFI_FILE* regfi_parse_regf(int fd, bool strict)
   if(ret_val == NULL)
     return NULL;
 
-  ret_val->fd = fd;
   ret_val->sk_cache = NULL;
   ret_val->last_message = NULL;
   ret_val->hbins = NULL;
-  
+
   length = REGFI_REGF_SIZE;
-  if((regfi_read(fd, file_header, &length)) != 0 || length != REGFI_REGF_SIZE)
+  if((regfi_read(file_cb, file_header, &length)) != 0 
+     || length != REGFI_REGF_SIZE)
     goto fail;
   
   ret_val->checksum = IVAL(file_header, 0x1FC);
@@ -2216,6 +2228,7 @@ REGFI_FILE* regfi_parse_regf(int fd, bool strict)
 		      ret_val->magic[0], ret_val->magic[1], 
 		      ret_val->magic[2], ret_val->magic[3]);
   }
+
   ret_val->sequence1 = IVAL(file_header, 0x4);
   ret_val->sequence2 = IVAL(file_header, 0x8);
   ret_val->mtime.low = IVAL(file_header, 0xC);
@@ -2269,7 +2282,7 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32_t offset, bool strict)
   if(offset >= file->file_length)
     return NULL;
 
-  if(lseek(file->fd, offset, SEEK_SET) == -1)
+  if(regfi_seek(file->cb, offset, SEEK_SET) == -1)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Seek failed"
 		      " while parsing hbin at offset 0x%.8X.", offset);
@@ -2277,11 +2290,11 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32_t offset, bool strict)
   }
 
   length = REGFI_HBIN_HEADER_SIZE;
-  if((regfi_read(file->fd, hbin_header, &length) != 0) 
+  if((regfi_read(file->cb, hbin_header, &length) != 0) 
      || length != REGFI_HBIN_HEADER_SIZE)
     return NULL;
 
-  if(lseek(file->fd, offset, SEEK_SET) == -1)
+  if(regfi_seek(file->cb, offset, SEEK_SET) == -1)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Seek failed"
 		      " while parsing hbin at offset 0x%.8X.", offset);
@@ -2340,7 +2353,7 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
   uint32_t length,cell_length;
   bool unalloc = false;
 
-  if(!regfi_parse_cell(file->fd, offset, nk_header, REGFI_NK_MIN_LENGTH,
+  if(!regfi_parse_cell(file->cb, offset, nk_header, REGFI_NK_MIN_LENGTH,
 		       &cell_length, &unalloc))
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell header"
@@ -2398,11 +2411,12 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
    * weed out some false positives during deleted data recovery.
    */
   if(unalloc
-     && ((ret_val->mtime.high < REGFI_MTIME_MIN_HIGH 
-	  && ret_val->mtime.low < REGFI_MTIME_MIN_LOW)
-	 || (ret_val->mtime.high > REGFI_MTIME_MAX_HIGH 
-	     && ret_val->mtime.low > REGFI_MTIME_MAX_LOW)))
+     && (ret_val->mtime.high < REGFI_MTIME_MIN_HIGH 
+	 || ret_val->mtime.high > REGFI_MTIME_MAX_HIGH))
+  {
+    talloc_free(ret_val);
     return NULL;
+  }
 
   ret_val->unknown1 = IVAL(nk_header, 0xC);
   ret_val->parent_off = IVAL(nk_header, 0x10);
@@ -2458,7 +2472,7 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
 
   /* Don't need to seek, should be at the right offset */
   length = ret_val->name_length;
-  if((regfi_read(file->fd, (uint8_t*)ret_val->keyname_raw, &length) != 0)
+  if((regfi_read(file->cb, (uint8_t*)ret_val->keyname_raw, &length) != 0)
      || length != ret_val->name_length)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Failed to read key name"
@@ -2482,7 +2496,7 @@ uint8_t* regfi_parse_classname(REGFI_FILE* file, uint32_t offset,
   if(*name_length > 0 && offset != REGFI_OFFSET_NONE 
      && (offset & 0x00000007) == 0)
   {
-    if(!regfi_parse_cell(file->fd, offset, NULL, 0, &cell_length, &unalloc))
+    if(!regfi_parse_cell(file->cb, offset, NULL, 0, &cell_length, &unalloc))
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell header"
 			" while parsing class name at offset 0x%.8X.", offset);
@@ -2520,7 +2534,7 @@ uint8_t* regfi_parse_classname(REGFI_FILE* file, uint32_t offset,
     if(ret_val != NULL)
     {
       length = *name_length;
-      if((regfi_read(file->fd, ret_val, &length) != 0)
+      if((regfi_read(file->cb, ret_val, &length) != 0)
 	 || length != *name_length)
       {
 	regfi_add_message(file, REGFI_MSG_ERROR, "Could not read class name"
@@ -2545,7 +2559,7 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32_t offset,
   uint32_t raw_data_size, length, cell_length;
   bool unalloc = false;
 
-  if(!regfi_parse_cell(file->fd, offset, vk_header, REGFI_VK_MIN_LENGTH,
+  if(!regfi_parse_cell(file->cb, offset, vk_header, REGFI_VK_MIN_LENGTH,
 		       &cell_length, &unalloc))
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell header"
@@ -2628,7 +2642,7 @@ REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32_t offset,
     }
 
     length = ret_val->name_length;
-    if((regfi_read(file->fd, (uint8_t*)ret_val->valuename_raw, &length) != 0)
+    if((regfi_read(file->cb, (uint8_t*)ret_val->valuename_raw, &length) != 0)
        || length != ret_val->name_length)
     {
       regfi_add_message(file, REGFI_MSG_ERROR, "Could not read value name"
@@ -2696,7 +2710,7 @@ REGFI_BUFFER regfi_load_data(REGFI_FILE* file, uint32_t voffset,
       goto fail;
     }
     
-    if(!regfi_parse_cell(file->fd, offset, NULL, 0,
+    if(!regfi_parse_cell(file->cb, offset, NULL, 0,
 			 &cell_length, &unalloc))
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell while"
@@ -2769,7 +2783,7 @@ REGFI_BUFFER regfi_parse_data(REGFI_FILE* file, uint32_t offset,
   ret_val.buf = NULL;
   ret_val.len = 0;
   
-  if(lseek(file->fd, offset+4, SEEK_SET) == -1)
+  if(regfi_seek(file->cb, offset+4, SEEK_SET) == -1)
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Could not seek while "
 		      "reading data at offset 0x%.8X.", offset);
@@ -2781,7 +2795,7 @@ REGFI_BUFFER regfi_parse_data(REGFI_FILE* file, uint32_t offset,
   ret_val.len = length;
   
   read_length = length;
-  if((regfi_read(file->fd, ret_val.buf, &read_length) != 0)
+  if((regfi_read(file->cb, ret_val.buf, &read_length) != 0)
      || read_length != length)
   {
     regfi_add_message(file, REGFI_MSG_ERROR, "Could not read data block while"
@@ -2847,7 +2861,7 @@ REGFI_BUFFER regfi_parse_big_data_header(REGFI_FILE* file, uint32_t offset,
     goto fail;
   }
 
-  if(!regfi_parse_cell(file->fd, offset, ret_val.buf, REGFI_BIG_DATA_MIN_LENGTH,
+  if(!regfi_parse_cell(file->cb, offset, ret_val.buf, REGFI_BIG_DATA_MIN_LENGTH,
 		       &cell_length, &unalloc))
   {
     regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell while"
@@ -2901,7 +2915,7 @@ uint32_t* regfi_parse_big_data_indirect(REGFI_FILE* file, uint32_t offset,
   if(ret_val == NULL)
     goto fail;
 
-  if(!regfi_parse_cell(file->fd, offset, (uint8_t*)ret_val,
+  if(!regfi_parse_cell(file->cb, offset, (uint8_t*)ret_val,
 		       num_chunks*sizeof(uint32_t),
 		       &indirect_length, &unalloc))
   {
@@ -2956,7 +2970,7 @@ range_list* regfi_parse_big_data_cells(REGFI_FILE* file, uint32_t* offsets,
   for(i=0; i<num_chunks; i++)
   {
     chunk_offset = offsets[i]+REGFI_REGF_SIZE;
-    if(!regfi_parse_cell(file->fd, chunk_offset, NULL, 0,
+    if(!regfi_parse_cell(file->cb, chunk_offset, NULL, 0,
 			 &cell_length, &unalloc))
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not parse cell while"
@@ -3064,7 +3078,7 @@ REGFI_BUFFER regfi_load_big_data(REGFI_FILE* file,
       goto fail;
     }
 
-    if(lseek(file->fd, cell_info->offset+sizeof(uint32_t), SEEK_SET) == -1)
+    if(regfi_seek(file->cb, cell_info->offset+sizeof(uint32_t), SEEK_SET) == -1)
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not seek to chunk while "
 			"constructing big data at offset 0x%.8X "
@@ -3073,7 +3087,7 @@ REGFI_BUFFER regfi_load_big_data(REGFI_FILE* file,
     }
 
     tmp_len = read_length;
-    if(regfi_read(file->fd, ret_val.buf+(data_length-data_left), 
+    if(regfi_read(file->cb, ret_val.buf+(data_length-data_left), 
 		  &read_length) != 0 || (read_length != tmp_len))
     {
       regfi_add_message(file, REGFI_MSG_WARN, "Could not read data chunk while"
@@ -3129,7 +3143,7 @@ range_list* regfi_parse_unalloc_cells(REGFI_FILE* file)
     curr_off = REGFI_HBIN_HEADER_SIZE;
     while(curr_off < hbin->block_size)
     {
-      if(!regfi_parse_cell(file->fd, hbin->file_off+curr_off, NULL, 0,
+      if(!regfi_parse_cell(file->cb, hbin->file_off+curr_off, NULL, 0,
 			   &cell_len, &is_unalloc))
 	break;
       

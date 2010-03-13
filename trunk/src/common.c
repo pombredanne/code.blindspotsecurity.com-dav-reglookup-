@@ -37,6 +37,14 @@ const char* common_special_chars = ",\"\\";
 #define REGLOOKUP_EXIT_NOINPUT 66
 
 
+/* Windows is lame */
+#ifdef O_BINARY
+#define REGLOOKUP_OPEN_FLAGS O_RDONLY|O_BINARY
+#else
+#define REGLOOKUP_OPEN_FLAGS O_RDONLY
+#endif
+
+
 void bailOut(int code, char* message)
 {
   fprintf(stderr, message);
@@ -335,4 +343,34 @@ static char* get_quoted_valuename(const REGFI_VK_REC* vk)
     ret_val = quote_string(vk->valuename, key_special_chars);
 
   return ret_val;
+}
+
+
+int openHive(const char* filename)
+{
+  int ret_val;
+
+  /* open an existing file */
+  if ((ret_val = open(filename, REGLOOKUP_OPEN_FLAGS)) == -1)
+  {
+    fprintf(stderr, "ERROR: Failed to open hive.  Error returned: %s\n", 
+	    strerror(errno));
+    return -1;
+  }
+
+  return ret_val;
+}
+
+
+void formatTime(const REGFI_NTTIME* nttime, char* output)
+{
+  time_t tmp_time[1];
+  struct tm* tmp_time_s = NULL;
+
+  *tmp_time = regfi_nt2unix_time(nttime);
+  tmp_time_s = gmtime(tmp_time);
+  strftime(output, 
+	   (4+1+2+1+2)+1+(2+1+2+1+2)+1, 
+              "%Y-%m-%d %H:%M:%S", 
+	   tmp_time_s);
 }

@@ -295,17 +295,13 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
   char* group = NULL;
   char* sacl = NULL;
   char* dacl = NULL;
+  char mtime[24];
   char* quoted_classname;
-  char mtime[20];
-  time_t tmp_time[1];
-  struct tm* tmp_time_s = NULL;
   const REGFI_SK_REC* sk;
   const REGFI_NK_REC* k = regfi_iterator_cur_key(iter);
   REGFI_CLASSNAME* classname;
 
-  *tmp_time = regfi_nt2unix_time(&k->mtime);
-  tmp_time_s = gmtime(tmp_time);
-  strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
+  formatTime(&k->mtime, mtime);
 
   if(print_security && (sk=regfi_iterator_cur_sk(iter)))
   {
@@ -562,7 +558,7 @@ int main(int argc, char** argv)
 {
   char** path = NULL;
   REGFI_ITERATOR* iter;
-  int retr_path_ret;
+  int retr_path_ret, fd;
   uint32_t argi, arge;
 
   /* Process command line arguments */
@@ -623,11 +619,18 @@ int main(int argc, char** argv)
   if((registry_file = strdup(argv[argi])) == NULL)
     bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
 
-  f = regfi_open(registry_file);
-  if(f == NULL)
+  fd = openHive(registry_file);
+  if(fd < 0)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
     bailOut(REGLOOKUP_EXIT_NOINPUT, "");
+  }
+
+  f = regfi_alloc(fd);
+  if(f == NULL)
+  {
+    close(fd);
+    bailOut(REGLOOKUP_EXIT_NOINPUT, "ERROR: Failed to create REGFI_FILE structure.\n");
   }
 
   if(print_verbose)
@@ -674,7 +677,8 @@ int main(int argc, char** argv)
     printKeyTree(iter);
 
   regfi_iterator_free(iter);
-  regfi_close(f);
+  regfi_free(f);
+  close(fd);
 
   return 0;
 }

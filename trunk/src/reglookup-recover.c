@@ -39,13 +39,13 @@ char* registry_file = NULL;
 #include "common.c"
 
 
-char* getQuotedData(int fd, uint32_t offset, uint32_t length)
+char* getQuotedData(REGFI_RAW_FILE* file_cb, uint32_t offset, uint32_t length)
 {
   uint8_t* buf;
   char* quoted_buf;
   uint32_t len;
 
-  if((lseek(fd, offset, SEEK_SET)) == -1)
+  if((regfi_seek(file_cb, offset, SEEK_SET)) == -1)
     return NULL;
 
   buf = (uint8_t*)malloc(length);
@@ -53,7 +53,7 @@ char* getQuotedData(int fd, uint32_t offset, uint32_t length)
     return NULL;
 
   len = length;
-  if((regfi_read(fd, buf, &length) != 0) || length != len)
+  if((regfi_read(file_cb, buf, &length) != 0) || length != len)
   {
     free(buf);
     return NULL;
@@ -68,16 +68,12 @@ char* getQuotedData(int fd, uint32_t offset, uint32_t length)
 /* XXX: Somewhere in here, need to start looking for and handling classnames */
 void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
 {
-  char mtime[20];
-  time_t tmp_time[1];
-  struct tm* tmp_time_s = NULL;
+  char mtime[24];
   char* quoted_name = NULL;
   char* quoted_raw = "";
 
-  *tmp_time = regfi_nt2unix_time(&nk->mtime);
-  tmp_time_s = gmtime(tmp_time);
-  strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
-
+  formatTime(&nk->mtime, mtime);
+  
   /* XXX: Add command line option to choose output encoding */
   regfi_interpret_keyname(f, nk, REGFI_ENCODING_ASCII, true);
 
@@ -95,7 +91,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
   }
 
   if(print_parsedraw)
-    quoted_raw = getQuotedData(f->fd, nk->offset, nk->cell_size);
+    quoted_raw = getQuotedData(f->cb, nk->offset, nk->cell_size);
 
   printf("%.8X,%.8X,KEY,%s,%s,%s,%d,,,,,,,,%s\n", nk->offset, nk->cell_size,
 	 prefix, quoted_name, mtime, nk->num_values, quoted_raw);
@@ -161,7 +157,7 @@ void printValue(REGFI_FILE* f, REGFI_VK_REC* vk, const char* prefix)
 
 
   if(print_parsedraw)
-    quoted_raw = getQuotedData(f->fd, vk->offset, vk->cell_size);
+    quoted_raw = getQuotedData(f->cb, vk->offset, vk->cell_size);
 
   str_type = regfi_type_val2str(vk->type);
   if(str_type == NULL)
@@ -194,7 +190,7 @@ void printSK(REGFI_FILE* f, REGFI_SK_REC* sk)
   char* dacl = regfi_get_dacl(sk->sec_desc);
 
   if(print_parsedraw)
-    quoted_raw = getQuotedData(f->fd, sk->offset, sk->cell_size);
+    quoted_raw = getQuotedData(f->cb, sk->offset, sk->cell_size);
 
   if(owner == NULL)
     owner = empty_str;
@@ -228,10 +224,10 @@ int printCell(REGFI_FILE* f, uint32_t offset)
   uint32_t cell_length;
   bool unalloc;
 
-  if(!regfi_parse_cell(f->fd, offset, NULL, 0, &cell_length, &unalloc))
+  if(!regfi_parse_cell(f->cb, offset, NULL, 0, &cell_length, &unalloc))
     return 1;
 
-  quoted_buf = getQuotedData(f->fd, offset, cell_length);
+  quoted_buf = getQuotedData(f->cb, offset, cell_length);
   if(quoted_buf == NULL)
     return 2;
 
@@ -489,7 +485,7 @@ int extractDataCells(REGFI_FILE* file,
       {
 	max_size = regfi_calc_maxsize(file, offset);
 	if(max_size >= 0 
-	   && regfi_parse_cell(file->fd, offset, NULL, 0,
+	   && regfi_parse_cell(file->cb, offset, NULL, 0,
 			       &cell_length, &unalloc)
 	   && (cell_length & 0x00000007) == 0
 	   && cell_length <= max_size)
@@ -788,7 +784,8 @@ int main(int argc, char** argv)
   REGFI_NK_REC* tmp_key;
   REGFI_VK_REC* tmp_value;
   uint32_t argi, arge, i, j, ret, num_unalloc_keys;
-  
+  int fd;
+
   /* Process command line arguments */
   if(argc < 2)
   {
@@ -825,12 +822,20 @@ int main(int argc, char** argv)
   if((registry_file = strdup(argv[argi])) == NULL)
     bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
 
-  f = regfi_open(registry_file);
-  if(f == NULL)
+  fd = openHive(registry_file);
+  if(fd < 0)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
     bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
+
+  f = regfi_alloc(fd);
+  if(f == NULL)
+  {
+    close(fd);
+    bailOut(REGLOOKUP_EXIT_NOINPUT, "ERROR: Failed to create REGFI_FILE structure.\n");
+  }
+
   if(print_verbose)
     regfi_set_message_mask(f, REGFI_MSG_ERROR|REGFI_MSG_WARN|REGFI_MSG_INFO);
   else
@@ -989,6 +994,9 @@ int main(int argc, char** argv)
   range_list_free(unalloc_linked_values);
   range_list_free(unalloc_values);
   range_list_free(unalloc_sks);
+
+  regfi_free(f);
+  close(fd);
 
   return 0;
 }
