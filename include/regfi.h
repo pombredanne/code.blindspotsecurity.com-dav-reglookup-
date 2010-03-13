@@ -93,13 +93,6 @@ typedef uint8_t REGFI_ENCODING;
 
 #define REGFI_NUM_ENCODINGS    3
 
-/* Windows is lame */
-#ifdef O_BINARY
-#define REGFI_OPEN_FLAGS O_RDONLY|O_BINARY
-#else
-#define REGFI_OPEN_FLAGS O_RDONLY
-#endif
-
 /* Registry data types */
 #define REG_NONE                       0
 #define REG_SZ		               1
@@ -161,12 +154,11 @@ typedef uint8_t REGFI_ENCODING;
  */
  /* Minimum time is Jan 1, 1990 00:00:00 */
 #define REGFI_MTIME_MIN_HIGH       0x01B41E6D
-#define REGFI_MTIME_MIN_LOW        0x26F98000
+
  /* Maximum time is Jan 1, 2290 00:00:00
   * (We hope no one is using Windows by then...) 
   */
 #define REGFI_MTIME_MAX_HIGH       0x03047543
-#define REGFI_MTIME_MAX_LOW        0xC80A4000
 
 
 /* Flags for the vk records */
@@ -648,6 +640,16 @@ typedef struct
 } REGFI_NK_REC;
 
 
+typedef struct _regfi_raw_file
+{
+  off_t    (* seek)(); /* (REGFI_RAW_FILE* self, off_t offset, int whence) */
+  ssize_t  (* read)(); /* (REGFI_RAW_FILE* self, void* buf, size_t count) */
+
+  uint64_t cur_off;
+  uint64_t size;
+  void*    state;
+} REGFI_RAW_FILE;
+
 
 /** Registry hive file data structure
  *
@@ -664,12 +666,12 @@ typedef struct
  *
  * @ingroup regfiBase
  */ 
-typedef struct 
+typedef struct _regfi_file
 {
   /* Run-time information */
   /************************/
-  /* file descriptor */
-  int fd;
+  /* Functions for accessing the file */
+  REGFI_RAW_FILE* cb;
 
   /* For sanity checking (not part of the registry header) */
   uint32_t file_length;
@@ -797,19 +799,6 @@ typedef struct _regfi_buffer
  */
 /******************************************************************************/
 
-/** Attempts to open a registry hive and allocate related data structures.
- * 
- * @param filename A string containing the relative or absolute path of the
- *               registry hive to be opened.
- *
- * @return A reference to a newly allocated REGFI_FILE structure, 
- *         if successful;  NULL on error.
- *
- * @ingroup regfiBase
- */
-REGFI_FILE*           regfi_open(const char* filename);
-
-
 /** Parses file headers of an already open registry hive file and 
  *  allocates related structures for further parsing.
  *
@@ -823,16 +812,19 @@ REGFI_FILE*           regfi_open(const char* filename);
 REGFI_FILE*           regfi_alloc(int fd);
 
 
-/** Closes and frees an open registry hive.
+/** Parses file headers returned by supplied callback functions.
  *
- * @param file The registry structure to close.
+ * This interface is useful if you have a registry hive in memory
+ * or have some other reason to emulate a real file.
  *
- * @return 0 on success, -1 on failure with errno set.  
- *         errno codes are similar to those of close(2).
+ * @param file_cb A structure defining the callback functions needed to access the file. 
+ *
+ * @return A reference to a newly allocated REGFI_FILE structure, if successful;
+ *         NULL on error.
  *
  * @ingroup regfiBase
  */
-int                   regfi_close(REGFI_FILE* file);
+REGFI_FILE*           regfi_alloc_cb(REGFI_RAW_FILE* file_cb);
 
 
 /** Frees a hive's data structures without closing the underlying file.
@@ -1297,7 +1289,7 @@ const REGFI_HBIN*     regfi_lookup_hbin(REGFI_FILE* file, uint32_t offset);
  */
 /******************************************************************************/
 
-REGFI_FILE*           regfi_parse_regf(int fd, bool strict);
+REGFI_FILE*           regfi_parse_regf(REGFI_RAW_FILE* file_cb, bool strict);
 REGFI_HBIN*           regfi_parse_hbin(REGFI_FILE* file, uint32_t offset, 
 				       bool strict);
 
@@ -1366,7 +1358,7 @@ range_list*           regfi_parse_unalloc_cells(REGFI_FILE* file);
  *
  * @ingroup regfiParseLayer
  */
-bool                  regfi_parse_cell(int fd, uint32_t offset, 
+bool                  regfi_parse_cell(REGFI_RAW_FILE* file_cb, uint32_t offset,
 				       uint8_t* hdr, uint32_t hdr_len,
 				       uint32_t* cell_length, bool* unalloc);
 
@@ -1409,7 +1401,15 @@ REGFI_BUFFER          regfi_parse_little_data(REGFI_FILE* file, uint32_t voffset
 REGFI_NK_REC*         regfi_rootkey(REGFI_FILE* file, 
 				    REGFI_ENCODING output_encoding);
 void                  regfi_subkeylist_free(REGFI_SUBKEY_LIST* list);
-uint32_t              regfi_read(int fd, uint8_t* buf, uint32_t* length);
+
+off_t                 regfi_raw_seek(REGFI_RAW_FILE* self, 
+				     off_t offset, int whence);
+ssize_t               regfi_raw_read(REGFI_RAW_FILE* self, 
+				     void* buf, size_t count);
+off_t                 regfi_seek(REGFI_RAW_FILE* file_cb, 
+				 off_t offset, int whence);
+uint32_t              regfi_read(REGFI_RAW_FILE* file_cb, 
+				 uint8_t* buf, uint32_t* length);
 
 const char*           regfi_type_val2str(unsigned int val);
 int                   regfi_type_str2val(const char* str);
