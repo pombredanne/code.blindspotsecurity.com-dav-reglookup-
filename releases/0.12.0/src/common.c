@@ -28,7 +28,7 @@ const char* key_special_chars = ",\"\\/";
 const char* subfield_special_chars = ",\"\\|";
 const char* common_special_chars = ",\"\\";
 
-#define REGLOOKUP_VERSION "0.12.0"
+#define REGLOOKUP_VERSION "0.12.1-unreleased"
 
 #define REGLOOKUP_EXIT_OK       0
 #define REGLOOKUP_EXIT_OSERR   71

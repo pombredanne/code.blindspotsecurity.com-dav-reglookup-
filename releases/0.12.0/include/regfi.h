@@ -161,12 +161,11 @@ typedef uint8_t REGFI_ENCODING;
  */
  /* Minimum time is Jan 1, 1990 00:00:00 */
 #define REGFI_MTIME_MIN_HIGH       0x01B41E6D
-#define REGFI_MTIME_MIN_LOW        0x26F98000
+
  /* Maximum time is Jan 1, 2290 00:00:00
   * (We hope no one is using Windows by then...) 
   */
 #define REGFI_MTIME_MAX_HIGH       0x03047543
-#define REGFI_MTIME_MAX_LOW        0xC80A4000
 
 
 /* Flags for the vk records */

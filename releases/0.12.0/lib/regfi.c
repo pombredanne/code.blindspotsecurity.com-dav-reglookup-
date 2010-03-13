@@ -2398,11 +2398,12 @@ REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
    * weed out some false positives during deleted data recovery.
    */
   if(unalloc
-     && ((ret_val->mtime.high < REGFI_MTIME_MIN_HIGH 
-	  && ret_val->mtime.low < REGFI_MTIME_MIN_LOW)
-	 || (ret_val->mtime.high > REGFI_MTIME_MAX_HIGH 
-	     && ret_val->mtime.low > REGFI_MTIME_MAX_LOW)))
+     && (ret_val->mtime.high < REGFI_MTIME_MIN_HIGH 
+	 || ret_val->mtime.high > REGFI_MTIME_MAX_HIGH))
+  {
+    talloc_free(ret_val);
     return NULL;
+  }
 
   ret_val->unknown1 = IVAL(nk_header, 0xC);
   ret_val->parent_off = IVAL(nk_header, 0x10);
