@@ -13,7 +13,7 @@ CC=gcc
 OPTS=-std=gnu99 -pedantic -Wall -ggdb
 #OPTS=-std=gnu99 -pedantic -Wall
 INC:=-I$(PWD)/include -I/usr/local/include 
-LIB=-L/usr/local/lib -lm
+LIB=-L/usr/local/lib -lm -lpthread
 BIN_EXT=
 EXTRA_OBJ=
 

@@ -68,6 +68,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <iconv.h>
+#include <pthread.h>
 
 #include "byteorder.h"
 #include "talloc.h"
@@ -673,14 +674,25 @@ typedef struct _regfi_file
   /* Functions for accessing the file */
   REGFI_RAW_FILE* cb;
 
+  /* Mutex for all cb access.  This is done to prevent one thread from moving
+   * the file offset while another thread is in the middle of a multi-read
+   * parsing transaction */
+  pthread_mutex_t* cb_lock;
+
   /* For sanity checking (not part of the registry header) */
   uint32_t file_length;
 
   /* Metadata about hbins */
   range_list* hbins;
 
+  /* Multiple read access allowed, write access is exclusive */
+  pthread_rwlock_t* hbins_lock;
+
   /* SK record cached since they're repeatedly reused */
   lru_cache* sk_cache;
+
+  /* Need exclusive access for LRUs, since lookups make changes */
+  pthread_mutex_t* sk_lock;
 
   /* Error/warning/info messages returned by lower layer functions */
   char* last_message;
