@@ -34,7 +34,7 @@ bool print_security = false;
 bool print_header = true;
 bool print_leftover = false;
 bool print_parsedraw = false;
-char* registry_file = NULL;
+const char* registry_file = NULL;
 
 #include "common.c"
 
@@ -817,10 +817,7 @@ int main(int argc, char** argv)
       bailOut(REGLOOKUP_EXIT_USAGE, "");
     }
   }
-  /*test_offset = strtol(argv[argi++], NULL, 16);*/
-
-  if((registry_file = strdup(argv[argi])) == NULL)
-    bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
+  registry_file = argv[argi];
 
   fd = openHive(registry_file);
   if(fd < 0)

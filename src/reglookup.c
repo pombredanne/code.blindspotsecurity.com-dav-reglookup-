@@ -39,7 +39,7 @@ bool path_filter_enabled = false;
 bool type_filter_enabled = false;
 char* path_filter = NULL;
 int type_filter;
-char* registry_file = NULL;
+const char* registry_file = NULL;
 
 /* Other globals */
 REGFI_FILE* f;
@@ -616,8 +616,7 @@ int main(int argc, char** argv)
       bailOut(REGLOOKUP_EXIT_USAGE, "");
     }
   }
-  if((registry_file = strdup(argv[argi])) == NULL)
-    bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
+  registry_file = argv[argi];
 
   fd = openHive(registry_file);
   if(fd < 0)
