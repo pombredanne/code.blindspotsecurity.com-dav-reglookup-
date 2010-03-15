@@ -1288,7 +1288,7 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 	  return NULL;
 	}
       }
-      talloc_reference(nk, nk->values);
+      talloc_steal(nk, nk->values);
     }
   }
 
@@ -1318,7 +1318,7 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 			  " while parsing NK record at offset 0x%.8X.", offset);
 	nk->num_subkeys = 0;
       }
-      talloc_reference(nk, nk->subkeys);
+      talloc_steal(nk, nk->subkeys);
     }
   }
 
@@ -1441,7 +1441,7 @@ REGFI_FILE* regfi_alloc(int fd)
     goto fail;
 
   /* In this case, we want file_cb to be freed when ret_val is */
-  talloc_reference(ret_val, file_cb);
+  talloc_steal(ret_val, file_cb);
   return ret_val;
 
  fail:
@@ -1494,7 +1494,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
   rb->hbins = range_list_new();
   if(rb->hbins == NULL)
     goto fail;
-  talloc_reference(rb, rb->hbins);
+  talloc_steal(rb, rb->hbins);
 
   rla = true;
   hbin_off = REGFI_REGF_SIZE;
@@ -1503,7 +1503,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
   {
     rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
     if(rla)
-      talloc_reference(rb->hbins, hbin);
+      talloc_steal(rb->hbins, hbin);
 
     hbin_off = hbin->file_off + hbin->block_size;
     hbin = regfi_parse_hbin(rb, hbin_off, true);
@@ -1654,6 +1654,8 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file,
     talloc_free(ret_val);
     return NULL;
   }
+  ret_val->cur_key = root;
+  talloc_steal(ret_val, root);
 
   ret_val->key_positions = void_stack_new(REGFI_MAX_DEPTH);
   if(ret_val->key_positions == NULL)
@@ -1661,10 +1663,9 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file,
     talloc_free(ret_val);
     return NULL;
   }
-  talloc_reference(ret_val, ret_val->key_positions);
+  talloc_steal(ret_val, ret_val->key_positions);
 
   ret_val->f = file;
-  ret_val->cur_key = root;
   ret_val->cur_subkey = 0;
   ret_val->cur_value = 0;
   ret_val->string_encoding = output_encoding;
@@ -1709,7 +1710,7 @@ bool regfi_iterator_down(REGFI_ITERATOR* i)
     regfi_free_key(subkey);
     return false;
   }
-  talloc_reference(i, subkey);
+  talloc_steal(i, subkey);
 
   i->cur_key = subkey;
   i->cur_subkey = 0;
@@ -1994,7 +1995,7 @@ REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
 
   ret_val->raw = raw;
   ret_val->size = parse_length;
-  talloc_reference(ret_val, raw);
+  talloc_steal(ret_val, raw);
 
   interpreted = talloc_array(NULL, char, parse_length);
 
@@ -2014,7 +2015,7 @@ REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
   {
     interpreted = talloc_realloc(NULL, interpreted, char, conv_size);
     ret_val->interpreted = interpreted;
-    talloc_reference(ret_val, interpreted);
+    talloc_steal(ret_val, interpreted);
   }
 
   return ret_val;
@@ -2094,7 +2095,7 @@ REGFI_DATA* regfi_buffer_to_data(REGFI_BUFFER raw_data)
   if(ret_val == NULL)
     return NULL;
   
-  talloc_reference(ret_val, raw_data.buf);
+  talloc_steal(ret_val, raw_data.buf);
   ret_val->raw = raw_data.buf;
   ret_val->size = raw_data.len;
   ret_val->interpreted_size = 0;
@@ -2149,7 +2150,7 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
     tmp_str = talloc_realloc(NULL, tmp_str, uint8_t, tmp_size);
     data->interpreted.string = tmp_str;
     data->interpreted_size = tmp_size;
-    talloc_reference(data, tmp_str);
+    talloc_steal(data, tmp_str);
     break;
 
   case REG_DWORD:
@@ -2234,8 +2235,8 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
     data->interpreted.multiple_string = tmp_array;
     /* XXX: how meaningful is this?  should we store number of strings instead? */
     data->interpreted_size = tmp_size;
-    talloc_reference(tmp_array, tmp_str);
-    talloc_reference(data, tmp_array);
+    talloc_steal(tmp_array, tmp_str);
+    talloc_steal(data, tmp_array);
     break;
 
   /* XXX: Dont know how to interpret these yet, just treat as binary */
@@ -2418,7 +2419,7 @@ REGFI_FILE* regfi_parse_regf(REGFI_RAW_FILE* file_cb, bool strict)
  ******************************************************************************/
 REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32_t offset, bool strict)
 {
-  REGFI_HBIN *hbin;
+  REGFI_HBIN* hbin = NULL;
   uint8_t hbin_header[REGFI_HBIN_HEADER_SIZE];
   uint32_t length;
   
