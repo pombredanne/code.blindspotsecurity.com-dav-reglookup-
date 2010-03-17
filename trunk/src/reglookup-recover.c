@@ -826,17 +826,17 @@ int main(int argc, char** argv)
     bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
 
+  if(print_verbose)
+    regfi_log_start(REGFI_LOG_ERROR|REGFI_LOG_WARN|REGFI_LOG_INFO);
+  else
+    regfi_log_start(REGFI_LOG_ERROR);
+
   f = regfi_alloc(fd);
   if(f == NULL)
   {
     close(fd);
     bailOut(REGLOOKUP_EXIT_NOINPUT, "ERROR: Failed to create REGFI_FILE structure.\n");
   }
-
-  if(print_verbose)
-    regfi_set_message_mask(f, REGFI_MSG_ERROR|REGFI_MSG_WARN|REGFI_MSG_INFO);
-  else
-    regfi_set_message_mask(f, REGFI_MSG_ERROR);
 
   if(print_header)
     printf("OFFSET,REC_LENGTH,REC_TYPE,PATH,NAME,"
@@ -993,6 +993,7 @@ int main(int argc, char** argv)
   range_list_free(unalloc_sks);
 
   regfi_free(f);
+  regfi_log_stop();
   close(fd);
 
   return 0;

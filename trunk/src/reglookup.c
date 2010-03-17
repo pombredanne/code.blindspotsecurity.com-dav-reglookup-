@@ -618,13 +618,18 @@ int main(int argc, char** argv)
   }
   registry_file = argv[argi];
 
+  if(print_verbose)
+    regfi_log_start(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
+  else
+    regfi_log_start(REGFI_LOG_ERROR|REGFI_LOG_WARN);
+
   fd = openHive(registry_file);
   if(fd < 0)
   {
     fprintf(stderr, "ERROR: Couldn't open registry file: %s\n", registry_file);
     bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
-
+    
   f = regfi_alloc(fd);
   if(f == NULL)
   {
@@ -632,8 +637,6 @@ int main(int argc, char** argv)
     bailOut(REGLOOKUP_EXIT_NOINPUT, "ERROR: Failed to create REGFI_FILE structure.\n");
   }
 
-  if(print_verbose)
-    regfi_set_message_mask(f, REGFI_MSG_INFO|REGFI_MSG_WARN|REGFI_MSG_ERROR);
 
   /* XXX: add command line option to choose output encoding */
   iter = regfi_iterator_new(f, REGFI_ENCODING_ASCII);
@@ -677,6 +680,7 @@ int main(int argc, char** argv)
 
   regfi_iterator_free(iter);
   regfi_free(f);
+  regfi_log_stop();
   close(fd);
 
   return 0;
