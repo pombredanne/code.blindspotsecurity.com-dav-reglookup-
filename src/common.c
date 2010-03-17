@@ -28,7 +28,7 @@ const char* key_special_chars = ",\"\\/";
 const char* subfield_special_chars = ",\"\\|";
 const char* common_special_chars = ",\"\\";
 
-#define REGLOOKUP_VERSION "0.12.0"
+#define REGLOOKUP_VERSION "0.1?.0"
 
 #define REGLOOKUP_EXIT_OK       0
 #define REGLOOKUP_EXIT_OSERR   71
@@ -48,12 +48,13 @@ const char* common_special_chars = ",\"\\";
 void bailOut(int code, char* message)
 {
   fprintf(stderr, message);
+  regfi_log_stop();
   exit(code);
 }
 
-void printMsgs(REGFI_FILE* f)
+void printMsgs()
 {
-  char* msgs = regfi_get_messages(f);
+  char* msgs = regfi_log_get_str();
   if(msgs != NULL)
   {
     fprintf(stderr, "%s", msgs);
@@ -61,9 +62,9 @@ void printMsgs(REGFI_FILE* f)
   }
 }
 
-void clearMsgs(REGFI_FILE* f)
+void clearMsgs()
 {
-  char* msgs = regfi_get_messages(f);
+  char* msgs = regfi_log_get_str();
   if(msgs != NULL)
     free(msgs);
 }
