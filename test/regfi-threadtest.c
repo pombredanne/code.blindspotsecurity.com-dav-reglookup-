@@ -32,7 +32,7 @@
 
 /* Globals, influenced by command line parameters */
 bool print_verbose = false;
-char* registry_file = NULL;
+const char* registry_file = NULL;
 
 /* Other globals */
 REGFI_FILE* f;
@@ -182,9 +182,9 @@ int main(int argc, char** argv)
     fprintf(stderr, "ERROR: Unrecognized option: %s\n", argv[argi]);
     bailOut(REGLOOKUP_EXIT_USAGE, "");
   }
+  registry_file = argv[argi];
 
-  if((registry_file = strdup(argv[argi])) == NULL)
-    bailOut(REGLOOKUP_EXIT_OSERR, "ERROR: Memory allocation problem.\n");
+  regfi_log_start(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
 
   fd = openHive(registry_file);
   if(fd < 0)
@@ -200,8 +200,6 @@ int main(int argc, char** argv)
     bailOut(REGLOOKUP_EXIT_NOINPUT, "ERROR: Failed to create REGFI_FILE structure.\n");
   }
 
-  regfi_set_message_mask(f, REGFI_MSG_INFO|REGFI_MSG_WARN|REGFI_MSG_ERROR);
-
   threads = malloc(sizeof(pthread_t)*num_threads);
   for(i=0; i<num_threads; i++)
   {
@@ -212,6 +210,7 @@ int main(int argc, char** argv)
     pthread_join(threads[i], NULL);
 
   regfi_free(f);
+  regfi_log_stop();
   close(fd);
 
   return 0;
