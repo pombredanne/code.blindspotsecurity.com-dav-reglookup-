@@ -118,13 +118,15 @@ lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys,
 
   if(max_keys == 0)
     ret_val->num_buckets = 1024;
+  else if(max_keys == 1)
+    ret_val->num_buckets = 1;    
   else
   {
     ret_val->num_buckets = max_keys/lru_cache_floor_log2(max_keys);
     if(ret_val->num_buckets < 1)
       ret_val->num_buckets = 1;
   }
-
+  
   ret_val->table = talloc_array(ret_val, 
 				lru_cache_element*, ret_val->num_buckets);
   if(ret_val->table == NULL)
@@ -176,7 +178,7 @@ bool lru_cache_update(lru_cache* ht, const void* index,
      * so remove it from the list for now.
      */
     if(ht->talloc_data)
-      talloc_free(e->data);
+      talloc_unlink(e, e->data);
 
     if(e->newer == NULL)
       ht->newest = e->older;
@@ -223,7 +225,7 @@ bool lru_cache_update(lru_cache* ht, const void* index,
       e->next = NULL;
 
       if(ht->talloc_data)
-	talloc_free(e->data);
+	talloc_unlink(e, e->data);
 
       tmp_index = talloc_realloc_size(e, e->index, index_len);
       if(tmp_index == NULL)
@@ -260,7 +262,7 @@ bool lru_cache_update(lru_cache* ht, const void* index,
   }
   e->data = data;
   if(ht->talloc_data)
-    talloc_steal(e, e->data);
+    talloc_reference(e, e->data);
 
   /* Finally, let's insert the element to the newest position in the LRU list.*/
   if(ht->newest != NULL)
