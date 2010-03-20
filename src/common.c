@@ -162,7 +162,7 @@ static char* quote_string(const char* str, const char* special)
  * is the responsibility of the caller to free both a non-NULL return
  * value, and a non-NULL (*error_msg).
  */
-static char* data_to_ascii(REGFI_DATA* data, char** error_msg)
+static char* data_to_ascii(const REGFI_DATA* data, char** error_msg)
 {
   char* ret_val;
   char* cur_quoted;

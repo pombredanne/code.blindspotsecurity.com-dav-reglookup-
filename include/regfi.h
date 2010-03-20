@@ -77,15 +77,15 @@
 #include "range_list.h"
 #include "lru_cache.h"
 
+
+/******************************************************************************/
+/* Constants for use while interacting with the library                       */
 /******************************************************************************/
 
 /* regfi library error message types */
 #define REGFI_LOG_INFO  0x0001
 #define REGFI_LOG_WARN  0x0004
 #define REGFI_LOG_ERROR 0x0010
-
-/* For internal use */
-pthread_key_t REGFI_LOG_KEY;
 
 typedef uint8_t REGFI_ENCODING;
 /* regfi library supported character encodings */
@@ -118,6 +118,14 @@ typedef uint8_t REGFI_ENCODING;
 #define REGFI_OFFSET_NONE          0xffffffff
 
 
+
+/******************************************************************************/
+/* Various resource limits and related constants                              */
+/******************************************************************************/
+
+/* Flags determining whether or not to cache various record types internally */
+#define REGFI_CACHE_SK             0
+
 /* This maximum depth is described here:
  * http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
  */
@@ -131,6 +139,13 @@ typedef uint8_t REGFI_ENCODING;
  */
 #define REGFI_MAX_SUBKEY_DEPTH     255
 
+
+/******************************************************************************/
+/* Symbols for internal use                                                   */
+/******************************************************************************/
+
+/* Global thread-local storage key */
+pthread_key_t REGFI_LOG_KEY;
 
 /* Header sizes and magic number lengths for various records */
 #define REGFI_HBIN_ALLOC           0x1000 /* Minimum allocation unit for HBINs */
@@ -234,6 +249,12 @@ typedef uint8_t REGFI_ENCODING;
 		    : ~ (time_t) 0 << (sizeof (time_t) * CHAR_BIT - 1))
 #define TIME_T_MAX (~ (time_t) 0 - TIME_T_MIN)
 #define TIME_FIXUP_CONSTANT (369.0*365.25*24*60*60-(3.0*24*60*60+6.0*60*60))
+
+
+
+/******************************************************************************/
+/* Structures                                                                 */
+/******************************************************************************/
 
 typedef struct _regfi_nttime
 {
@@ -824,7 +845,7 @@ typedef struct _regfi_buffer
  * @param fd A file descriptor of an already open file.  Must be seekable.
  *
  * @return A reference to a newly allocated REGFI_FILE structure, if successful;
- *         NULL on error.
+ *         NULL on error.  Use regfi_free to free the returned REGFI_FILE.
  *
  * @ingroup regfiBase
  */
@@ -839,7 +860,7 @@ REGFI_FILE*           regfi_alloc(int fd);
  * @param file_cb A structure defining the callback functions needed to access the file. 
  *
  * @return A reference to a newly allocated REGFI_FILE structure, if successful;
- *         NULL on error.
+ *         NULL on error.  Use regfi_free to free the returned REGFI_FILE.
  *
  * @ingroup regfiBase
  */
@@ -908,23 +929,19 @@ void regfi_log_stop();
 
 /* Dispose of previously parsed records */
 
-/** Frees a key structure previously returned by one of the API functions
+/** Frees a record previously returned by one of the API functions.
  *
- * XXX: finish documenting
+ * Can be used to free REGFI_NK_REC, REGFI_VK_REC, REGFI_SK_REC, REGFI_DATA, and
+ * REGFI_CLASSNAME records.
  *
- * @ingroup regfiBase
- */
-void                  regfi_free_key(REGFI_NK_REC* nk);
-
-
-/** Frees a value structure previously returned by one of the API functions
- *
- * XXX: finish documenting
+ * @note The "const" in the data type is a bit misleading and is there just for
+ * convenience.  Since records returned previously must not be modified by users
+ * of the API due to internal caching, these are returned as const, so this
+ * function is const to make passing back in easy.
  *
  * @ingroup regfiBase
  */
-void                  regfi_free_value(REGFI_VK_REC* vk);
-
+void regfi_free_record(const void* record);
 
 
 /******************************************************************************/
@@ -1037,7 +1054,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
  *
  * @ingroup regfiIteratorLayer
  */
-const REGFI_NK_REC*   regfi_iterator_cur_key(REGFI_ITERATOR* i);
+const REGFI_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i);
 
 
 /** Returns the SK (security) record referenced by the current key.
@@ -1048,7 +1065,7 @@ const REGFI_NK_REC*   regfi_iterator_cur_key(REGFI_ITERATOR* i);
  *
  * @ingroup regfiIteratorLayer
  */
-const REGFI_SK_REC*   regfi_iterator_cur_sk(REGFI_ITERATOR* i);
+const REGFI_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i);
 
 
 /** Sets the internal subkey index to the first subkey referenced by the current
@@ -1059,11 +1076,11 @@ const REGFI_SK_REC*   regfi_iterator_cur_sk(REGFI_ITERATOR* i);
  * @return A newly allocated key structure for the newly referenced first 
  *         subkey, or NULL on failure.  Failure may be due to a lack of any
  *         subkeys or other errors.  Newly allocated keys must be freed with
- *         regfi_free_key.
+ *         regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_NK_REC*         regfi_iterator_first_subkey(REGFI_ITERATOR* i);
+const REGFI_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 
 
 /** Returns the currently indexed subkey.
@@ -1072,11 +1089,11 @@ REGFI_NK_REC*         regfi_iterator_first_subkey(REGFI_ITERATOR* i);
  *
  * @return A newly allocated key structure for the currently referenced subkey,
  *         or NULL on failure.  Newly allocated keys must be freed with 
- *         regfi_free_key.
+ *         regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_NK_REC*         regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
+const REGFI_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
 
 
 /** Increments the internal subkey index to the next key in the subkey-list and
@@ -1085,11 +1102,11 @@ REGFI_NK_REC*         regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
  * @param i the iterator
  *
  * @return A newly allocated key structure for the next subkey or NULL on
- *         failure.  Newly allocated keys must be freed with regfi_free_key.
+ *         failure.  Newly allocated keys must be freed with regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_NK_REC*         regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+const REGFI_NK_REC* regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
 
 /** Searches for a subkey with a given name under the current key.
@@ -1103,8 +1120,8 @@ REGFI_NK_REC*         regfi_iterator_next_subkey(REGFI_ITERATOR* i);
  *
  * @ingroup regfiIteratorLayer
  */
-bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i, 
-						 const char* subkey_name);
+bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name);
+
 
 /** Sets the internal value index to the first value referenced by the current
  *  key and returns that value.
@@ -1114,11 +1131,11 @@ bool                  regfi_iterator_find_subkey(REGFI_ITERATOR* i,
  * @return  A newly allocated value structure for the newly referenced first
  *          value, or NULL on failure.  Failure may be due to a lack of any
  *          values or other errors.  Newly allocated keys must be freed with
- *          regfi_free_value.
+ *          regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_VK_REC*         regfi_iterator_first_value(REGFI_ITERATOR* i);
+const REGFI_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i);
 
 
 /** Returns the currently indexed value.
@@ -1127,11 +1144,11 @@ REGFI_VK_REC*         regfi_iterator_first_value(REGFI_ITERATOR* i);
  *
  * @return A newly allocated value structure for the currently referenced value,
  *         or NULL on failure.  Newly allocated values must be freed with 
- *         regfi_free_value.
+ *         regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_VK_REC*         regfi_iterator_cur_value(REGFI_ITERATOR* i);
+const REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i);
 
 
 /** Increments the internal value index to the next value in the value-list and
@@ -1140,11 +1157,11 @@ REGFI_VK_REC*         regfi_iterator_cur_value(REGFI_ITERATOR* i);
  * @param i the iterator
  *
  * @return  A newly allocated key structure for the next value or NULL on 
- *          failure.  Newly allocated keys must be freed with regfi_free_value.
+ *          failure.  Newly allocated keys must be freed with regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_VK_REC*         regfi_iterator_next_value(REGFI_ITERATOR* i);
+const REGFI_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i);
 
 
 /** Searches for a value with a given name under the current key.
@@ -1167,12 +1184,12 @@ bool                  regfi_iterator_find_value(REGFI_ITERATOR* i,
  * @param key the key whose classname is desired
  *
  * @return Returns a newly allocated classname structure, or NULL on failure.
- *         Classname structures must be freed with regfi_free_classname.
+ *         Classname structures must be freed with regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_CLASSNAME*      regfi_iterator_fetch_classname(REGFI_ITERATOR* i, 
-						     const REGFI_NK_REC* key);
+const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i, 
+						      const REGFI_NK_REC* key);
 
 
 /** Retrieves data for a given value.
@@ -1181,12 +1198,12 @@ REGFI_CLASSNAME*      regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
  * @param value the value whose data is desired
  *
  * @return Returns a newly allocated data structure, or NULL on failure.
- *         Data structures must be freed with regfi_free_data.
+ *         Data structures must be freed with regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
-REGFI_DATA*           regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
-						const REGFI_VK_REC* value);
+const REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i,
+					    const REGFI_VK_REC* value);
 
 
 
@@ -1275,23 +1292,6 @@ bool                  regfi_interpret_data(REGFI_FILE* file,
 					   REGFI_ENCODING string_encoding,
 					   uint32_t type, REGFI_DATA* data);
 
-
-/** Frees the memory associated with a REGFI_CLASSNAME data structure.
- *
- * XXX: finish documenting
- *
- * @ingroup regfiGlueLayer
- */
-void                  regfi_free_classname(REGFI_CLASSNAME* classname);
-
-
-/** Frees the memory associated with a REGFI_DATA data structure.
- *
- * XXX: finish documenting
- *
- * @ingroup regfiGlueLayer
- */
-void                  regfi_free_data(REGFI_DATA* data);
 
 
 /* These are cached so return values don't need to be freed. */
@@ -1433,7 +1433,6 @@ REGFI_BUFFER          regfi_parse_little_data(REGFI_FILE* file, uint32_t voffset
 /******************************************************************************/
 REGFI_NK_REC*         regfi_rootkey(REGFI_FILE* file, 
 				    REGFI_ENCODING output_encoding);
-void                  regfi_subkeylist_free(REGFI_SUBKEY_LIST* list);
 
 off_t                 regfi_raw_seek(REGFI_RAW_FILE* self, 
 				     off_t offset, int whence);
