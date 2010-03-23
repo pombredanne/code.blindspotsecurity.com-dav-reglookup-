@@ -48,13 +48,13 @@ REGFI_FILE* f;
 
 void traverseValueList(REGFI_ITERATOR* iter)
 {
-  REGFI_VK_REC* value;
+  const REGFI_VK_REC* value;
 
   value = regfi_iterator_first_value(iter);
   while(value != NULL)
   {
     printMsgs(iter->f);
-    regfi_free_value(value);
+    regfi_free_record(value);
     value = regfi_iterator_next_value(iter);
   }
 }
@@ -64,7 +64,7 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
 {
   const REGFI_NK_REC* root = NULL;
   const REGFI_NK_REC* cur = NULL;
-  REGFI_NK_REC* sub = NULL;
+  const REGFI_NK_REC* sub = NULL;
   const REGFI_SK_REC* sk;
   bool print_this = true;
 
@@ -115,7 +115,7 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
 
       cur = regfi_iterator_cur_key(iter);
       printMsgs(iter->f);
-      regfi_free_key(sub);
+      regfi_free_record(sub);
 
       sub = regfi_iterator_first_subkey(iter);
       printMsgs(iter->f);
@@ -130,10 +130,12 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
 
 
 int num_iterations;
-void threadLoop(void* file)
+void* threadLoop(void* file)
 {
   REGFI_ITERATOR* iter;
   int i;
+
+  regfi_log_set_mask(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
 
   iter = regfi_iterator_new((REGFI_FILE*)f, REGFI_ENCODING_ASCII);
   if(iter == NULL)
@@ -149,6 +151,8 @@ void threadLoop(void* file)
   }
 
   regfi_iterator_free(iter);
+
+  return NULL;
 }
 
 
@@ -184,7 +188,7 @@ int main(int argc, char** argv)
   }
   registry_file = argv[argi];
 
-  regfi_log_start(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
+  regfi_log_set_mask(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
 
   fd = openHive(registry_file);
   if(fd < 0)
@@ -210,7 +214,6 @@ int main(int argc, char** argv)
     pthread_join(threads[i], NULL);
 
   regfi_free(f);
-  regfi_log_stop();
   close(fd);
 
   return 0;

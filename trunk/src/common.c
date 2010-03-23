@@ -48,7 +48,6 @@ const char* common_special_chars = ",\"\\";
 void bailOut(int code, char* message)
 {
   fprintf(stderr, message);
-  regfi_log_stop();
   exit(code);
 }
 

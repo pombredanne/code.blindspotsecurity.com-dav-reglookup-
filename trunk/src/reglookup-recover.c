@@ -827,9 +827,9 @@ int main(int argc, char** argv)
   }
 
   if(print_verbose)
-    regfi_log_start(REGFI_LOG_ERROR|REGFI_LOG_WARN|REGFI_LOG_INFO);
+    regfi_log_set_mask(REGFI_LOG_ERROR|REGFI_LOG_WARN|REGFI_LOG_INFO);
   else
-    regfi_log_start(REGFI_LOG_ERROR);
+    regfi_log_set_mask(REGFI_LOG_ERROR);
 
   f = regfi_alloc(fd);
   if(f == NULL)
@@ -993,7 +993,6 @@ int main(int argc, char** argv)
   range_list_free(unalloc_sks);
 
   regfi_free(f);
-  regfi_log_stop();
   close(fd);
 
   return 0;

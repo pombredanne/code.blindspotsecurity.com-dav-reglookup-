@@ -623,9 +623,7 @@ int main(int argc, char** argv)
   registry_file = argv[argi];
 
   if(print_verbose)
-    regfi_log_start(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
-  else
-    regfi_log_start(REGFI_LOG_ERROR|REGFI_LOG_WARN);
+    regfi_log_set_mask(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
 
   fd = openHive(registry_file);
   if(fd < 0)
@@ -684,7 +682,6 @@ int main(int argc, char** argv)
 
   regfi_iterator_free(iter);
   regfi_free(f);
-  regfi_log_stop();
   close(fd);
 
   return 0;
