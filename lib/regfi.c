@@ -44,35 +44,61 @@ const char* regfi_encoding_names[] =
   {"US-ASCII//TRANSLIT", "UTF-8//TRANSLIT", "UTF-16LE//TRANSLIT"};
 
 
+/* Ensures regfi_init runs only once */
+static pthread_once_t regfi_init_once = PTHREAD_ONCE_INIT;
+
+
 
 /******************************************************************************
  ******************************************************************************/
-void regfi_log_start(uint16_t msg_mask)
+void regfi_log_free(void* ptr)
 {
+  REGFI_LOG* log_info = (REGFI_LOG*)ptr;
+  
+  if(log_info->messages != NULL)
+    free(log_info->messages);
+
+  talloc_free(log_info);
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+void regfi_init()
+{
+  int err;
+  if((err = pthread_key_create(&regfi_log_key, regfi_log_free)) != 0)
+    fprintf(stderr, "ERROR: key_create: %s\n", strerror(err));
+  errno = err;
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+REGFI_LOG* regfi_log_new()
+{
+  int err;
   REGFI_LOG* log_info = talloc(NULL, REGFI_LOG);
   if(log_info == NULL)
-    return;
+    return NULL;
 
-  log_info->msg_mask = msg_mask;
+  log_info->msg_mask = REGFI_DEFAULT_LOG_MASK;
   log_info->messages = NULL;
 
-  /* XXX: Should we bother with a destructor here? */
-  if(pthread_key_create(&REGFI_LOG_KEY, NULL) != 0)
+  pthread_once(&regfi_init_once, regfi_init);
+
+  if((err = pthread_setspecific(regfi_log_key, log_info)) != 0)
   {
-    fprintf(stderr, "ERROR: key_create\n");
+    fprintf(stderr, "ERROR: setspecific: %s\n", strerror(err));
     goto fail;
   }
 
-  if(pthread_setspecific(REGFI_LOG_KEY, log_info) != 0)
-  {
-    fprintf(stderr, "ERROR: setspecific\n");
-    goto fail;
-  }
-
-  return;
+  return log_info;
 
  fail:
   talloc_free(log_info);
+  errno = err;
+  return NULL;
 }
 
 
@@ -92,8 +118,11 @@ void regfi_log_add(uint16_t msg_type, const char* fmt, ...)
   REGFI_LOG* log_info;
   va_list args;
 
-  log_info = (REGFI_LOG*)pthread_getspecific(REGFI_LOG_KEY);
-  if(log_info == NULL || (log_info->msg_mask & msg_type) == 0)
+  log_info = (REGFI_LOG*)pthread_getspecific(regfi_log_key);
+  if(log_info == NULL && (log_info = regfi_log_new()) == NULL)
+    return;
+
+  if((log_info->msg_mask & msg_type) == 0)
     return;
 
   if(log_info->messages == NULL)
@@ -137,10 +166,10 @@ void regfi_log_add(uint16_t msg_type, const char* fmt, ...)
 char* regfi_log_get_str()
 {
   char* ret_val;
-  REGFI_LOG* log_info = (REGFI_LOG*)pthread_getspecific(REGFI_LOG_KEY);
-  if(log_info == NULL)
+  REGFI_LOG* log_info = (REGFI_LOG*)pthread_getspecific(regfi_log_key);
+  if(log_info == NULL && (log_info = regfi_log_new()) == NULL)
     return NULL;
-
+  
   ret_val = log_info->messages;
   log_info->messages = NULL;
 
@@ -150,29 +179,16 @@ char* regfi_log_get_str()
 
 /******************************************************************************
  ******************************************************************************/
-void regfi_log_set_mask(uint16_t msg_mask)
+bool regfi_log_set_mask(uint16_t msg_mask)
 {
-  REGFI_LOG* log_info = (REGFI_LOG*)pthread_getspecific(REGFI_LOG_KEY);
-  if(log_info == NULL)
-    return;
+  REGFI_LOG* log_info = (REGFI_LOG*)pthread_getspecific(regfi_log_key);
+  if(log_info == NULL && (log_info = regfi_log_new()) == NULL)
+  {
+      return false;
+  }
 
   log_info->msg_mask = msg_mask;
-}
-
-
-/******************************************************************************
- ******************************************************************************/
-void regfi_log_stop()
-{
-  REGFI_LOG* log_info = (REGFI_LOG*)pthread_getspecific(REGFI_LOG_KEY);
-  if(log_info == NULL)
-    return;
-  
-  if(log_info->messages != NULL)
-    free(log_info->messages);
-
-  pthread_key_delete(REGFI_LOG_KEY);
-  talloc_free(log_info);
+  return true;
 }
 
 
