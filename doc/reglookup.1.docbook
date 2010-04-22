@@ -16,7 +16,7 @@
     <para>
       <command>
 	reglookup [options] <replaceable>registry-file</replaceable>
-      </command> 
+      </command>
     </para>
   </refsect1>
 
@@ -67,7 +67,7 @@
 	    and
 	    <command>
 	      KEY
-	    </command>
+	    </command>.
 	  </para>
         </listitem>
       </varlistentry>
