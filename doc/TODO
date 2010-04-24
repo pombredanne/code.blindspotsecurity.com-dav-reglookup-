@@ -26,6 +26,7 @@ things you could look into:
    project.  I have also now decided that make is painful to use for
    everything.  I'd like to switch to a suite of shell scripts driven by
    minimal make rules.  If you got any ideas on this, shoot them my way.
+   scons?
 
  - Unicode support still needs improvement.  While parsing strings seems
    to be decent, UTF-8 output would be nice.
@@ -37,9 +38,6 @@ things you could look into:
  - Documentation.  The security descriptor output format needs to be
    documented.  Also, function contracts should be added to the
    lower-level functions of regfi.c.
-
- - The smb_deps.h and smb_deps.c content is almost eliminated.  Just need
-   to integrate parts that are being kept into regfi or other modules.
 
  - Consider switching from libiconv to Joachim Metz's libuna for
    increased portability and easier builds.
