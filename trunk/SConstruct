@@ -2,6 +2,7 @@
 cflags = '-std=gnu99 -pedantic -Wall -ggdb'
 
 if False:
+    # XXX: get mingw build working again with pthreads
     libiconv_path='/usr/local/src/libiconv-1.13-mingw32-dev'
     env = Environment(CC='i586-mingw32msvc-cc',
                       CFLAGS=cflags,
@@ -50,8 +51,6 @@ man_reglookup_timeline = env.ManPage('doc/reglookup-timeline.1.docbook')
 
 # Installation
 prefix='/usr/local/'
-
-# XXX: need to install reglookup-timeline
 env.Install(prefix+'bin', [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
 env.Install(prefix+'lib', [libregfi, libregfi_static])
 env.Install(prefix+'man/man1', [man_reglookup, man_reglookup_recover,
