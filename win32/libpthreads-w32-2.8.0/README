@@ -1,0 +1,4 @@
+This directory contains selected files built from sources obtained at:
+  ftp://sourceware.org/pub/pthreads-win32/
+
+Only the minimal files necessary to build reglookup for win32 platforms are included.

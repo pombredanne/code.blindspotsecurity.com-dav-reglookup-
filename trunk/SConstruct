@@ -1,22 +1,6 @@
 #cflags = '-std=gnu99 -pedantic -Wall'
 cflags = '-std=gnu99 -pedantic -Wall -ggdb'
 
-if False:
-    # XXX: get mingw build working again with pthreads
-    libiconv_path='/usr/local/src/libiconv-1.13-mingw32-dev'
-    env = Environment(CC='i586-mingw32msvc-cc',
-                      CFLAGS=cflags,
-                      CPPPATH=['include', '/usr/local/include',
-                               libiconv_path+'/include'],
-                      LIBPATH=['lib', '/usr/local/lib',
-                               libiconv_path+'/lib'],
-                      LIBS=['m', 'pthread', 'regfi'])
-else:
-    env = Environment(CFLAGS=cflags,
-                      CPPPATH=['include', '/usr/local/include'],
-                      LIBPATH=['lib', '/usr/local/lib'],
-                      LIBS=['m', 'pthread', 'regfi'])
-    
 
 lib_src = ['lib/regfi.c',
            'lib/talloc.c',
@@ -25,14 +9,20 @@ lib_src = ['lib/regfi.c',
            'lib/lru_cache.c',
            'lib/void_stack.c']
 
+env = Environment(CFLAGS=cflags,
+                  CPPPATH=['include', '/usr/local/include'],
+                  LIBPATH=['lib', '/usr/local/lib'],
+                  LIBS=['m', 'pthread', 'regfi'])
+    
+
 # Libraries
 libregfi_static = env.Library(lib_src)
 libregfi = env.SharedLibrary(lib_src, LIBS=['m','pthread'])
 
 
 # Executables
-reglookup = env.Program('src/reglookup.c')
-reglookup_recover = env.Program('src/reglookup-recover.c')
+reglookup = env.Program(['src/reglookup.c'])
+reglookup_recover = env.Program(['src/reglookup-recover.c'])
 
 
 # Documentation

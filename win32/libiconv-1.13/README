@@ -1,0 +1,4 @@
+This directory contains selected files from the MinGW port of libiconv as obtained from here:
+  http://sourceforge.net/projects/mingw/files/MinGW%20libiconv/release%201.13/
+
+These files are the minimal needed to link the win32 version of reglookup.
