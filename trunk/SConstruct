@@ -13,7 +13,7 @@ env = Environment(CFLAGS=cflags,
                   CPPPATH=['include', '/usr/local/include'],
                   LIBPATH=['lib', '/usr/local/lib'],
                   LIBS=['m', 'pthread', 'regfi'])
-    
+
 
 # Libraries
 libregfi_static = env.Library(lib_src)
@@ -54,6 +54,9 @@ env.Alias('reglookup', reglookup)
 env.Alias('reglookup-recover', reglookup_recover)
 env.Alias('bin', [reglookup_recover, reglookup])
 env.Alias('doc', [man_reglookup,man_reglookup_recover,man_reglookup_timeline])
-env.Alias('install', [prefix+'bin', prefix+'lib', prefix+'man'])
+env.Alias('install', [prefix+'bin',
+                      prefix+'lib', 
+                      prefix+'include/regfi',
+                      prefix+'man'])
 
 Default('bin', libregfi)
