@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2005-2010 Timothy D. Morgan
+ * Copyright (C) 2010 Michael Cohen
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
@@ -70,12 +71,13 @@
 #include <iconv.h>
 #include <pthread.h>
 
-#include "byteorder.h"
-#include "talloc.h"
-#include "winsec.h"
-#include "void_stack.h"
-#include "range_list.h"
-#include "lru_cache.h"
+/* regfi headers */
+#include <byteorder.h>
+#include <talloc.h>
+#include <winsec.h>
+#include <void_stack.h>
+#include <range_list.h>
+#include <lru_cache.h>
 
 
 
@@ -90,34 +92,35 @@
 #define REGFI_LOG_ERROR 0x0010
 #define REGFI_DEFAULT_LOG_MASK REGFI_LOG_ERROR|REGFI_LOG_WARN
 
-typedef uint8_t REGFI_ENCODING;
 /* regfi library supported character encodings */
-#define REGFI_ENCODING_ASCII   0
-#define REGFI_ENCODING_UTF8    1
-#define REGFI_ENCODING_DEFAULT REGFI_ENCODING_ASCII
 /* UTF16LE is not supported for output */
-#define REGFI_ENCODING_UTF16LE 2
-
-#define REGFI_NUM_ENCODINGS    3
+typedef enum {
+  REGFI_ENCODING_DEFAULT  = 0,
+  REGFI_ENCODING_ASCII =   0,
+  REGFI_ENCODING_UTF8  =  1,
+  REGFI_ENCODING_UTF16LE = 2,
+  REGFI_NUM_ENCODINGS  =  3
+} REGFI_ENCODING;
 
 /* Registry data types */
-#define REG_NONE                       0
-#define REG_SZ		               1
-#define REG_EXPAND_SZ                  2
-#define REG_BINARY 	               3
-#define REG_DWORD	               4
-#define REG_DWORD_LE	               4  /* DWORD, little endian */
-#define REG_DWORD_BE	               5  /* DWORD, big endian */
-#define REG_LINK                       6
-#define REG_MULTI_SZ  	               7
-#define REG_RESOURCE_LIST              8
-#define REG_FULL_RESOURCE_DESCRIPTOR   9
-#define REG_RESOURCE_REQUIREMENTS_LIST 10
-#define REG_QWORD                      11 /* 64-bit little endian */
+typedef enum {
+  REG_NONE                   =    0,
+  REG_SZ		     =    1,
+  REG_EXPAND_SZ              =    2,
+  REG_BINARY 	             =    3,
+  REG_DWORD	             =    4,
+  REG_DWORD_LE	             =    4 , /* DWORD, little endian */
+  REG_DWORD_BE	             =    5 , /* DWORD, big endian */
+  REG_LINK                   =    6,
+  REG_MULTI_SZ  	     =    7,
+  REG_RESOURCE_LIST          =    8,
+  REG_FULL_RESOURCE_DESCRIPTOR=   9,
+  REG_RESOURCE_REQUIREMENTS_LIST= 10,
+  REG_QWORD                     = 11, /* 64-bit little endian */
 /* XXX: Has MS defined a REG_QWORD_BE? */
 /* Not a real type in the registry */
-#define REG_KEY                    0x7FFFFFFF
-
+  REG_KEY                 =   0x7FFFFFFF
+} REGFI_DATA_TYPE;
 #define REGFI_OFFSET_NONE          0xffffffff
 
 
@@ -247,7 +250,10 @@ pthread_key_t regfi_log_key;
                                     | REGFI_NK_FLAG_UNKNOWN3)
 
 
+#ifndef CHAR_BIT
 #define CHAR_BIT 8
+#endif
+
 #define TIME_T_MIN ((time_t)0 < (time_t) -1 ? (time_t) 0 \
 		    : ~ (time_t) 0 << (sizeof (time_t) * CHAR_BIT - 1))
 #define TIME_T_MAX (~ (time_t) 0 - TIME_T_MIN)
@@ -384,7 +390,7 @@ typedef struct _regfi_classname
 typedef struct _regfi_data
 {
   /** Data type of this data, as indicated by the referencing VK record. */
-  uint32_t type;
+  REGFI_DATA_TYPE type;
 
   /** Length of the raw data. */
   uint32_t size;
@@ -525,7 +531,7 @@ typedef struct
   uint32_t data_off;
 
   /** Value's data type */
-  uint32_t type;
+  REGFI_DATA_TYPE type;
 
   /** VK record's magic number (should be "vk") */
   uint8_t  magic[REGFI_CELL_MAGIC_SIZE];

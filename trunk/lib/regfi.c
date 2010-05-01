@@ -2208,7 +2208,7 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
     if(tmp_size < 0)
     {
       regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
-		    " converting data of type %d to %s.  Error message: %s",
+		    " converting data of type %d to %d.  Error message: %s",
 		    type, string_encoding, strerror(-tmp_size));
       talloc_free(tmp_str);
       data->interpreted.string = NULL;
