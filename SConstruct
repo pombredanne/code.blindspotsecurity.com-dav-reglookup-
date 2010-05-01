@@ -43,6 +43,7 @@ man_reglookup_timeline = env.ManPage('doc/reglookup-timeline.1.docbook')
 prefix='/usr/local/'
 env.Install(prefix+'bin', [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
 env.Install(prefix+'lib', [libregfi, libregfi_static])
+env.Install(prefix+'include/regfi', Glob('include/*.h'))
 env.Install(prefix+'man/man1', [man_reglookup, man_reglookup_recover,
                                 man_reglookup_timeline])
 
