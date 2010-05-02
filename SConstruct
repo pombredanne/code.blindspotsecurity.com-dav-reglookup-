@@ -3,6 +3,7 @@ cflags = '-std=gnu99 -pedantic -Wall'
 libiconv_path='win32/libiconv/'
 libpthreads_path='win32/libpthreads/'
 libpthread_name='pthreadGC2'
+libtalloc_path='win32/libtalloc/'
 
 source_targets=('reglookup-trunk.tar.gz',)
 win32_targets=('reglookup-trunk-win32.zip',)
@@ -28,7 +29,7 @@ mv .release/%s.tar.gz . && rm -rf .release
 win32_cmds='''
 rm -rf .release && mkdir -p .release/%s
 cp %s/src/*.exe .release/%s
-cp win32/libiconv/bin/*.dll win32/libpthreads/bin/*.dll .release/%s
+cp win32/libiconv/bin/*.dll win32/libpthreads/bin/*.dll win32/libtalloc/bin/*.dll .release/%s
 cd .release && zip -r %s.zip %s
 mv .release/%s.zip . && rm -rf .release
 '''
@@ -53,16 +54,17 @@ def generate_cmds(source, target, env, for_signature):
             env['CFLAGS']=cflags
             env['CPPPATH']=[input_prefix+'include', 
                             libiconv_path+'include',
-                            libpthreads_path+'include']
+                            libpthreads_path+'include',
+                            libtalloc_path+'include']
             env['LIBPATH']=[input_prefix+'lib',
                             libiconv_path+'lib',
-                            libpthreads_path+'lib']
-            env['LIBS']=['m', libpthread_name, 'iconv', 'regfi']
+                            libpthreads_path+'lib',
+                            libtalloc_path+'lib']
+            env['LIBS']=['m', libpthread_name, 'iconv', 'regfi', 'talloc']
 
             
             # Libraries
             lib_src = [input_prefix+'lib/regfi.c',
-                       input_prefix+'lib/talloc.c',
                        input_prefix+'lib/winsec.c',
                        input_prefix+'lib/range_list.c',
                        input_prefix+'lib/lru_cache.c',
@@ -71,7 +73,8 @@ def generate_cmds(source, target, env, for_signature):
 
             extra_obj=['%s/lib/lib%s.a' % (libpthreads_path, libpthread_name),
                        libiconv_path+'/lib/libiconv.dll.a',
-                       input_prefix+'lib/libregfi.a']
+                       libtalloc_path+'/lib/libtalloc.dll.a',
+                       input_prefix+'lib/libregfi.a',]
 
             # Executables
             reglookup = env.Program(input_prefix+'src/reglookup.exe',
@@ -99,10 +102,7 @@ env = Environment()
 env['BUILDERS']['Release'] = release_builder
 
 
-for target in source_targets:
-    env.Release(target, Dir(version2input(target2version(target))))
-
-for target in win32_targets:
+for target in COMMAND_LINE_TARGETS:
     env.Release(target, Dir(version2input(target2version(target))))
 
 

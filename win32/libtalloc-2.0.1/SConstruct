@@ -1,0 +1,13 @@
+
+env = Environment()
+env['platform']='cygwin'
+env['CC']='i586-mingw32msvc-gcc'
+env['CFLAGS']='-D__CLEANUP_C -O3 -finline-functions -DHAVE_CONFIG_H -Wall'
+env['CPPPATH']=['include']
+
+talloc_o = env.Object('src/talloc.c')
+
+env.Command(['src/libtalloc.o'], 'src/talloc.o',
+            'i586-mingw32msvc-dlltool --export-all-symbols --dllname libtalloc.dll -e $TARGET -l lib/libtalloc.dll.a $SOURCE')
+env.Command('bin/libtalloc.dll', ['src/talloc.o','src/libtalloc.o'],
+            'i586-mingw32msvc-gcc --shared -o $TARGET $SOURCE')

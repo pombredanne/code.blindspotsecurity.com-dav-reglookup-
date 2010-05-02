@@ -3,7 +3,6 @@ cflags = '-std=gnu99 -pedantic -Wall -ggdb'
 
 
 lib_src = ['lib/regfi.c',
-           'lib/talloc.c',
            'lib/winsec.c',
            'lib/range_list.c',
            'lib/lru_cache.c',
@@ -12,7 +11,7 @@ lib_src = ['lib/regfi.c',
 env = Environment(CFLAGS=cflags,
                   CPPPATH=['include', '/usr/local/include'],
                   LIBPATH=['lib', '/usr/local/lib'],
-                  LIBS=['m', 'pthread', 'regfi'])
+                  LIBS=['m', 'pthread', 'regfi', 'talloc'])
 
 
 # Libraries

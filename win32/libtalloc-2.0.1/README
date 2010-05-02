@@ -1,0 +1,5 @@
+This library is based on talloc version 2.0.1 obtained from:
+  http://samba.org/ftp/talloc/talloc-2.0.1.tar.gz
+
+A few changes were made to the source to rip out unnecessary
+dependencies on libreplace and to accommodate MinGW cross-compiling.
