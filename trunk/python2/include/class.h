@@ -189,7 +189,7 @@ extern "C" {
 #define max(X, Y)  ((X) > (Y) ? (X) : (Y))
 
 
-#include "talloc.h"
+#include <talloc.h>
 
 #define CLASS(class,super_class)                                 \
   typedef struct class ## _t *class;                             \
@@ -249,7 +249,7 @@ extern "C" {
 #define SET_DOCSTRING(string)			\
   ((Object)self)->__doc__ = string
 
-#define END_VIRTUAL return 1; };
+#define END_VIRTUAL return 1; }
 
 #define VMETHOD(method)				\
   (self)->method
@@ -365,7 +365,7 @@ struct Object_t {
 #define CLASSOF(obj)				\
   ((Object)obj)->__class__
 
-inline void Object_init(Object);
+void Object_init(Object);
 
 extern struct Object_t __Object;
 

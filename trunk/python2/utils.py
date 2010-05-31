@@ -288,8 +288,7 @@ class ExtendedEnvironment(SCons.Environment.Environment):
             shlib_suffix = distutils.util.split_quoted(
                 sysconfig.get_config_var('SO'))
             shlib_post_action = None
-            cppflags = distutils.util.split_quoted(
-                "-I"+sysconfig.get_python_inc())
+            cppflags = distutils.util.split_quoted(self.python_cppflags)
             shlink_flags = str(self['LINKFLAGS']).split()
 
         install_dest = distutils.util.split_quoted(

@@ -3,7 +3,7 @@
 import sys
 import pyregfi
 
-files = sys.argv
+files = sys.argv[1:]
 
 
 def iter_values(iter):
@@ -27,6 +27,6 @@ def walk_tree(iter):
 
 for f in files:
     rf = pyregfi.RegistryFile(f)
-    iter = r.get_key()
+    iter = rf.get_key()
     print walk_tree(iter)
     

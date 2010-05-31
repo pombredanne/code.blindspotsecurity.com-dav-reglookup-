@@ -32,10 +32,10 @@
 // Noone should instantiate Object directly. this should be already
 // allocated therefore:
 
-inline void Object_init(Object this) {
+void Object_init(Object this) {
   this->__class__ = &__Object;
   this->__super__ = NULL;
-};
+}
 
 struct Object_t __Object = {
   .__class__ = &__Object,
@@ -55,9 +55,9 @@ int issubclass(Object obj, Object class) {
     if(obj == &__Object || obj==NULL) 
       return 0;
   };
-};
+}
 
 void unimplemented(Object self) {
   printf("%s contains unimplemented functions.. is it an abstract class?\n", NAMEOF(self));
   abort();
-};
+}
