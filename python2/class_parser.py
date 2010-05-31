@@ -19,6 +19,7 @@ class Module:
         self.constants = set()
         self.classes = {}
         self.headers = '#include <Python.h>\n'
+
         self.files = []
 
     def __str__(self):
@@ -40,7 +41,7 @@ class Module:
     init_string = ''
     def initialization(self):
         result = self.init_string + """
-talloc_set_log_fn((void *)printf);
+talloc_set_log_fn((void(*)(const char*))printf);
 //talloc_enable_leak_report();
 """
         for cls in self.classes.values():
@@ -118,7 +119,7 @@ Gen_wrapper *new_class_wrapper(Object item) {
    if(!item) {
      Py_INCREF(Py_None);
      return (Gen_wrapper *)Py_None;
-   };
+   }
 
    // Search for subclasses
    for(cls=(Object)item->__class__; cls != cls->__super__; cls=cls->__super__) {
@@ -127,7 +128,8 @@ Gen_wrapper *new_class_wrapper(Object item) {
          PyErr_Clear();
 
          result = (Gen_wrapper *)_PyObject_New(python_wrappers[i].python_type);
-         result->ctx = talloc_asprintf(NULL, "new_class_wrapper %%s@%%p", NAMEOF(item), item);
+         result->ctx = talloc_asprintf(NULL, "new_class_wrapper %%s@%%p",
+                                       NAMEOF(item), (void*)item);
          result->base = (void *)item;
 
          /* If its owned by the null_context it means that the function does
@@ -137,13 +139,13 @@ Gen_wrapper *new_class_wrapper(Object item) {
                   talloc_steal(result->ctx, result->base);
 
          return result;
-       };
-     };
-   };
+       }
+     }
+   }
 
   PyErr_Format(PyExc_RuntimeError, "Unable to find a wrapper for object %%s", NAMEOF(item));
   return NULL;
-};
+}
 
 static PyObject *resolve_exception(char **error_buff) {
   enum _error_type *type = aff4_get_current_error(error_buff);
@@ -159,7 +161,7 @@ case EWarning:
 default:
     return PyExc_RuntimeError;
 };
-};
+}
 
 static int type_check(PyObject *obj, PyTypeObject *type) {
    PyTypeObject *tmp;
@@ -168,10 +170,10 @@ static int type_check(PyObject *obj, PyTypeObject *type) {
    if(obj)
      for(tmp = obj->ob_type; tmp && tmp != &PyBaseObject_Type; tmp = tmp->tp_base) {
        if(tmp == type) return 1;
-     };
+     }
 
   return 0;
-};
+}
 
 static int check_error() {
    if(!CheckError(EZero)) {
@@ -181,9 +183,9 @@ static int check_error() {
          PyErr_Format(exception, "%%s", buffer);
          ClearError();
          return 1;
-   };
+   }
   return 0;
-};
+}
 
 #define CHECK_ERROR if(check_error()) goto error;
 
@@ -375,7 +377,7 @@ class String(Type):
         name = name or self.name
 
         result = """PyErr_Clear();
-   if(!%(name)s) { PyErr_Format(PyExc_RuntimeError, "%(name)s is NULL"); goto error; };
+   if(!%(name)s) { PyErr_Format(PyExc_RuntimeError, "%(name)s is NULL"); goto error; }
    %(result)s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);\nif(!%(result)s) goto error;
 """ % dict(name=name, result=result,length=self.length)
 
@@ -397,7 +399,7 @@ class String(Type):
   %(destination)s = talloc_size(%(context)s, length + 1);
   memcpy(%(destination)s, buff, length);
   %(destination)s[length]=0;
-};
+}
 """ % dict(source = source, destination = destination, context =context)
 
 class ZString(String):
@@ -494,7 +496,7 @@ class Char(Integer):
     PyErr_Clear();
     %(result)s = PyString_FromStringAndSize(str_%(name)s, 1);
 if(!%(result)s) goto error;
-};
+}
 """ % dict(result=result, name = name or self.name)
 
     def definition(self, default = '"\\x0"', **kw):
@@ -512,7 +514,7 @@ if(strlen(str_%(name)s)!=1) {
   PyErr_Format(PyExc_RuntimeError,
           "You must only provide a single character for arg %(name)r");
   goto error;
-};
+}
 
 %(name)s = str_%(name)s[0];
 """ % dict(name = self.name)
@@ -578,7 +580,7 @@ PyString_AsStringAndSize(tmp_%s, &%s, (Py_ssize_t *)&%s);
 
         return  """if(func_return > %(length)s) {
   func_return = 0;
-};
+}
 
 _PyString_Resize(&tmp_%(name)s, func_return); \n%(result)s = tmp_%(name)s;\n""" % \
             dict(name= name, result= result, length=self.length)
@@ -593,7 +595,7 @@ _PyString_Resize(&tmp_%(name)s, func_return); \n%(result)s = tmp_%(name)s;\n""" 
     memcpy(%(name)s,tmp_buff, tmp_len);
     Py_DECREF(%(result)s);
     %(result)s = PyLong_FromLong(tmp_len);
-};
+}
 """ % dict(result = result, name=self.name)
 
 class TDB_DATA_P(Char_and_Length_OUT):
@@ -630,7 +632,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
   PyErr_Clear();
   if(-1==PyString_AsStringAndSize(%(source)s, &buf, &tmp)) {
   goto error;
-};
+}
 
   // Take a copy of the python string
   %(destination)s->dptr = talloc_memdup(%(destination)s, buf, tmp);
@@ -697,10 +699,10 @@ if(%(source)s) {
    if(!PySequence_Check(%(source)s)) {
      PyErr_Format(PyExc_ValueError, "%(destination)s must be a sequence");
      goto error;
-   };
+   }
 
    size = PySequence_Size(%(source)s);
-};
+}
 
 %(destination)s = talloc_zero_array(NULL, char *, size + 1);
 
@@ -711,11 +713,11 @@ for(i=0; i<size;i++) {
  if(!%(destination)s[i]) {
    Py_DECREF(tmp);
    goto error;
- };
+ }
  Py_DECREF(tmp);
-};
+}
 
-};""" % dict(source = source, destination = destination, context = context)
+}""" % dict(source = source, destination = destination, context = context)
 
     def pre_call(self, method):
         return self.from_python_object("py_%s" % self.name, self.name, method)
@@ -734,7 +736,7 @@ class Wrapper(Type):
 if(!type_check(%(source)s, &%(type)s_Type)) {
   PyErr_Format(PyExc_RuntimeError, "function must return an %(type)s instance");
   goto error;
-};
+}
 
 %(destination)s = ((Gen_wrapper *)%(source)s)->base;
 """ % dict(source = source, destination = destination, type = self.type)
@@ -767,7 +769,7 @@ if(!%(name)s || (PyObject *)%(name)s==Py_None) {
      goto error;
 } else {
    call_%(name)s = %(name)s->base;
-};\n""" % self.__dict__
+}\n""" % self.__dict__
 
     def assign(self, call, method, target=None):
         method.error_set = True;
@@ -809,7 +811,7 @@ if(!%(name)s || (PyObject *)%(name)s==Py_None) {
         if "BORROWED" in self.attributes:
             result += "           talloc_reference(%(name)s->ctx, %(name)s->base);\n" % args
 
-        result += """       };
+        result += """       }
     }
 """
         return result
@@ -849,7 +851,7 @@ if(!%(name)s || (PyObject *)%(name)s==Py_None) {
      goto error;
 } else {
    call_%(name)s = (%(type)s *)&%(name)s->base;
-};\n""" % self.__dict__
+}\n""" % self.__dict__
 
 class StructWrapper(Wrapper):
     """ A wrapper for struct classes """
@@ -863,7 +865,7 @@ PyErr_Clear();
 """ % args
 
         if "NULL_OK" in self.attributes:
-            result += "if(!%(name)s->base) { Py_DECREF(%(name)s); return NULL; };" % args
+            result += "if(!%(name)s->base) { Py_DECREF(%(name)s); return NULL; }" % args
 
         result += """
 // A NULL object gets translated to a None
@@ -998,7 +1000,7 @@ class ResultException:
 
     def write(self, out):
         out.write("\n//Handle exceptions\n")
-        out.write("if(%s) {\n    PyErr_Format(PyExc_%s, %s);\n  goto error; \n};\n\n" % (
+        out.write("if(%s) {\n    PyErr_Format(PyExc_%s, %s);\n  goto error; \n}\n\n" % (
                 self.check, self.exception, self.message))
 
 class Method:
@@ -1152,8 +1154,8 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
      if(!method || (void *)unimplemented == (void *)method) {
          PyErr_Format(PyExc_RuntimeError, "%(class_name)s.%(method)s is not implemented");
          goto error;
-     };
-  };
+     }
+  }
 """ % dict(def_class_name = self.definition_class_name, method=self.name,
            class_name = self.class_name))
 
@@ -1207,7 +1209,7 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
             out.write("\n// error conditions:\n")
             out.write("error:\n    " + self.error_condition());
 
-        out.write("\n};\n\n")
+        out.write("\n}\n\n")
 
     def add_arg(self, type, name):
         try:
@@ -1313,7 +1315,7 @@ class SelfIteratorMethod(IteratorMethod):
         out.write("""{
           ((%(class_name)s)self->base)->%(method)s((%(class_name)s)self->base);
           return PyObject_SelfIter((PyObject *)self);
-};
+}
 """ % args)
 
 class ConstructorMethod(Method):
@@ -1334,13 +1336,13 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
         //printf("Unlinking %s@%p\\n", NAMEOF(self->base), self->base);
         talloc_free(self->ctx);
         self->base=NULL;
-    };
+    }
 """
         out.write("""static void
 %(class_name)s_dealloc(py%(class_name)s *self) {
 %(free)s
  PyObject_Del(self);
-};\n
+}\n
 """ % dict(class_name = self.class_name, free=free))
 
     def error_condition(self):
@@ -1378,7 +1380,7 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
   } else if(!self->base) {
     PyErr_Format(PyExc_IOError, "Unable to construct class %s");
     goto error;
-  };
+  }
 """ % (tmp, self.class_name))
 
         out.write("  return 0;\n");
@@ -1387,7 +1389,7 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
         if self.error_set:
             out.write("error:\n    " + self.error_condition());
 
-        out.write("\n};\n\n")
+        out.write("\n}\n\n")
 
 class GetattrMethod(Method):
     def __init__(self, class_name, base_class_name, myclass):
@@ -1462,7 +1464,7 @@ static PyObject *%(name)s(py%(class_name)s *self, PyObject *name);
     for(i=%s_methods; i->ml_name; i++) {
      tmp = PyString_FromString(i->ml_name);
     PyList_Append(result, tmp); Py_DECREF(tmp);
-    }; """ % self.class_name)
+    }""" % self.class_name)
 
         out.write("""
      return result; 
@@ -1503,7 +1505,7 @@ if(!strcmp(name, "%(name)s")) {
     %(python_assign)s
     %(python_obj)s
     return py_result;
-};""" % dict(name = attr.name, python_obj = attr.to_python_object(),
+}""" % dict(name = attr.name, python_obj = attr.to_python_object(),
              python_assign = attr.assign(call, self),
              python_def = attr.definition(sense='out')))
 
@@ -1542,7 +1544,7 @@ class ProxiedGetattr(GetattrMethod):
     for(i=%s_methods; i->ml_name; i++) {
      tmp = PyString_FromString(i->ml_name);
     PyList_Append(result, tmp); Py_DECREF(tmp);
-    }; """ % self.class_name)
+    } """ % self.class_name)
 
         out.write("""
      return result;
@@ -1551,7 +1553,7 @@ class ProxiedGetattr(GetattrMethod):
         out.write(""" /** Just try to get the attribute from our proxied object */  {
    PyObject *result = PyObject_GetAttrString(self->base->proxied, name);
    if(result) return result;
-}; """)
+} """)
 
 class ProxiedMethod(Method):
     def __init__(self, method, myclass):
@@ -1614,7 +1616,7 @@ static %(return_type)s %(name)s(%(definition_class_name)s self""" % dict(
             out.write(arg.to_python_object(result = "py_%s" % arg.name,
                                            sense='proxied', BORROWED=True))
 
-        out.write('if(!((%s)self)->proxied) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto error;\n};\n' % (self.myclass.class_name, self.myclass.class_name))
+        out.write('if(!((%s)self)->proxied) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto error;\n}\n' % (self.myclass.class_name, self.myclass.class_name))
 
         out.write("\n//Now call the method\n")
         out.write("""PyErr_Clear();
@@ -1644,10 +1646,10 @@ if(PyErr_Occurred()) {
       strncpy(error_str, str_c, BUFF_SIZE-1);
       error_str[BUFF_SIZE-1]=0;
       *error_type = ERuntimeError;
-   };
+   }
    Py_DECREF(str);
    goto error;
-};
+}
 
 """);
 
@@ -1657,24 +1659,24 @@ if(PyErr_Occurred()) {
         ## Now convert the python value back to a value
         out.write(self.return_type.from_python_object('py_result',self.return_type.name, self, context = "self"))
 
-        out.write("if(py_result) { Py_DECREF(py_result);};\nPy_DECREF(method_name);\n\n");
+        out.write("if(py_result) { Py_DECREF(py_result);}\nPy_DECREF(method_name);\n\n");
         out.write("PyGILState_Release(gstate);\n")
 
         ## Decref all our python objects:
         for arg in self.args:
-            out.write("if(py_%s) { Py_DECREF(py_%s);};\n" %( arg.name, arg.name))
+            out.write("if(py_%s) { Py_DECREF(py_%s);}\n" %( arg.name, arg.name))
 
         out.write(self.return_type.return_value('func_return'))
         if self.error_set:
             out.write("\nerror:\n")
-            out.write("if(py_result) { Py_DECREF(py_result);};\nPy_DECREF(method_name);\n\n");
+            out.write("if(py_result) { Py_DECREF(py_result);}\nPy_DECREF(method_name);\n\n");
             ## Decref all our python objects:
             for arg in self.args:
-                out.write("if(py_%s) { Py_DECREF(py_%s);};\n" % (arg.name, arg.name))
+                out.write("if(py_%s) { Py_DECREF(py_%s);}\n" % (arg.name, arg.name))
 
             out.write("PyGILState_Release(gstate);\n %s;\n" % self.error_condition())
 
-        out.write("   };\n};\n")
+        out.write("   }\n}\n")
 
     def error_condition(self):
         return self.return_type.error_value
@@ -1687,13 +1689,13 @@ class StructConstructor(ConstructorMethod):
         out.write("""static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObject *kwds) {\n""" % dict(method = self.name, class_name = self.class_name))
         out.write("\nself->ctx = talloc_strdup(NULL, \"%s\");" % self.class_name)
         out.write("\nself->base = talloc(self->ctx, %s);\n" % self.class_name)
-        out.write("  return 0;\n};\n\n")
+        out.write("  return 0;\n}\n\n")
 
     def write_destructor(self, out):
         out.write("""static void
 %(class_name)s_dealloc(py%(class_name)s *self) {
    talloc_free(self->ctx);
-};\n
+}\n
 """ % dict(class_name = self.class_name))
 
 class ProxyConstructor(ConstructorMethod):
@@ -1705,14 +1707,14 @@ class ProxyConstructor(ConstructorMethod):
         //Py_DECREF(self->base->proxied);
         talloc_free(self->ctx);
         self->base = NULL;
-    };
-};\n
+    }
+}\n
 
 static int %(class_name)s_destructor(void *this) {
   py%(class_name)s *self = (py%(class_name)s *)this;
   Py_DECREF(self->base->proxied);
   return 0;
-};
+}
 """ % dict(class_name = self.class_name))
 
     def initialise_attributes(self, out):
@@ -1729,9 +1731,9 @@ static int %(class_name)s_destructor(void *this) {
        %(from_python_object)s;
        ((%(definition_class_name)s)self->base)->%(name)s = tmp;
        Py_DECREF(py_result);
-  };
+  }
   PyErr_Clear();
-};""" % dict(definition = attribute.definition(), name=attribute.name,
+}""" % dict(definition = attribute.definition(), name=attribute.name,
              attribute_name = attribute.__class__.__name__,
              type = attribute.type,
              definition_class_name = definition_class_name,
@@ -1759,7 +1761,7 @@ static int %(class_name)s_destructor(void *this) {
                                            sense = 'proxied',
                                            BORROWED=True))
 
-        out.write('if(!((%s)self)->proxied) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto error;\n};\n' % (self.myclass.class_name, self.myclass.class_name))
+        out.write('if(!((%s)self)->proxied) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto error;\n}\n' % (self.myclass.class_name, self.myclass.class_name))
 
         out.write("""
 // Enlarge the object size to accomodate the extended class
@@ -1781,7 +1783,7 @@ self = talloc_realloc_size(self, self, sizeof(struct %(base_class_name)s_t));
 if(!py_result && PyCallable_Check(this->proxied)) {
    PyErr_Clear();
    py_result = PyObject_CallFunctionObjArgs(((%(name)s)self)->proxied, %(call)s);
-};
+}
 
 /** Check for python errors */
 if(PyErr_Occurred()) {
@@ -1801,10 +1803,10 @@ if(PyErr_Occurred()) {
       strncpy(error_str, str_c, BUFF_SIZE-1);
       error_str[BUFF_SIZE-1]=0;
       *error_type = ERuntimeError;
-   };
+   }
    Py_DECREF(str);
    goto error;
-};
+}
 
 // Take over the proxied object now
 this->proxied = py_result;
@@ -1824,14 +1826,14 @@ this->proxied = py_result;
             out.write(attr.from_python_object("py_result",
                                               "((%s)self)->%s" % (class_name, attr.name),
                                               self))
-            out.write("}\nPy_DECREF(py_result);\n};\n};\n")
+            out.write("}\nPy_DECREF(py_result);\n}\n}\n")
 
         out.write("PyGILState_Release(gstate);\n")
         out.write("\n\nreturn self;\n")
         if self.error_set:
             out.write("error:\n PyGILState_Release(gstate);\ntalloc_free(self); return NULL;\n")
 
-        out.write("};\n\n")
+        out.write("}\n\n")
 
     def write_definition(self, out):
         self.write_constructor_proxy(out)
@@ -1880,7 +1882,7 @@ this->proxied = py_result;
             out.write("""
    if(1 || PyDict_GetItemString(proxied->ob_type->tp_dict, "%(name)s")) {
      ((%(definition_class_name)s)self->base)->%(name)s = py%(class_name)s_%(name)s;
-   };
+   }
 """ % dict(definition_class_name = method.definition_class_name,
            name = method.name,
            class_name = self.myclass.class_name))
@@ -1898,12 +1900,12 @@ this->proxied = py_result;
         if self.error_set:
             out.write("error:\n  PyGILState_Release(gstate);\n  " + self.error_condition());
 
-        out.write("\n};\n\n")
+        out.write("\n}\n\n")
 
 class EmptyConstructor(ConstructorMethod):
     def write_definition(self, out):
         out.write("""static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObject *kwds) {\n""" % dict(method = self.name, class_name = self.class_name))
-        out.write("""return 0;};\n\n""")
+        out.write("""return 0;}\n\n""")
 
 class ClassGenerator:
     docstring = ''
@@ -2034,7 +2036,7 @@ static int
 %(class_name)s_nonzero(py%(class_name)s *v)
 {
         return v->base != 0;
-};
+}
 """ % self.__dict__
 
     def numeric_protocol(self, out):
@@ -2523,7 +2525,7 @@ class EnumConstructor(ConstructorMethod):
 %(class_name)s_dealloc(py%(class_name)s *self) {
  Py_DECREF(self->value);
  PyObject_Del(self);
-};\n
+}\n
 """ % dict(class_name = self.class_name))
     def write_definition(self, out):
         self.myclass.modifier.add("TP_STR")
@@ -2539,7 +2541,7 @@ Py_INCREF(self->value);
   return 0;
 error:
     return -1;
-};
+}
 
 static PyObject *py%(class_name)s___str__(py%(class_name)s *self) {
   PyObject *result = PyDict_GetItem(%(class_name)s_rev_lookup, self->value);
@@ -2548,10 +2550,10 @@ static PyObject *py%(class_name)s___str__(py%(class_name)s *self) {
      Py_INCREF(result);
  } else {
      result = PyObject_Str(self->value);
- };
+ }
 
  return result;
-};
+}
 
 """ % self.__dict__)
 
@@ -2598,7 +2600,7 @@ static PyObject *%(class_name)s_rev_lookup;
 static PyObject *%(class_name)s_int(py%(class_name)s *self) {
     Py_INCREF(self->value);
     return self->value;
-};
+}
 """ % self.__dict__
 
     def initialise(self):
@@ -2647,9 +2649,9 @@ if(%(name)s) { PyObject *py_%(name)s = PyLong_FromLong(%(name)s);
   if(!tmp) {
     PyErr_Format(PyExc_RuntimeError, "value %%lu is not valid for Enum %(type)s of arg '%(name)s'", (unsigned long)%(name)s);
     goto error;
-  };
+  }
   Py_DECREF(tmp);
-};
+}
 """ % self.__dict__
 
 class HeaderParser(lexer.SelfFeederMixIn):

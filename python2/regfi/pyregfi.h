@@ -18,16 +18,16 @@
 struct RegistryFile_t;
 struct ValueIterator_t;
 
-BIND_STRUCT(REGFI_NK_REC);
-BIND_STRUCT(REGFI_VK_REC);
-BIND_STRUCT(REGFI_DATA);
+BIND_STRUCT(REGFI_NK_REC)
+BIND_STRUCT(REGFI_VK_REC)
+BIND_STRUCT(REGFI_DATA)
 
 /** This is the base class for data objects */
 CLASS(RawData, Object)
-    REGFI_DATA *data;
-    REGFI_VK_REC *rec;
+    const REGFI_DATA *data;
+    const REGFI_VK_REC *rec;
 
-    RawData METHOD(RawData, Con, REGFI_DATA *data,REGFI_VK_REC *record);
+    RawData METHOD(RawData, Con, REGFI_DATA *data, REGFI_VK_REC *record);
 
     /** Return the raw buffer as a string. By default we only return
         this much data - specify a required length to return more.

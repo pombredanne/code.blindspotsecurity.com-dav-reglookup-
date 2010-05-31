@@ -27,7 +27,14 @@ BOUND_FILES = Split("""
     """)
 
 nenv.config = config
-nenv.Append(CFLAGS = "-I../include/ -Iinclude")
+if config.DEBUG:
+    nenv.Append(CFLAGS = "-ggdb -pedantic -Wall -std=gnu99")
+    nenv.Append(CPPPATH=['../include', 'include'])
+    nenv.python_cppflags = '-I/usr/include/python2.5_d'
+else:
+    nenv.Append(CFLAGS = "-ggdb -pedantic -Wall")
+    nenv.Append(CPPPATH=['../include', 'include'])
+    
 nenv.Append(LIBPATH="../lib")
 nenv.Append(LINKFLAGS="")
 nenv.Command('regfi/pyregfi.c', BOUND_FILES, partial(build_python_bindings,

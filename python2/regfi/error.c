@@ -21,7 +21,7 @@ static pthread_key_t error_value_slot;
 
 void error_dest(void *slot) {
   if(slot) talloc_free(slot);
-};
+}
 
 void *raise_errors(enum _error_type t, char *reason, ...) {
   char *error_buffer;
@@ -41,7 +41,7 @@ void *raise_errors(enum _error_type t, char *reason, ...) {
   *type = t;
 
   return NULL;
-};
+}
 
 static int error_subsystem_initialised=0;
 
@@ -69,7 +69,7 @@ enum _error_type *aff4_get_current_error(char **error_buffer) {
   };
 
   return type;
-};
+}
 
 /** Initialise the error subsystem */
 void error_init() {
@@ -81,4 +81,4 @@ void error_init() {
     printf("Unable to set up TLS variables\n");
     abort();
   };
-};
+}
