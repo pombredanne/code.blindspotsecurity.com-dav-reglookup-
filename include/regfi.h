@@ -1066,14 +1066,11 @@ const REGFI_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i);
 
 
 /** Sets the internal subkey index to the first subkey referenced by the current
- *  key and returns that key.
+ *  key.
  *
  * @param i the iterator
  *
- * @return A newly allocated key structure for the newly referenced first 
- *         subkey, or NULL on failure.  Failure may be due to a lack of any
- *         subkeys or other errors.  Newly allocated keys must be freed with
- *         @ref regfi_free_record.
+ * @return True if the current key has any subkeys, false otherwise.
  *
  * @ingroup regfiIteratorLayer
  */
@@ -1093,14 +1090,11 @@ bool regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 const REGFI_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
 
 
-/** Increments the internal subkey index to the next key in the subkey-list and
- *  returns the subkey for that index.
+/** Increments the internal subkey index to the next key in the subkey-list.
  *
  * @param i the iterator
  *
- * @return A newly allocated key structure for the next subkey or NULL on
- *         failure.  Newly allocated keys must be freed with 
- *         @ref regfi_free_record.
+ * @return True if another subkey should exist, false otherwise.
  *
  * @ingroup regfiIteratorLayer
  */
@@ -1122,14 +1116,11 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name);
 
 
 /** Sets the internal value index to the first value referenced by the current
- *  key and returns that value.
+ *  key.
  *
  * @param i the iterator
  *
- * @return  A newly allocated value structure for the newly referenced first
- *          value, or NULL on failure.  Failure may be due to a lack of any
- *          values or other errors.  Newly allocated keys must be freed with
- *          @ref regfi_free_record.
+ * @return True if the current key has any values, false otherwise.
  *
  * @ingroup regfiIteratorLayer
  */
@@ -1149,14 +1140,11 @@ bool regfi_iterator_first_value(REGFI_ITERATOR* i);
 const REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i);
 
 
-/** Increments the internal value index to the next value in the value-list and
- *  returns the value for that index.
+/** Increments the internal value index to the next value in the value-list.
  *
  * @param i the iterator
  *
- * @return  A newly allocated key structure for the next value or NULL on 
- *          failure.  Newly allocated keys must be freed with 
- *          @ref regfi_free_record.
+ * @return True if another value should exist, false otherwise.
  *
  * @ingroup regfiIteratorLayer
  */

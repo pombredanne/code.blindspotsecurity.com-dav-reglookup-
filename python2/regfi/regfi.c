@@ -29,7 +29,7 @@ static RegistryFile RegistryFile_Con(RegistryFile self, char *filename) {
   self->reg = regfi_alloc(self->fd);
 
   if(!self->reg) {
-    /*RaiseError(ERuntimeError, "REGFI Error: %s", regfi_log_get_str());*/
+    RaiseError(ERuntimeError, "REGFI Error: %s", regfi_log_get_str());
     /*char* e = regfi_log_get_str();*/
     /*fprintf(stderr, "%p\n", e);*/
     goto error;
@@ -60,8 +60,11 @@ static int KeyIterator_dest(void *self) {
   return 0;
 }
 
-static KeyIterator KeyIterator_Con(KeyIterator self, RegistryFile file, char **path,
-                             REGFI_ENCODING encoding) {
+static KeyIterator KeyIterator_Con(KeyIterator self, 
+				   RegistryFile file, 
+				   char **path,
+				   REGFI_ENCODING encoding) 
+{
   self->iter = regfi_iterator_new(file->reg, encoding);
 
   if(!self->iter) {
@@ -79,39 +82,44 @@ static KeyIterator KeyIterator_Con(KeyIterator self, RegistryFile file, char **p
     }
   }
 
-  fprintf(stderr, "Con called\n");
-  self->first_called = false;
+  self->root_traversed = false;
 
   return self;
  error:
   return NULL;
 }
 
-static KeyIterator KeyIterator__iter__(KeyIterator self) {
-  return self;
+static void KeyIterator__iter__(KeyIterator self) 
+{
+  return;
 }
 
 
-static const REGFI_NK_REC* KeyIterator_next(KeyIterator self) {
-
-  fprintf(stderr, "next called\n");
-
-  if(!self->first_called)
+static const REGFI_NK_REC *KeyIterator_next(KeyIterator self) 
+{
+  if(!self->root_traversed)
+    self->root_traversed = true;
+  else if(!regfi_iterator_down(self->iter))
   {
-    regfi_iterator_first_subkey(self->iter);
-    self->first_called = true;
+    do
+    {
+      if(!regfi_iterator_up(self->iter))
+	return NULL;
+    } while(!regfi_iterator_next_subkey(self->iter));
+
+    /* XXX: This is an error condition.  
+     *      Probably should throw an exception or something. */
+    if(!regfi_iterator_down(self->iter))
+      return NULL;
   }
-  else
-    regfi_iterator_next_subkey(self->iter);
-    
-  return regfi_iterator_cur_subkey(self->iter);
+
+  regfi_iterator_first_subkey(self->iter);
+  return regfi_iterator_cur_key(self->iter);
 }
 
 
 static int KeyIterator_down(KeyIterator self) {
-  fprintf(stderr, "down cur_subkey: %d\n", self->iter->cur_subkey);
   int result = regfi_iterator_down(self->iter);
-  fprintf(stderr, "down result: %d\n", result);
   regfi_iterator_first_subkey(self->iter);
   regfi_iterator_first_value(self->iter);
   return result;
@@ -152,11 +160,11 @@ static ValueIterator ValueIterator_Con(ValueIterator self, KeyIterator key) {
   return self;
 }
 
-static ValueIterator ValueIterator__iter__(ValueIterator self) {
-  return self;
+static void ValueIterator__iter__(ValueIterator self) {
+  return;
 }
 
-static RawData ValueIterator_iternext(ValueIterator self) {
+static REGFI_VK_REC* ValueIterator_iternext(ValueIterator self) {
   RawData result;
   const REGFI_DATA* data;
   const REGFI_VK_REC* rec;
@@ -171,11 +179,14 @@ static RawData ValueIterator_iternext(ValueIterator self) {
 
   rec = regfi_iterator_cur_value(self->iter);
 
+  return rec;
+
   if(!rec) return NULL;
 
   /* XXX: shouldn't parse data here every time we walk over a value.  
    *      Instead, make data fetching a method and parse it then. 
    */
+  /*
   data = (REGFI_DATA *)regfi_iterator_fetch_data(self->iter, rec);
   if(!data) {
     RaiseError(ERuntimeError, "Unable to fetch data: %s", regfi_log_get_str());
@@ -197,6 +208,7 @@ static RawData ValueIterator_iternext(ValueIterator self) {
     result = (RawData)CONSTRUCT(RawData, RawData, Con, NULL, data, rec);
     break;
   }
+  */
 
   return result;
  error:
