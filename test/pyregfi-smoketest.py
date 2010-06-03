@@ -14,24 +14,17 @@ def iter_values(iter):
     return i
 
 
-def walk_tree(iter):
-    total_keys = 1
-    total_values = iter_values(iter)
-    print "total_values:", total_values
-    
-    for sub_key in iter:
-        print sub_key.keyname
-        
-        print iter.down()
-        num_keys,num_values = walk_tree(iter)
-        total_keys += num_keys
-        total_values += num_values
-        iter.up()
-
-    return (total_keys, total_values)
-
-
 for f in files:
     rf = pyregfi.RegistryFile(f)
     iter = rf.get_key()
-    print walk_tree(iter)
+
+    num_keys = 0
+    num_values = 0
+    # The iterator now walks the entire registry hive, depth-first
+    for key in iter:
+        #print key.keyname
+        num_keys +=1
+        num_values += iter_values(iter)
+
+    print "keys: %d" % num_keys
+    print "values: %d" % num_values

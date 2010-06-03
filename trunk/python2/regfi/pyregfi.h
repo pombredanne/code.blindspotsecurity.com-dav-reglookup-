@@ -48,15 +48,15 @@ END_CLASS
 /** This is an iterator for reading keys from the registry */
 CLASS(KeyIterator, Object)
      PRIVATE REGFI_ITERATOR *iter;
-     PRIVATE bool first_called;
+     PRIVATE bool root_traversed;
 
      KeyIterator METHOD(KeyIterator, Con, struct RegistryFile_t *file, char **path,
                         REGFI_ENCODING encoding);
 
      struct ValueIterator_t *METHOD(KeyIterator, list_values);
 
-     KeyIterator METHOD(KeyIterator, __iter__);
-     REGFI_NK_REC *METHOD(KeyIterator, iternext);
+     void METHOD(KeyIterator, __iter__);
+     BORROWED REGFI_NK_REC *METHOD(KeyIterator, iternext);
 
      int METHOD(KeyIterator, down);
      int METHOD(KeyIterator, up);
@@ -70,7 +70,7 @@ CLASS(ValueIterator, Object)
      ValueIterator METHOD(ValueIterator, Con, KeyIterator key);
 
      void METHOD(ValueIterator, __iter__);
-     RawData METHOD(ValueIterator, iternext);
+     REGFI_VK_REC *METHOD(ValueIterator, iternext);
 END_CLASS
 
 CLASS(RegistryFile, Object)
