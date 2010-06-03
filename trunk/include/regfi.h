@@ -1077,7 +1077,7 @@ const REGFI_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i);
  *
  * @ingroup regfiIteratorLayer
  */
-const REGFI_NK_REC* regfi_iterator_first_subkey(REGFI_ITERATOR* i);
+bool regfi_iterator_first_subkey(REGFI_ITERATOR* i);
 
 
 /** Returns the currently indexed subkey.
@@ -1104,7 +1104,7 @@ const REGFI_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i);
  *
  * @ingroup regfiIteratorLayer
  */
-const REGFI_NK_REC* regfi_iterator_next_subkey(REGFI_ITERATOR* i);
+bool regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
 
 /** Searches for a subkey with a given name under the current key.
@@ -1133,7 +1133,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name);
  *
  * @ingroup regfiIteratorLayer
  */
-const REGFI_VK_REC* regfi_iterator_first_value(REGFI_ITERATOR* i);
+bool regfi_iterator_first_value(REGFI_ITERATOR* i);
 
 
 /** Returns the currently indexed value.
@@ -1160,7 +1160,7 @@ const REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i);
  *
  * @ingroup regfiIteratorLayer
  */
-const REGFI_VK_REC* regfi_iterator_next_value(REGFI_ITERATOR* i);
+bool regfi_iterator_next_value(REGFI_ITERATOR* i);
 
 
 /** Searches for a value with a given name under the current key.
