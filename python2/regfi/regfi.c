@@ -57,10 +57,6 @@ static int KeyIterator_dest(void *self) {
   KeyIterator this = (KeyIterator)self;
 
   regfi_iterator_free(this->iter);
-  if(this->next_item) {
-    regfi_free_record(this->next_item);
-  }
-
   return 0;
 }
 
@@ -75,7 +71,7 @@ static KeyIterator KeyIterator_Con(KeyIterator self, RegistryFile file, char **p
 
   talloc_set_destructor((void*)self, KeyIterator_dest);
 
-  // Traverse to the path
+  /* Traverse to the path */
   if(path[0]) {
     if(!regfi_iterator_walk_path(self->iter, (const char **)path)) {
       RaiseError(ERuntimeError, "Unable to walk down key path");
@@ -83,32 +79,46 @@ static KeyIterator KeyIterator_Con(KeyIterator self, RegistryFile file, char **p
     }
   }
 
-  // Get the first key in the list
-  self->next_item = regfi_iterator_first_subkey(self->iter);
+  fprintf(stderr, "Con called\n");
+  self->first_called = false;
 
   return self;
  error:
   return NULL;
 }
 
-static void KeyIterator__iter__(KeyIterator self) {
-  if(self->next_item) {
-    regfi_free_record(self->next_item);
-  };
-
-  self->next_item = regfi_iterator_first_subkey(self->iter);
+static KeyIterator KeyIterator__iter__(KeyIterator self) {
+  return self;
 }
 
+
 static const REGFI_NK_REC* KeyIterator_next(KeyIterator self) {
-  const REGFI_NK_REC* result;
 
-  if(!self->next_item) return NULL;
+  fprintf(stderr, "next called\n");
 
-  result = self->next_item;
+  if(!self->first_called)
+  {
+    regfi_iterator_first_subkey(self->iter);
+    self->first_called = true;
+  }
+  else
+    regfi_iterator_next_subkey(self->iter);
+    
+  return regfi_iterator_cur_subkey(self->iter);
+}
 
-  self->next_item = regfi_iterator_next_subkey(self->iter);
 
+static int KeyIterator_down(KeyIterator self) {
+  fprintf(stderr, "down cur_subkey: %d\n", self->iter->cur_subkey);
+  int result = regfi_iterator_down(self->iter);
+  fprintf(stderr, "down result: %d\n", result);
+  regfi_iterator_first_subkey(self->iter);
+  regfi_iterator_first_value(self->iter);
   return result;
+}
+
+static int KeyIterator_up(KeyIterator self) {
+  return regfi_iterator_up(self->iter);
 }
 
 static ValueIterator KeyIterator_list_values(KeyIterator self) {
@@ -118,6 +128,8 @@ static ValueIterator KeyIterator_list_values(KeyIterator self) {
 VIRTUAL(KeyIterator, Object) {
   VMETHOD(Con) = KeyIterator_Con;
   VMETHOD(iternext) = KeyIterator_next;
+  VMETHOD(down) = KeyIterator_down;
+  VMETHOD(up) = KeyIterator_up;
   VMETHOD(__iter__) = KeyIterator__iter__;
   VMETHOD(list_values) = KeyIterator_list_values;
 } END_VIRTUAL
@@ -125,7 +137,7 @@ VIRTUAL(KeyIterator, Object) {
 static int ValueIterator_dest(void *self) {
   ValueIterator this = (ValueIterator)self;
 
-  if(this->next_item) regfi_free_record(this->next_item);
+  talloc_unlink(this, this->iter);
 
   return 0;
 }
@@ -135,33 +147,42 @@ static ValueIterator ValueIterator_Con(ValueIterator self, KeyIterator key) {
   self->iter = key->iter;
   talloc_reference(self, self->iter);
 
-  self->next_item = regfi_iterator_first_value(self->iter);
-
   talloc_set_destructor((void *)self, ValueIterator_dest);
 
   return self;
 }
 
-static void ValueIterator__iter__(ValueIterator self) {
-  if(self->next_item) regfi_free_record(self->next_item);
-
-  self->next_item = regfi_iterator_first_value(self->iter);
+static ValueIterator ValueIterator__iter__(ValueIterator self) {
+  return self;
 }
 
 static RawData ValueIterator_iternext(ValueIterator self) {
   RawData result;
-  const REGFI_DATA *data;
-  const REGFI_VK_REC *rec = self->next_item;
+  const REGFI_DATA* data;
+  const REGFI_VK_REC* rec;
+
+  if(!self->first_called)
+  {
+    regfi_iterator_first_value(self->iter);
+    self->first_called = true;
+  }
+  else
+    regfi_iterator_next_value(self->iter);
+
+  rec = regfi_iterator_cur_value(self->iter);
 
   if(!rec) return NULL;
 
+  /* XXX: shouldn't parse data here every time we walk over a value.  
+   *      Instead, make data fetching a method and parse it then. 
+   */
   data = (REGFI_DATA *)regfi_iterator_fetch_data(self->iter, rec);
   if(!data) {
     RaiseError(ERuntimeError, "Unable to fetch data: %s", regfi_log_get_str());
     goto error;
   }
 
-  switch(self->next_item->type) {
+  switch(rec->type) {
   case REG_EXPAND_SZ:
   case REG_SZ:
     result = (RawData)CONSTRUCT(DataString, RawData, Con, NULL, data, rec);
@@ -176,14 +197,6 @@ static RawData ValueIterator_iternext(ValueIterator self) {
     result = (RawData)CONSTRUCT(RawData, RawData, Con, NULL, data, rec);
     break;
   }
-
-
-  /*  if(self->next_item) {
-    regfi_free_record(self->next_item);
-  };
-  */
-
-  self->next_item = regfi_iterator_next_value(self->iter);
 
   return result;
  error:
@@ -254,6 +267,6 @@ VIRTUAL(DWORDData, RawData) {
 } END_VIRTUAL
 
 void pyregfi_init() {
+  regfi_init();
   INIT_CLASS(RegistryFile);
-
 }

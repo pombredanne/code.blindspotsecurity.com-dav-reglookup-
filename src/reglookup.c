@@ -276,13 +276,13 @@ void printValueList(REGFI_ITERATOR* iter, char* prefix)
 {
   const REGFI_VK_REC* value;
 
-  value = regfi_iterator_first_value(iter);
-  while(value != NULL)
+  regfi_iterator_first_value(iter);
+  while((value = regfi_iterator_cur_value(iter)) != NULL)
   {
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(iter, value, prefix);
     regfi_free_record(value);
-    value = regfi_iterator_next_value(iter);
+    regfi_iterator_next_value(iter);
     printMsgs(iter->f);
   }
 }
@@ -378,7 +378,8 @@ void printKeyTree(REGFI_ITERATOR* iter)
   bool print_this = true;
 
   root = cur = regfi_iterator_cur_key(iter);
-  sub = regfi_iterator_first_subkey(iter);
+  regfi_iterator_first_subkey(iter);
+  sub = regfi_iterator_cur_subkey(iter);
   printMsgs(iter->f);
 
   if(root == NULL)
@@ -418,7 +419,8 @@ void printKeyTree(REGFI_ITERATOR* iter)
 	  bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: unexpected NULL for key.\n");
 	}
 	
-	sub = regfi_iterator_next_subkey(iter);
+	regfi_iterator_next_subkey(iter);
+	sub = regfi_iterator_cur_subkey(iter);
       }
       print_this = false;
     }
@@ -434,7 +436,8 @@ void printKeyTree(REGFI_ITERATOR* iter)
 
       cur = regfi_iterator_cur_key(iter);
       regfi_free_record(sub);
-      sub = regfi_iterator_first_subkey(iter);
+      regfi_iterator_first_subkey(iter);
+      sub = regfi_iterator_cur_subkey(iter);
       print_this = true;
     }
     printMsgs(iter->f);

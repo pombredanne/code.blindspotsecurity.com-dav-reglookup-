@@ -28,7 +28,7 @@ BOUND_FILES = Split("""
 
 nenv.config = config
 if config.DEBUG:
-    nenv.Append(CFLAGS = "-ggdb -pedantic -Wall -std=gnu99")
+    nenv.Append(CFLAGS = "-ggdb -O0 -pedantic -Wall -std=gnu99")
     nenv.Append(CPPPATH=['../include', 'include'])
     nenv.python_cppflags = '-I/usr/include/python2.5_d'
 else:
