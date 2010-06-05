@@ -1,5 +1,5 @@
 #cflags = '-std=gnu99 -pedantic -Wall'
-cflags = '-std=gnu99 -pedantic -Wall -ggdb'
+cflags = '-std=gnu99 -pedantic -Wall -fvisibility=hidden -ggdb'
 
 
 lib_src = ['lib/regfi.c',

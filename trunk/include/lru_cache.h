@@ -34,7 +34,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "talloc.h"
+#include <talloc.h>
+
+/* GCC-specific macro for library exports */
+#ifdef _EXPORT
+#undef _EXPORT
+#endif
+#define _EXPORT __attribute__((visibility("default")))
 
 struct lru_cache_element;
 typedef struct lru_cache_element lru_cache_element; 
@@ -67,12 +73,14 @@ typedef struct _lru_cache
 /**
  * XXX: finish documenting.
  */
+_EXPORT
 lru_cache* lru_cache_create(uint32_t max_keys, uint32_t secret);
 
 
 /**
  * XXX: finish documenting.
  */
+_EXPORT
 lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys, 
 				uint32_t secret, bool talloc_data);
 
@@ -80,12 +88,14 @@ lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys,
 /**
  * XXX: finish documenting.
  */
+_EXPORT
 void lru_cache_destroy(lru_cache* ht);
 
 
 /**
  * XXX: finish documenting.
  */
+_EXPORT
 bool lru_cache_update(lru_cache* ht, const void* index, 
 		      uint32_t index_len, void* data);
 
@@ -95,6 +105,7 @@ bool lru_cache_update(lru_cache* ht, const void* index,
  * @return A pointer to data previously stored at index.
  *         If no data was found at index, NULL is returned.
  */
+_EXPORT
 void* lru_cache_find(lru_cache* ht, const void* index, 
 		     uint32_t index_len);
 
@@ -106,6 +117,7 @@ void* lru_cache_find(lru_cache* ht, const void* index,
  * @return A pointer to data that was there previously or NULL if no entry is
  *         at index.
  */
+_EXPORT
 bool lru_cache_remove(lru_cache* ht, const void* index, 
 		      uint32_t index_len);
 
