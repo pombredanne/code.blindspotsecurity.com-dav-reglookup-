@@ -43,9 +43,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <talloc.h>
 
-#include "talloc.h"
 #include "byteorder.h"
+
+/* GCC-specific macro for library exports */
+#ifdef _EXPORT
+#undef _EXPORT
+#endif
+#define _EXPORT __attribute__((visibility("default")))
 
 
 /* This is the maximum number of subauths in a SID, as defined here:
@@ -216,6 +222,7 @@ typedef struct _winsec_desc
  *
  * XXX: finish documenting
  */
+_EXPORT
 WINSEC_DESC* winsec_parse_descriptor(const uint8_t* buf, uint32_t buf_len);
 
 
@@ -223,12 +230,14 @@ WINSEC_DESC* winsec_parse_descriptor(const uint8_t* buf, uint32_t buf_len);
  *
  * XXX: finish documenting
  */
+_EXPORT
 void winsec_free_descriptor(WINSEC_DESC* desc);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
 			       const uint8_t* buf, uint32_t buf_len);
 
@@ -236,6 +245,7 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
  *
  * XXX: finish documenting
  */
+_EXPORT
 WINSEC_ACL* winsec_parse_acl(void* talloc_ctx, 
 			     const uint8_t* buf, uint32_t buf_len);
 
@@ -243,6 +253,7 @@ WINSEC_ACL* winsec_parse_acl(void* talloc_ctx,
  *
  * XXX: finish documenting
  */
+_EXPORT
 WINSEC_ACE* winsec_parse_ace(void* talloc_ctx, 
 			     const uint8_t* buf, uint32_t buf_len);
 
@@ -250,6 +261,7 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
  *
  * XXX: finish documenting
  */
+_EXPORT
 WINSEC_DOM_SID* winsec_parse_dom_sid(void* talloc_ctx, 
 				     const uint8_t* buf, uint32_t buf_len);
 
@@ -257,6 +269,7 @@ WINSEC_DOM_SID* winsec_parse_dom_sid(void* talloc_ctx,
  *
  * XXX: finish documenting
  */
+_EXPORT
 WINSEC_UUID* winsec_parse_uuid(void* talloc_ctx, 
 			       const uint8_t* buf, uint32_t buf_len);
 
@@ -265,48 +278,56 @@ WINSEC_UUID* winsec_parse_uuid(void* talloc_ctx,
  *
  * XXX: finish documenting
  */
+_EXPORT
 size_t winsec_sid_size(const WINSEC_DOM_SID* sid);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 int winsec_sid_compare_auth(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 int winsec_sid_compare(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 bool winsec_sid_equal(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 bool winsec_desc_equal(WINSEC_DESC* s1, WINSEC_DESC* s2);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 bool winsec_acl_equal(WINSEC_ACL* s1, WINSEC_ACL* s2);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 bool winsec_ace_equal(WINSEC_ACE* s1, WINSEC_ACE* s2);
 
 /**
  *
  * XXX: finish documenting
  */
+_EXPORT
 bool winsec_ace_object(uint8_t type);
 
 #endif /* _WINSEC_H */

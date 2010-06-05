@@ -31,7 +31,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include "talloc.h"
+#include <talloc.h>
+
+/* GCC-specific macro for library exports */
+#ifdef _EXPORT
+#undef _EXPORT
+#endif
+#define _EXPORT __attribute__((visibility("default")))
 
 /** XXX: document this. */
 typedef struct _void_stack
@@ -58,6 +64,7 @@ typedef struct _void_stack_iterator
  * @return a pointer to the newly allocated void_stack, 
  *         or NULL if an error occurred.
  */
+_EXPORT
 void_stack* void_stack_new(unsigned short max_size);
 
 
@@ -67,6 +74,7 @@ void_stack* void_stack_new(unsigned short max_size);
  *
  * @return a pointer to the duplicate void_stack, or NULL if an error occurred.
  */
+_EXPORT
 void_stack* void_stack_copy(const void_stack* v);
 
 
@@ -77,6 +85,7 @@ void_stack* void_stack_copy(const void_stack* v);
  * @return a pointer to the duplicate void_stack 
  *         (which will be in reverse order), or NULL if an error occurred.
  */
+_EXPORT
 void_stack* void_stack_copy_reverse(const void_stack* v);
 
 
@@ -85,6 +94,7 @@ void_stack* void_stack_copy_reverse(const void_stack* v);
  *
  * @param stack the stack to be free()d.
  */
+_EXPORT
 void void_stack_free(void_stack* stack);
 
 
@@ -97,6 +107,7 @@ void void_stack_free(void_stack* stack);
  *
  * @param stack the stack to be free()d.
  */
+_EXPORT
 void void_stack_free_deep(void_stack* stack);
 
 
@@ -106,6 +117,7 @@ void void_stack_free_deep(void_stack* stack);
  *
  * @return the number of elements currently on the stack.
  */
+_EXPORT
 unsigned short void_stack_size(const void_stack* stack);
 
 
@@ -116,6 +128,7 @@ unsigned short void_stack_size(const void_stack* stack);
  * @return a pointer to the popped stack element, or NULL if no elements exist
  *         on the stack.
  */
+_EXPORT
 void* void_stack_pop(void_stack* stack);
 
 
@@ -126,6 +139,7 @@ void* void_stack_pop(void_stack* stack);
  *
  * @return true if the element was successfully added, false otherwise.
  */
+_EXPORT
 bool void_stack_push(void_stack* stack, void* e);
 
 
@@ -136,6 +150,7 @@ bool void_stack_push(void_stack* stack, void* e);
  * @return a pointer to the current element on the top of the stack, or NULL if
  *         no elements exist in the stack.
  */
+_EXPORT
 const void* void_stack_cur(const void_stack* stack);
 
 
@@ -145,6 +160,7 @@ const void* void_stack_cur(const void_stack* stack);
  *
  * @return a new void_stack_iterator, or NULL if an error occurred.
  */
+_EXPORT
 void_stack_iterator* void_stack_iterator_new(const void_stack* stack);
 
 
@@ -154,6 +170,7 @@ void_stack_iterator* void_stack_iterator_new(const void_stack* stack);
  *
  * @param iter the void_stack_iterator to be free()d.
  */
+_EXPORT
 void void_stack_iterator_free(void_stack_iterator* iter);
 
 
@@ -165,6 +182,7 @@ void void_stack_iterator_free(void_stack_iterator* iter);
  *
  * @return a pointer to the next element.
  */
+_EXPORT
 const void* void_stack_iterator_next(void_stack_iterator* iter);
 
 
