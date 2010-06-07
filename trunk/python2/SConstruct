@@ -28,17 +28,18 @@ BOUND_FILES = Split("""
 
 nenv.config = config
 if config.DEBUG:
-    nenv.Append(CFLAGS = "-ggdb -O0 -pedantic -Wall -std=gnu99")
+    nenv.Append(CFLAGS = "-std=gnu99 -pedantic -Wall -fPIC -ggdb -O0")
     nenv.Append(CPPPATH=['../include', 'include'])
     nenv.python_cppflags = '-I/usr/include/python2.5_d'
 else:
-    nenv.Append(CFLAGS = "-ggdb -pedantic -Wall")
+    nenv.Append(CFLAGS = "-std=gnu99 -pedantic -Wall -fPIC")
     nenv.Append(CPPPATH=['../include', 'include'])
     
 nenv.Append(LIBPATH="../lib")
 nenv.Append(LINKFLAGS="")
+# XXX: why should I need to call regfi_init() when it should be called only once automatically? 
 nenv.Command('regfi/pyregfi.c', BOUND_FILES, partial(build_python_bindings,
-                                                     initialization='pyregfi_init();'))
+                                                     initialization='pyregfi_init();regfi_init();'))
 nenv.Depends('regfi/pyregfi.c', 'class_parser.py')
 
 nenv.PythonModule("pyregfi", ['regfi/pyregfi.c', 'regfi/regfi.c', 'regfi/class.c', 'regfi/error.c'],
