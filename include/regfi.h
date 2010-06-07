@@ -339,16 +339,16 @@ typedef struct _regfi_subkey_list
   uint32_t cell_size;
   
   /* Number of immediate children */
-  uint32_t num_children;  
+  uint32_t num_children;
 
-  /* Total number of keys referenced by this list and it's children */
-  uint32_t num_keys;      
+  /* Total number of keys referenced by this list and its children */
+  uint32_t num_keys;
 
   REGFI_SUBKEY_LIST_ELEM* elements;
   uint8_t magic[REGFI_CELL_MAGIC_SIZE];
 
   /* Set if the magic indicates this subkey list points to child subkey lists */
-  bool recursive_type;  
+  bool recursive_type;
 } REGFI_SUBKEY_LIST;
 
 
@@ -707,10 +707,10 @@ typedef struct _regfi_raw_file
  * registry hive as well as file header (REGF block) data.  This structure 
  * also stores a list of warnings and error messages generated while parsing
  * the registry hive.  These can be tuned using @ref regfi_set_message_mask.  
- * Messages may be retrieved using @ref regfi_get_messages.
+ * Messages may be retrieved using @ref regfi_log_get_str.
  *
  * @note If the message mask is set to record any messages, dependent code 
- *       must use @ref regfi_get_messages periodically to clear the message
+ *       must use @ref regfi_log_get_str periodically to clear the message
  *       queue. Otherwise, this structure will grow in size over time as 
  *       messages queue up.
  *
@@ -1528,6 +1528,9 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK_REC* nk,
 _EXPORT
 void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK_REC* vk, 
 			       REGFI_ENCODING output_encoding, bool strict);
+
+_EXPORT
+void regfi_init();
 
 
 #endif	/* _REGFI_H */

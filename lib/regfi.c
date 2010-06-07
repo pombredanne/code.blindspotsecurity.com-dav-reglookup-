@@ -66,7 +66,6 @@ void regfi_log_free(void* ptr)
  ******************************************************************************/
 void regfi_init()
 {
-fprintf(stderr, "regfi_init called\n");
   int err;
   if((err = pthread_key_create(&regfi_log_key, regfi_log_free)) != 0)
     fprintf(stderr, "ERROR: key_create: %s\n", strerror(err));
@@ -1319,7 +1318,7 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK_REC* nk,
 /******************************************************************************
  *
  ******************************************************************************/
-REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset, 
+REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 			     REGFI_ENCODING output_encoding, bool strict)
 {
   REGFI_NK_REC* nk;
