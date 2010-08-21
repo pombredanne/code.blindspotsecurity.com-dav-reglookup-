@@ -16,7 +16,7 @@ env = Environment(CFLAGS=cflags,
 
 # Libraries
 libregfi_static = env.Library(lib_src)
-libregfi = env.SharedLibrary(lib_src, LIBS=['m','pthread'])
+libregfi = env.SharedLibrary(lib_src, LIBS=['m','pthread', 'talloc'])
 
 
 # Executables

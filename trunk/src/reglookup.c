@@ -51,7 +51,7 @@ REGFI_FILE* f;
 #include "common.c"
 
 
-void printValue(REGFI_ITERATOR* iter, const REGFI_VK_REC* vk, char* prefix)
+void printValue(REGFI_ITERATOR* iter, const REGFI_VK* vk, char* prefix)
 {
   const REGFI_DATA* data;
   char* quoted_value = NULL;
@@ -204,7 +204,7 @@ void freePath(char** path)
 char* iter2Path(REGFI_ITERATOR* i)
 {
   const REGFI_ITER_POSITION* cur;
-  const REGFI_NK_REC* tmp_key;
+  const REGFI_NK* tmp_key;
   uint32_t buf_left = 127;
   uint32_t buf_len = buf_left+1;
   uint32_t name_len = 0;
@@ -274,7 +274,7 @@ char* iter2Path(REGFI_ITERATOR* i)
 
 void printValueList(REGFI_ITERATOR* iter, char* prefix)
 {
-  const REGFI_VK_REC* value;
+  const REGFI_VK* value;
 
   regfi_iterator_first_value(iter);
   while((value = regfi_iterator_cur_value(iter)) != NULL)
@@ -297,8 +297,8 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
   char* dacl = NULL;
   char mtime[24];
   char* quoted_classname;
-  const REGFI_SK_REC* sk;
-  const REGFI_NK_REC* key = regfi_iterator_cur_key(iter);
+  const REGFI_SK* sk;
+  const REGFI_NK* key = regfi_iterator_cur_key(iter);
   const REGFI_CLASSNAME* classname;
 
   formatTime(&key->mtime, mtime);
@@ -370,9 +370,9 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
 
 void printKeyTree(REGFI_ITERATOR* iter)
 {
-  const REGFI_NK_REC* root = NULL;
-  const REGFI_NK_REC* cur = NULL;
-  const REGFI_NK_REC* sub = NULL;
+  const REGFI_NK* root = NULL;
+  const REGFI_NK* cur = NULL;
+  const REGFI_NK* sub = NULL;
   char* path = NULL;
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
@@ -459,7 +459,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
  */
 int retrievePath(REGFI_ITERATOR* iter, char** path)
 {
-  const REGFI_VK_REC* value;
+  const REGFI_VK* value;
   char* tmp_path_joined;
   const char** tmp_path;
   uint32_t i;

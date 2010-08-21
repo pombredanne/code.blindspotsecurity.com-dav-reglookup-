@@ -81,7 +81,7 @@ static int RegistryKey_dest(void *self)
 }
 
 static RegistryKey RegistryKey_Con(RegistryKey self, 
-				   RegistryFile file, REGFI_NK_REC* base_key)
+				   RegistryFile file, REGFI_NK* base_key)
 {
   if(base_key == NULL)
     goto error;
@@ -190,7 +190,6 @@ static RegistryKey TreeIterator_next(TreeIterator self)
 		   regfi_iterator_cur_key(self->iter));
 }
 
-
 static int TreeIterator_down(TreeIterator self) 
 {
   int result = regfi_iterator_down(self->iter);
@@ -204,18 +203,25 @@ static int TreeIterator_up(TreeIterator self)
   return regfi_iterator_up(self->iter);
 }
 
-/*
-static ValueIterator TreeIterator_list_values(TreeIterator self) 
+static RegistryKey TreeIterator_current(TreeIterator self)
 {
-  return CONSTRUCT(ValueIterator, ValueIterator, Con, NULL, self);
+  return CONSTRUCT(RegistryKey, RegistryKey, Con, NULL, self->file,
+		   regfi_iterator_cur_key(self->iter));
 }
-*/
+
+static int TreeIterator_to_root(TreeIterator self)
+{
+  return regfi_iterator_to_root(self->iter);
+}
+
 
 VIRTUAL(TreeIterator, Object) {
   VMETHOD(Con) = TreeIterator_Con;
   VMETHOD(iternext) = TreeIterator_next;
   VMETHOD(down) = TreeIterator_down;
   VMETHOD(up) = TreeIterator_up;
+  VMETHOD(current) = TreeIterator_current;
+  VMETHOD(to_root) = TreeIterator_to_root;
   VMETHOD(__iter__) = TreeIterator__iter__;
   /*  VMETHOD(list_values) = TreeIterator_list_values;*/
 } END_VIRTUAL
@@ -233,7 +239,7 @@ static int SubkeyIterator_dest(void *self)
 
 static SubkeyIterator SubkeyIterator_Con(SubkeyIterator self, 
 					 struct RegistryFile_t* file, 
-					 REGFI_NK_REC* key)
+					 REGFI_NK* key)
 {
   /* XXX: add a talloc reference? */
   self->file = file;
@@ -255,9 +261,9 @@ static void SubkeyIterator__iter__(SubkeyIterator self)
 
 static RegistryKey SubkeyIterator_iternext(SubkeyIterator self)
 {
-  const REGFI_NK_REC* nk;
+  const REGFI_NK* nk;
 
-  if(self->cur < self->list->num_keys)
+  if(self->list != NULL && self->cur < self->list->num_keys)
   {
     /* XXX: can we switch to UTF-8 and have Python properly import that? */
     nk = regfi_load_key(self->file->reg, 
@@ -290,7 +296,7 @@ static int ValueIterator_dest(void *self)
 
 static ValueIterator ValueIterator_Con(ValueIterator self,
 				       struct RegistryFile_t* file, 
-				       REGFI_NK_REC* key)
+				       REGFI_NK* key)
 {
   /* XXX: add a talloc reference? */
   self->file = file;
@@ -311,9 +317,9 @@ static void ValueIterator__iter__(ValueIterator self)
   return;
 }
 
-static REGFI_VK_REC* ValueIterator_iternext(ValueIterator self)
+static REGFI_VK* ValueIterator_iternext(ValueIterator self)
 {
-  const REGFI_VK_REC* vk;
+  const REGFI_VK* vk;
 
   if(self->list != NULL && self->cur < self->list->num_values)
   {
@@ -385,7 +391,7 @@ static int RawData_dest(void *self)
   return 0;
 }
 
-static RawData RawData_Con(RawData self, REGFI_DATA *data, REGFI_VK_REC *record)
+static RawData RawData_Con(RawData self, REGFI_DATA *data, REGFI_VK *record)
 {
   self->rec = record;
   self->data = data;

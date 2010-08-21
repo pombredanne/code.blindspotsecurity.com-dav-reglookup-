@@ -66,7 +66,7 @@ char* getQuotedData(REGFI_RAW_FILE* file_cb, uint32_t offset, uint32_t length)
 }
 
 /* XXX: Somewhere in here, need to start looking for and handling classnames */
-void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
+void printKey(REGFI_FILE* f, REGFI_NK* nk, const char* prefix)
 {
   char mtime[24];
   char* quoted_name = NULL;
@@ -102,7 +102,7 @@ void printKey(REGFI_FILE* f, REGFI_NK_REC* nk, const char* prefix)
 }
 
 
-void printValue(REGFI_FILE* f, REGFI_VK_REC* vk, const char* prefix)
+void printValue(REGFI_FILE* f, REGFI_VK* vk, const char* prefix)
 {
   char* quoted_value = NULL;
   char* quoted_name = NULL;
@@ -180,7 +180,7 @@ void printValue(REGFI_FILE* f, REGFI_VK_REC* vk, const char* prefix)
 }
 
 
-void printSK(REGFI_FILE* f, REGFI_SK_REC* sk)
+void printSK(REGFI_FILE* f, REGFI_SK* sk)
 {
   char* quoted_raw = NULL;
   char* empty_str = "";
@@ -245,10 +245,10 @@ int printCell(REGFI_FILE* f, uint32_t offset)
 /* XXX: This is not terribly efficient, as it may reparse many keys 
  *      repeatedly.  Should try to add caching.
  */
-char* getParentPath(REGFI_FILE* f, REGFI_NK_REC* nk)
+char* getParentPath(REGFI_FILE* f, REGFI_NK* nk)
 {
   void_stack* path_stack = void_stack_new(REGFI_MAX_DEPTH);
-  REGFI_NK_REC* cur_ancestor;
+  REGFI_NK* cur_ancestor;
   char* ret_val;
   uint32_t virt_offset, i, stack_size, ret_val_size, ret_val_used, offset;
   int32_t max_size;
@@ -409,7 +409,7 @@ int extractVKs(REGFI_FILE* f,
 	       range_list* unalloc_values)
 {
   const range_list_element* cur_elem;
-  REGFI_VK_REC* vk;
+  REGFI_VK* vk;
   uint32_t i, j;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -452,7 +452,7 @@ int extractDataCells(REGFI_FILE* file,
 		     range_list* unalloc_values)
 {
   const range_list_element* cur_elem;
-  REGFI_VK_REC* vk;
+  REGFI_VK* vk;
   range_list* bd_cells;
   REGFI_BUFFER data;
   uint32_t i, j, offset, cell_length, length;
@@ -468,7 +468,7 @@ int extractDataCells(REGFI_FILE* file,
   for(i=0; i<range_list_size(unalloc_values); i++)
   {
     cur_elem = range_list_get(unalloc_values, i);
-    vk = (REGFI_VK_REC*)cur_elem->data;
+    vk = (REGFI_VK*)cur_elem->data;
     if(vk == NULL)
       return 11;
 
@@ -587,7 +587,7 @@ int extractKeys(REGFI_FILE* f,
 		range_list* unalloc_keys)
 {
   const range_list_element* cur_elem;
-  REGFI_NK_REC* key;
+  REGFI_NK* key;
   uint32_t i, j;
   int error_code = 0;
 
@@ -639,8 +639,8 @@ int extractValueLists(REGFI_FILE* f,
 		      range_list* unalloc_keys,
 		      range_list* unalloc_linked_values)
 {
-  REGFI_NK_REC* nk;
-  REGFI_VK_REC* vk;
+  REGFI_NK* nk;
+  REGFI_VK* vk;
   const range_list_element* cur_elem;
   uint32_t i, j, num_keys, off, values_length;
   int32_t max_size;
@@ -731,7 +731,7 @@ int extractSKs(REGFI_FILE* f,
 	       range_list* unalloc_sks)
 {
   const range_list_element* cur_elem;
-  REGFI_SK_REC* sk;
+  REGFI_SK* sk;
   uint32_t i, j;
 
   for(i=0; i < range_list_size(unalloc_cells); i++)
@@ -781,8 +781,8 @@ int main(int argc, char** argv)
   char** parent_paths;
   char* tmp_name;
   char* tmp_path;
-  REGFI_NK_REC* tmp_key;
-  REGFI_VK_REC* tmp_value;
+  REGFI_NK* tmp_key;
+  REGFI_VK* tmp_value;
   uint32_t argi, arge, i, j, ret, num_unalloc_keys;
   int fd;
 
@@ -921,7 +921,7 @@ int main(int argc, char** argv)
   for(i=0; i < num_unalloc_keys; i++)
   {
     cur_elem = range_list_get(unalloc_keys, i);
-    tmp_key = (REGFI_NK_REC*)cur_elem->data;
+    tmp_key = (REGFI_NK*)cur_elem->data;
 
     if(tmp_key == NULL)
       return 20;
@@ -935,7 +935,7 @@ int main(int argc, char** argv)
   for(i=0; i < num_unalloc_keys; i++)
   {
     cur_elem = range_list_get(unalloc_keys, i);
-    tmp_key = (REGFI_NK_REC*)cur_elem->data;
+    tmp_key = (REGFI_NK*)cur_elem->data;
 
     printKey(f, tmp_key, parent_paths[i]);
     if(tmp_key->num_values > 0 && tmp_key->values != NULL)
@@ -955,9 +955,9 @@ int main(int argc, char** argv)
       for(j=0; j < tmp_key->values->num_values; j++)
       {
 	tmp_value = 
-	  (REGFI_VK_REC*)range_list_find_data(unalloc_linked_values, 
-					      tmp_key->values->elements[j]
-					      + REGFI_REGF_SIZE);
+	  (REGFI_VK*)range_list_find_data(unalloc_linked_values, 
+					  tmp_key->values->elements[j]
+					  + REGFI_REGF_SIZE);
 	if(tmp_value != NULL)
 	  printValue(f, tmp_value, tmp_path);
       }
@@ -972,7 +972,7 @@ int main(int argc, char** argv)
   for(i=0; i < range_list_size(unalloc_values); i++)
   {
     cur_elem = range_list_get(unalloc_values, i);
-    tmp_value = (REGFI_VK_REC*)cur_elem->data; 
+    tmp_value = (REGFI_VK*)cur_elem->data; 
 
     printValue(f, tmp_value, "");
   }
