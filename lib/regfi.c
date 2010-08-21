@@ -832,7 +832,9 @@ REGFI_SUBKEY_LIST* regfi_parse_subkeylist(REGFI_FILE* file, uint32_t offset,
     elem_size = sizeof(uint32_t);
   }
   else if(buf[0] == 'l' && buf[1] == 'i')
+  {
     elem_size = sizeof(uint32_t);
+  }
   else if((buf[0] == 'l') && (buf[1] == 'f' || buf[1] == 'h'))
     elem_size = sizeof(REGFI_SUBKEY_LIST_ELEM);
   else
@@ -972,10 +974,10 @@ REGFI_SUBKEY_LIST* regfi_merge_subkeylists(uint16_t num_lists,
 /******************************************************************************
  *
  ******************************************************************************/
-REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32_t offset, uint32_t max_size, 
+REGFI_SK* regfi_parse_sk(REGFI_FILE* file, uint32_t offset, uint32_t max_size, 
 			     bool strict)
 {
-  REGFI_SK_REC* ret_val = NULL;
+  REGFI_SK* ret_val = NULL;
   uint8_t* sec_desc_buf = NULL;
   uint32_t cell_length, length;
   uint8_t sk_header[REGFI_SK_MIN_LENGTH];
@@ -999,7 +1001,7 @@ REGFI_SK_REC* regfi_parse_sk(REGFI_FILE* file, uint32_t offset, uint32_t max_siz
     goto fail_locked;
   }
 
-  ret_val = talloc(NULL, REGFI_SK_REC);
+  ret_val = talloc(NULL, REGFI_SK);
   if(ret_val == NULL)
     goto fail_locked;
 
@@ -1173,7 +1175,7 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
 }
 
 
-void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK_REC* vk, 
+void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, 
 			       REGFI_ENCODING output_encoding, bool strict)
 {
   /* XXX: Registry value names are supposedly limited to 16383 characters 
@@ -1223,10 +1225,10 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK_REC* vk,
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_VK_REC* regfi_load_value(REGFI_FILE* file, uint32_t offset, 
+REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset, 
 			       REGFI_ENCODING output_encoding, bool strict)
 {
-  REGFI_VK_REC* ret_val = NULL;
+  REGFI_VK* ret_val = NULL;
   int32_t max_size;
 
   max_size = regfi_calc_maxsize(file, offset);
@@ -1269,7 +1271,7 @@ REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32_t offset,
 }
 
 
-void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK_REC* nk, 
+void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, 
 			     REGFI_ENCODING output_encoding, bool strict)
 {
   /* XXX: Registry key names are supposedly limited to 255 characters according to:
@@ -1318,10 +1320,10 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK_REC* nk,
 /******************************************************************************
  *
  ******************************************************************************/
-REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
+REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 			     REGFI_ENCODING output_encoding, bool strict)
 {
-  REGFI_NK_REC* nk;
+  REGFI_NK* nk;
   uint32_t off;
   int32_t max_size;
 
@@ -1409,9 +1411,9 @@ REGFI_NK_REC* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 
 /******************************************************************************
  ******************************************************************************/
-const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
+const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
 {
-  REGFI_SK_REC* ret_val = NULL;
+  REGFI_SK* ret_val = NULL;
   int32_t max_size;
   void* failure_ptr = NULL;
   
@@ -1426,7 +1428,7 @@ const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict
     return NULL;
 
   /* First look if we have already parsed it */
-  ret_val = (REGFI_SK_REC*)lru_cache_find(file->sk_cache, &offset, 4);
+  ret_val = (REGFI_SK*)lru_cache_find(file->sk_cache, &offset, 4);
 
   /* Bail out if we have previously cached a parse failure at this offset. */
   if(ret_val == (void*)REGFI_OFFSET_NONE)
@@ -1462,10 +1464,10 @@ const REGFI_SK_REC* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_NK_REC* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin, 
+REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin, 
 				 REGFI_ENCODING output_encoding)
 {
-  REGFI_NK_REC* nk = NULL;
+  REGFI_NK* nk = NULL;
   uint32_t cell_length;
   uint32_t cur_offset = hbin->file_off+REGFI_HBIN_HEADER_SIZE;
   uint32_t hbin_end = hbin->file_off+hbin->block_size;
@@ -1575,12 +1577,12 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
   file_cb->seek(file_cb, 0, SEEK_SET);
 
   /* Read file header */
-  if ((rb = regfi_parse_regf(file_cb, false)) == NULL) 
+  if ((rb = regfi_parse_regf(file_cb, false)) == NULL)
   {
     regfi_log_add(REGFI_LOG_ERROR, "Failed to read REGF block.");
     return NULL;
   }
-  rb->file_length = file_length;  
+  rb->file_length = file_length;
   rb->cb = file_cb;
 
   if(pthread_mutex_init(&rb->cb_lock, NULL) != 0)
@@ -1661,9 +1663,9 @@ void regfi_free(REGFI_FILE* file)
  * First checks the offset given by the file header, then checks the
  * rest of the file if that fails.
  ******************************************************************************/
-REGFI_NK_REC* regfi_rootkey(REGFI_FILE* file, REGFI_ENCODING output_encoding)
+REGFI_NK* regfi_rootkey(REGFI_FILE* file, REGFI_ENCODING output_encoding)
 {
-  REGFI_NK_REC* nk = NULL;
+  REGFI_NK* nk = NULL;
   REGFI_HBIN* hbin;
   uint32_t root_offset, i, num_hbins;
   
@@ -1717,7 +1719,7 @@ void regfi_free_record(const void* record)
 REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file, 
 				   REGFI_ENCODING output_encoding)
 {
-  REGFI_NK_REC* root;
+  REGFI_NK* root;
   REGFI_ITERATOR* ret_val;
 
   if(output_encoding != REGFI_ENCODING_UTF8
@@ -1772,14 +1774,14 @@ void regfi_iterator_free(REGFI_ITERATOR* i)
 /* XXX: some way of indicating reason for failure should be added. */
 bool regfi_iterator_down(REGFI_ITERATOR* i)
 {
-  REGFI_NK_REC* subkey;
+  REGFI_NK* subkey;
   REGFI_ITER_POSITION* pos;
 
   pos = talloc(i->key_positions, REGFI_ITER_POSITION);
   if(pos == NULL)
     return false;
 
-  subkey = (REGFI_NK_REC*)regfi_iterator_cur_subkey(i);
+  subkey = (REGFI_NK*)regfi_iterator_cur_subkey(i);
   if(subkey == NULL)
   {
     talloc_free(pos);
@@ -1839,7 +1841,7 @@ bool regfi_iterator_to_root(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
 {
-  REGFI_NK_REC* subkey;
+  REGFI_NK* subkey;
   bool found = false;
   uint32_t old_subkey = i->cur_subkey;
 
@@ -1898,7 +1900,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
+const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
   return i->cur_key;
 }
@@ -1906,7 +1908,7 @@ const REGFI_NK_REC* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_SK_REC* regfi_iterator_cur_sk(REGFI_ITERATOR* i)
+const REGFI_SK* regfi_iterator_cur_sk(REGFI_ITERATOR* i)
 {
   if(i->cur_key == NULL || i->cur_key->sk_off == REGFI_OFFSET_NONE)
     return NULL;
@@ -1928,7 +1930,7 @@ bool regfi_iterator_first_subkey(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_NK_REC* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
+const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
 {
   uint32_t nk_offset;
 
@@ -1960,7 +1962,7 @@ bool regfi_iterator_next_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
 {
-  const REGFI_VK_REC* cur;
+  const REGFI_VK* cur;
   bool found = false;
   uint32_t old_value = i->cur_value;
 
@@ -2006,9 +2008,9 @@ bool regfi_iterator_first_value(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_VK_REC* regfi_iterator_cur_value(REGFI_ITERATOR* i)
+const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
-  REGFI_VK_REC* ret_val = NULL;
+  REGFI_VK* ret_val = NULL;
   uint32_t voffset;
 
   if(i->cur_key->values != NULL && i->cur_key->values->elements != NULL 
@@ -2036,7 +2038,7 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i)
 /******************************************************************************
  *****************************************************************************/
 const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
-						      const REGFI_NK_REC* key)
+						      const REGFI_NK* key)
 {
   REGFI_CLASSNAME* ret_val;
   uint8_t* raw;
@@ -2100,7 +2102,7 @@ const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
 /******************************************************************************
  *****************************************************************************/
 const REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
-					    const REGFI_VK_REC* value)
+					    const REGFI_VK* value)
 {
   REGFI_DATA* ret_val = NULL;
   REGFI_BUFFER raw_data;
@@ -2564,15 +2566,15 @@ REGFI_HBIN* regfi_parse_hbin(REGFI_FILE* file, uint32_t offset, bool strict)
 
 /*******************************************************************
  *******************************************************************/
-REGFI_NK_REC* regfi_parse_nk(REGFI_FILE* file, uint32_t offset, 
-			     uint32_t max_size, bool strict)
+REGFI_NK* regfi_parse_nk(REGFI_FILE* file, uint32_t offset, 
+			 uint32_t max_size, bool strict)
 {
   uint8_t nk_header[REGFI_NK_MIN_LENGTH];
-  REGFI_NK_REC* ret_val;
+  REGFI_NK* ret_val;
   uint32_t length,cell_length;
   bool unalloc = false;
 
-  ret_val = talloc(NULL, REGFI_NK_REC);
+  ret_val = talloc(NULL, REGFI_NK);
   if(ret_val == NULL)
   {
     regfi_log_add(REGFI_LOG_ERROR, "Failed to allocate memory while"
@@ -2783,15 +2785,15 @@ uint8_t* regfi_parse_classname(REGFI_FILE* file, uint32_t offset,
 
 /******************************************************************************
 *******************************************************************************/
-REGFI_VK_REC* regfi_parse_vk(REGFI_FILE* file, uint32_t offset, 
+REGFI_VK* regfi_parse_vk(REGFI_FILE* file, uint32_t offset, 
 			     uint32_t max_size, bool strict)
 {
-  REGFI_VK_REC* ret_val;
+  REGFI_VK* ret_val;
   uint8_t vk_header[REGFI_VK_MIN_LENGTH];
   uint32_t raw_data_size, length, cell_length;
   bool unalloc = false;
 
-  ret_val = talloc(NULL, REGFI_VK_REC);
+  ret_val = talloc(NULL, REGFI_VK);
   if(ret_val == NULL)
     goto fail;
 

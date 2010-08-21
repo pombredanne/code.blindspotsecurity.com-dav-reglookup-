@@ -36,16 +36,16 @@ struct SubkeyIterator_t;
 struct ValueIterator_t;
 struct TreeIterator_t;
 
-BIND_STRUCT(REGFI_NK_REC)
-BIND_STRUCT(REGFI_VK_REC)
+BIND_STRUCT(REGFI_NK)
+BIND_STRUCT(REGFI_VK)
 BIND_STRUCT(REGFI_DATA)
 
 /** This is the base class for data objects */
 CLASS(RawData, Object)
     const REGFI_DATA *data;
-    const REGFI_VK_REC *rec;
+    const REGFI_VK *rec;
 
-    RawData METHOD(RawData, Con, REGFI_DATA *data, REGFI_VK_REC *record);
+    RawData METHOD(RawData, Con, REGFI_DATA *data, REGFI_VK *record);
 
     /** Return the raw buffer as a string. By default we only return
         this much data - specify a required length to return more.
@@ -72,23 +72,26 @@ CLASS(TreeIterator, Object)
      struct TreeIterator_t *METHOD(TreeIterator, Con, struct RegistryFile_t *file,
 				   char **path, REGFI_ENCODING encoding);
 
-/*     struct ValueIterator_t *METHOD(TreeIterator, list_values);*/
-
      void METHOD(TreeIterator, __iter__);
      struct RegistryKey_t *METHOD(TreeIterator, iternext);
 
+
      int METHOD(TreeIterator, down);
      int METHOD(TreeIterator, up);
+
+     struct RegistryKey_t *METHOD(TreeIterator, current);
+     int METHOD(TreeIterator, to_root);
+
 END_CLASS
 
 
 /** XXX */
 CLASS(RegistryKey, Object)
      struct RegistryFile_t *file;
-     const REGFI_NK_REC *key;      /* XXX: temporary */
+     const REGFI_NK *key;
 
      struct RegistryKey_t *METHOD(RegistryKey, Con,
-				  struct RegistryFile_t *file, REGFI_NK_REC *base_key);
+				  struct RegistryFile_t *file, REGFI_NK *base_key);
 
      struct SubkeyIterator_t *METHOD(RegistryKey, subkeys);
      struct ValueIterator_t *METHOD(RegistryKey, values);
@@ -103,7 +106,7 @@ CLASS(SubkeyIterator, Object)
      PRIVATE uint32_t cur;
      
      SubkeyIterator METHOD(SubkeyIterator, Con, 
-			   struct RegistryFile_t *file, REGFI_NK_REC *key);
+			   struct RegistryFile_t *file, REGFI_NK *key);
 
      void METHOD(SubkeyIterator, __iter__);
      RegistryKey METHOD(SubkeyIterator, iternext);
@@ -118,10 +121,10 @@ CLASS(ValueIterator, Object)
      PRIVATE uint32_t cur;
      
      ValueIterator METHOD(ValueIterator, Con, 
-			  struct RegistryFile_t *file, REGFI_NK_REC *key);
+			  struct RegistryFile_t *file, REGFI_NK *key);
 
      void METHOD(ValueIterator, __iter__);
-     REGFI_VK_REC *METHOD(ValueIterator, iternext);
+     REGFI_VK *METHOD(ValueIterator, iternext);
 END_CLASS
 
 

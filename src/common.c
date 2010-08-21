@@ -319,7 +319,7 @@ static char* data_to_ascii(const REGFI_DATA* data, char** error_msg)
 }
 
 
-static char* get_quoted_keyname(const REGFI_NK_REC* nk)
+static char* get_quoted_keyname(const REGFI_NK* nk)
 {
   char* ret_val;
 
@@ -332,7 +332,7 @@ static char* get_quoted_keyname(const REGFI_NK_REC* nk)
 }
 
 
-static char* get_quoted_valuename(const REGFI_VK_REC* vk)
+static char* get_quoted_valuename(const REGFI_VK* vk)
 {
   char* ret_val;
 
