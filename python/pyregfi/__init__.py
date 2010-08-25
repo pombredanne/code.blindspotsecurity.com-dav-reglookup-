@@ -28,6 +28,15 @@ regfi.regfi_log_set_mask.restype = c_bool
 regfi.regfi_free_record.argtypes = [c_void_p]
 regfi.regfi_free_record.restype = None
 
+regfi.regfi_fetch_classname.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
+regfi.regfi_fetch_classname.restype = POINTER(REGFI_CLASSNAME)
+
+regfi.regfi_fetch_sk.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
+regfi.regfi_fetch_sk.restype = POINTER(REGFI_SK)
+
+regfi.regfi_fetch_data.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_VK)]
+regfi.regfi_fetch_data.restype = POINTER(REGFI_DATA)
+
 regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE), REGFI_ENCODING]
 regfi.regfi_iterator_new.restype = POINTER(REGFI_ITERATOR)
 
@@ -48,9 +57,6 @@ regfi.regfi_iterator_walk_path.restype = c_bool
 
 regfi.regfi_iterator_cur_key.argtypes = [POINTER(REGFI_ITERATOR)]
 regfi.regfi_iterator_cur_key.restype = POINTER(REGFI_NK)
-
-regfi.regfi_iterator_cur_sk.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_cur_sk.restype = POINTER(REGFI_SK)
 
 regfi.regfi_iterator_first_subkey.argtypes = [POINTER(REGFI_ITERATOR)]
 regfi.regfi_iterator_first_subkey.restype = c_bool
@@ -76,13 +82,6 @@ regfi.regfi_iterator_next_value.restype = c_bool
 regfi.regfi_iterator_find_value.argtypes = [POINTER(REGFI_ITERATOR), c_char_p]
 regfi.regfi_iterator_find_value.restype = c_bool
 
-# XXX: possibly move REGFI_ENCODING to file object and eliminate need for ITERATOR here.
-regfi.regfi_iterator_fetch_classname.argtypes = [POINTER(REGFI_ITERATOR), POINTER(REGFI_NK)]
-regfi.regfi_iterator_fetch_classname.restype = POINTER(REGFI_CLASSNAME)
-
-regfi.regfi_iterator_fetch_data.argtypes = [POINTER(REGFI_ITERATOR), POINTER(REGFI_VK)]
-regfi.regfi_iterator_fetch_data.restype = POINTER(REGFI_DATA)
-
 
 regfi.regfi_init.argtypes = []
 regfi.regfi_init.restype = None
@@ -90,8 +89,44 @@ regfi.regfi_init()
 
 
 def GetLogMessages():
-    return regfi.regfi_log_get_str()
+    msgs = regfi.regfi_log_get_str()
+    if msgs == None:
+        return ''
+    return msgs
 
+
+class _StructureWrapper():
+    "Handles memory management and proxies attribute access to base structures"
+    base = None
+
+    def __init__(self, base):
+        # XXX: check for NULL here, throw an exception if so.
+        self.base = base
+
+    def __del__(self):
+        regfi.regfi_free_record(self.base)
+
+    def __getattr__(self, name):
+        return getattr(self.base.contents, name)
+
+    def __eq__(self, other):
+        return (type(self) == type(other)) and (self.offset == other.offset)
+
+    def __ne__(self, other):
+        return (not self.__eq__(other))
+
+
+class Key(_StructureWrapper):
+    pass
+
+class Value(_StructureWrapper):
+    pass
+
+class Data(_StructureWrapper):
+    pass
+
+class Security(_StructureWrapper):
+    pass
 
 class Hive():    
     file = None
@@ -125,11 +160,16 @@ class Hive():
     def __iter__(self):
         return HiveIterator(self)
 
+    def subtree(self, path):
+        hi = HiveIterator(self)
+        hi.descend(path)
+        return hi
+
 
 class HiveIterator():
     hive = None
     iter = None
-    root_traversed = False
+    iteration_root = None
 
     def __init__(self, hive):
         # REGFI_ENCODING_UTF8==1
@@ -146,15 +186,19 @@ class HiveIterator():
         regfi.regfi_iterator_free(self.iter)        
 
     def __iter__(self):
+        self.iteration_root = None
         return self
 
     def __next__(self):
-        if self.root_traversed:
-            self.root_traversed = True
-            
+        if self.iteration_root == None:
+            self.iteration_root = self.current_key()            
         elif not regfi.regfi_iterator_down(self.iter):
             up_ret = regfi.regfi_iterator_up(self.iter)
-            while up_ret and not regfi.regfi_iterator_next_subkey(self.iter):
+            while (up_ret and
+                   not regfi.regfi_iterator_next_subkey(self.iter)):
+                if self.iteration_root == self.current_key():
+                    self.iteration_root = None
+                    raise StopIteration('')
                 up_ret = regfi.regfi_iterator_up(self.iter)
 
             if not up_ret:
@@ -165,6 +209,23 @@ class HiveIterator():
                                 ' Current log:\n'+ GetLogMessages())
 
         regfi.regfi_iterator_first_subkey(self.iter)
-        print(regfi.regfi_iterator_cur_key(self.iter).contents.keyname)
-        return regfi.regfi_iterator_cur_key(self.iter)
+        return self.current_key()
 
+    def down(self):
+        pass
+
+    def up(self):
+        pass
+
+    def descend(self, path):
+        #set up generator
+        cpath = (bytes(p,'ascii') for p in path) 
+
+        # evaluate generator and create char* array
+        apath = (c_char_p*len(path))(*cpath)
+
+        if not regfi.regfi_iterator_walk_path(self.iter,apath):
+            raise Exception('Could not locate path.\n'+GetLogMessages())
+
+    def current_key(self):
+        return Key(regfi.regfi_iterator_cur_key(self.iter))

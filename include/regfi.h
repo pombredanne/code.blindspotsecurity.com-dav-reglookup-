@@ -358,6 +358,11 @@ typedef uint32_t REGFI_VALUE_LIST_ELEM;
  */
 typedef struct _regfi_value_list
 {
+  /* Real offset of this record's cell in the file */
+  uint32_t offset;
+
+  uint32_t cell_size;
+
   /* Actual number of values referenced by this list.  
    * May differ from parent key's num_values if there were parsing errors. 
    */
@@ -372,6 +377,9 @@ typedef struct _regfi_value_list
  */
 typedef struct _regfi_classname
 {
+  /** Real offset of this record's cell in the file */
+  uint32_t offset;
+
   /** As converted to requested REGFI_ENCODING */
   char* interpreted;
 
@@ -496,7 +504,7 @@ typedef struct _regfi_data
 /** Value structure
  * @ingroup regfiBase
  */
-typedef struct
+typedef struct _regfi_vk
 {
   /** Real offset of this record's cell in the file */
   uint32_t offset;	
@@ -504,23 +512,20 @@ typedef struct
   /** ((start_offset - end_offset) & 0xfffffff8) */
   uint32_t cell_size;
 
-  /* XXX: deprecated */
-  REGFI_DATA* data;
-
   /** The name of this value converted to desired REGFI_ENCODING.  
    *
    * This conversion typically occurs automatically through REGFI_ITERATOR
    * settings.  String is NUL terminated.
    */
-  char*    valuename;
+  char* name;
 
   /** The raw value name
    *
    * Length of the buffer is stored in name_length.
    */
-  uint8_t* valuename_raw;
+  uint8_t* name_raw;
 
-  /** Length of valuename_raw */
+  /** Length of name_raw */
   uint16_t name_length;
 
   /** Offset from beginning of this hbin block */
@@ -552,16 +557,20 @@ typedef struct
    * This information is derived from the high bit of the raw data size field.
    */
   bool     data_in_offset;
+
+  /* XXX: deprecated */
+  REGFI_DATA* data;
+
 } REGFI_VK;
 
 
 /* Key Security */
-struct _regfi_sk_rec;
+struct _regfi_sk;
 
 /** Security structure
  * @ingroup regfiBase
  */
-typedef struct _regfi_sk_rec 
+typedef struct _regfi_sk 
 {
   /** Real file offset of this record */
   uint32_t offset;
@@ -598,7 +607,7 @@ typedef struct _regfi_sk_rec
 /** Key structure
  * @ingroup regfiBase
  */
-typedef struct _regfi_nk_rec
+typedef struct _regfi_nk
 {
   /** Real offset of this record's cell in the file */
   uint32_t offset;
@@ -641,13 +650,13 @@ typedef struct _regfi_nk_rec
    * This conversion typically occurs automatically through REGFI_ITERATOR
    * settings.  String is NUL terminated.
    */
-  char* keyname;
+  char* name;
 
   /** The raw key name
    *
    * Length of the buffer is stored in name_length.
    */
-  uint8_t* keyname_raw;
+  uint8_t* name_raw;
 
   /** Virutal offset of parent key */
   uint32_t parent_off;
@@ -661,7 +670,7 @@ typedef struct _regfi_nk_rec
   /* XXX: max subkey classname length (as if) */
   uint32_t max_bytes_subkeyclassname;
 
-  /* XXX: max valuename * 2 */
+  /* XXX: max value name * 2 */
   uint32_t max_bytes_valuename;
 
   /* XXX: max value data size */
@@ -771,6 +780,13 @@ typedef struct _regfi_file
 
   /* Run-time information */
   /************************/
+  /* For sanity checking (not part of the registry header) */
+  uint32_t file_length;
+
+  /** The encoding that all strings are converted to during interpretation.
+   */
+  REGFI_ENCODING string_encoding;
+
   /* Functions for accessing the file */
   REGFI_RAW_FILE* cb;
 
@@ -778,9 +794,6 @@ typedef struct _regfi_file
    * the file offset while another thread is in the middle of a multi-read
    * parsing transaction */
   pthread_mutex_t cb_lock;
-
-  /* For sanity checking (not part of the registry header) */
-  uint32_t file_length;
 
   /* Metadata about hbins */
   range_list* hbins;
@@ -810,11 +823,6 @@ typedef struct _regfi_iterator
 
   /** The current key */
   REGFI_NK* cur_key;
-
-  /** The encoding that all strings are converted to as set during iterator
-   *  creation.
-   */
-  REGFI_ENCODING string_encoding;
 
   /** Index of the current subkey */
   uint32_t cur_subkey;
@@ -865,7 +873,7 @@ typedef struct _regfi_buffer
  * @ingroup regfiBase
  */
 _EXPORT
-REGFI_FILE* regfi_alloc(int fd);
+REGFI_FILE* regfi_alloc(int fd, REGFI_ENCODING output_encoding);
 
 
 /** Parses file headers returned by supplied callback functions.
@@ -881,7 +889,8 @@ REGFI_FILE* regfi_alloc(int fd);
  * @ingroup regfiBase
  */
 _EXPORT
-REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb);
+REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
+			   REGFI_ENCODING output_encoding);
 
 
 /** Frees a hive's data structures without closing the underlying file.
@@ -953,6 +962,49 @@ _EXPORT
 void regfi_free_record(const void* record);
 
 
+/** Retrieves classname for a given key.
+ *
+ * @param file the file from which key is derived
+ * @param key the key whose classname is desired
+ *
+ * @return Returns a newly allocated classname structure, or NULL on failure.
+ *         Classname structures must be freed with @ref regfi_free_record.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_CLASSNAME* regfi_fetch_classname(REGFI_FILE* file, 
+					     const REGFI_NK* key);
+
+
+/** Returns the SK (security) record referenced by the supplied key.
+ *
+ * @param file the file from which key is derived
+ * @param key  the key whose SK record is desired
+ * 
+ * @return A read-only SK structure, or NULL on failure.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_SK* regfi_fetch_sk(REGFI_FILE* file, const REGFI_NK* key);
+
+
+/** Retrieves data for a given value.
+ *
+ * @param file the file from which value is derived
+ * @param value the value whose data is desired
+ *
+ * @return Returns a newly allocated data structure, or NULL on failure.
+ *         Data structures must be freed with @ref regfi_free_record.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file,
+				   const REGFI_VK* value);
+
+
 /******************************************************************************/
 /** 
  * @defgroup regfiIteratorLayer Iterator Layer: Primary regfi Library Interface
@@ -981,8 +1033,7 @@ void regfi_free_record(const void* record);
  * @ingroup regfiIteratorLayer
  */
 _EXPORT
-REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file,
-					 REGFI_ENCODING output_encoding);
+REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file);
 
 
 /** Frees a registry file iterator previously created by regfi_iterator_new.
@@ -1071,18 +1122,6 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
  */
 _EXPORT
 const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i);
-
-
-/** Returns the SK (security) record referenced by the current key.
- *
- * @param i the iterator
- *
- * @return A read-only SK structure, or NULL on failure.
- *
- * @ingroup regfiIteratorLayer
- */
-_EXPORT
-const REGFI_SK* regfi_iterator_cur_sk(REGFI_ITERATOR* i);
 
 
 /** Sets the internal subkey index to the first subkey referenced by the current
@@ -1193,36 +1232,6 @@ _EXPORT
 bool regfi_iterator_find_value(REGFI_ITERATOR* i, 
 			       const char* value_name);
 
-/** Retrieves classname for a given key.
- *
- * @param i   the iterator
- * @param key the key whose classname is desired
- *
- * @return Returns a newly allocated classname structure, or NULL on failure.
- *         Classname structures must be freed with @ref regfi_free_record.
- *
- * @ingroup regfiIteratorLayer
- */
-_EXPORT
-const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i, 
-						      const REGFI_NK* key);
-
-
-/** Retrieves data for a given value.
- *
- * @param i     the iterator
- * @param value the value whose data is desired
- *
- * @return Returns a newly allocated data structure, or NULL on failure.
- *         Data structures must be freed with @ref regfi_free_record.
- *
- * @ingroup regfiIteratorLayer
- */
-_EXPORT
-const REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i,
-					    const REGFI_VK* value);
-
-
 
 /******************************************************************************/
 /** 
@@ -1329,6 +1338,8 @@ bool regfi_interpret_data(REGFI_FILE* file,
 _EXPORT
 const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset,
 				  bool strict);
+
+
 
 
 /** Retrieves the HBIN data structure stored at the specified offset.
@@ -1469,8 +1480,7 @@ REGFI_BUFFER regfi_parse_little_data(REGFI_FILE* file, uint32_t voffset,
 /******************************************************************************/
 /*    Private Functions                                                       */
 /******************************************************************************/
-REGFI_NK*         regfi_rootkey(REGFI_FILE* file, 
-				    REGFI_ENCODING output_encoding);
+REGFI_NK*             regfi_rootkey(REGFI_FILE* file);
 
 off_t                 regfi_raw_seek(REGFI_RAW_FILE* self, 
 				     off_t offset, int whence);
@@ -1505,8 +1515,8 @@ REGFI_SUBKEY_LIST*    regfi_load_subkeylist_aux(REGFI_FILE* file, uint32_t offse
 						uint8_t depth_left);
 void                  regfi_add_message(REGFI_FILE* file, uint16_t msg_type, 
 					const char* fmt, ...);
-REGFI_NK*         regfi_copy_nk(const REGFI_NK* nk);
-REGFI_VK*         regfi_copy_vk(const REGFI_VK* vk);
+REGFI_NK*             regfi_copy_nk(const REGFI_NK* nk);
+REGFI_VK*             regfi_copy_vk(const REGFI_VK* vk);
 _EXPORT
 int32_t               regfi_calc_maxsize(REGFI_FILE* file, uint32_t offset);
 int32_t               regfi_conv_charset(const char* input_charset, 

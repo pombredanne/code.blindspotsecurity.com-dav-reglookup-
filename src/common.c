@@ -323,10 +323,10 @@ static char* get_quoted_keyname(const REGFI_NK* nk)
 {
   char* ret_val;
 
-  if(nk->keyname == NULL)
-    ret_val = quote_buffer(nk->keyname_raw, nk->name_length, key_special_chars);
+  if(nk->name == NULL)
+    ret_val = quote_buffer(nk->name_raw, nk->name_length, key_special_chars);
   else
-    ret_val = quote_string(nk->keyname, key_special_chars);
+    ret_val = quote_string(nk->name, key_special_chars);
 
   return ret_val;
 }
@@ -336,11 +336,11 @@ static char* get_quoted_valuename(const REGFI_VK* vk)
 {
   char* ret_val;
 
-  if(vk->valuename == NULL)
-    ret_val = quote_buffer(vk->valuename_raw, vk->name_length, 
+  if(vk->name == NULL)
+    ret_val = quote_buffer(vk->name_raw, vk->name_length, 
 			   key_special_chars);
   else
-    ret_val = quote_string(vk->valuename, key_special_chars);
+    ret_val = quote_string(vk->name, key_special_chars);
 
   return ret_val;
 }
