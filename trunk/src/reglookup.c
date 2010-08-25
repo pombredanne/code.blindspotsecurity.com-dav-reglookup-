@@ -76,7 +76,7 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK* vk, char* prefix)
     quoted_name[0] = '\0';
   }
   
-  data = regfi_iterator_fetch_data(iter, vk);
+  data = regfi_fetch_data(iter->f, vk);
 
   printMsgs(iter->f);
   if(data != NULL)
@@ -303,7 +303,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
 
   formatTime(&key->mtime, mtime);
 
-  if(print_security && (sk=regfi_iterator_cur_sk(iter)))
+  if(print_security && (sk=regfi_fetch_sk(iter->f, key)))
   {
     owner = regfi_get_owner(sk->sec_desc);
     group = regfi_get_group(sk->sec_desc);
@@ -320,7 +320,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
     if(dacl == NULL)
       dacl = empty_str;
 
-    classname = regfi_iterator_fetch_classname(iter, key);
+    classname = regfi_fetch_classname(iter->f, key);
     printMsgs(iter->f);
     if(classname != NULL)
     {
@@ -635,16 +635,15 @@ int main(int argc, char** argv)
     bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
     
-  f = regfi_alloc(fd);
+  /* XXX: add command line option to choose output encoding */
+  f = regfi_alloc(fd, REGFI_ENCODING_ASCII);
   if(f == NULL)
   {
     close(fd);
     bailOut(REGLOOKUP_EXIT_NOINPUT, "ERROR: Failed to create REGFI_FILE structure.\n");
   }
 
-
-  /* XXX: add command line option to choose output encoding */
-  iter = regfi_iterator_new(f, REGFI_ENCODING_ASCII);
+  iter = regfi_iterator_new(f);
   if(iter == NULL)
   {
     printMsgs(f);

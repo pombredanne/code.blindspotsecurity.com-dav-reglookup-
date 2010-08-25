@@ -1130,6 +1130,8 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
   if(ret_val->elements == NULL)
     goto fail_locked;
 
+  ret_val->offset = offset;
+  ret_val->cell_size = cell_length;
   ret_val->num_values = num_values;
 
   length = read_len;
@@ -1174,7 +1176,7 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
   return NULL;
 }
 
-
+/* XXX: should give this boolean return type to indicate errors */
 void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, 
 			       REGFI_ENCODING output_encoding, bool strict)
 {
@@ -1192,32 +1194,27 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
 
   if(from_encoding == output_encoding)
   {
-    vk->valuename_raw = talloc_realloc(vk, vk->valuename_raw,
-					    uint8_t, vk->name_length+1);
-    vk->valuename_raw[vk->name_length] = '\0';
-    vk->valuename = (char*)vk->valuename_raw;
+    vk->name_raw[vk->name_length] = '\0';
+    vk->name = (char*)vk->name_raw;
   }
   else
   {
-    vk->valuename = talloc_array(vk, char, vk->name_length+1);
-    if(vk->valuename == NULL)
-    {
-      talloc_free(vk);
+    vk->name = talloc_array(vk, char, vk->name_length+1);
+    if(vk->name == NULL)
       return;
-    }
 
     tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
 				  regfi_encoding_int2str(output_encoding),
-				  vk->valuename_raw, vk->valuename,
+				  vk->name_raw, vk->name,
 				  vk->name_length, vk->name_length+1);
     if(tmp_size < 0)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
-			" valuename to encoding %s.  Error message: %s",
+			" value name to encoding %s.  Error message: %s",
 			regfi_encoding_int2str(output_encoding), 
 			strerror(-tmp_size));
-      talloc_free(vk->valuename);
-      vk->valuename = NULL;
+      talloc_free(vk->name);
+      vk->name = NULL;
     }
   }
 }
@@ -1226,7 +1223,7 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
 /******************************************************************************
  ******************************************************************************/
 REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset, 
-			       REGFI_ENCODING output_encoding, bool strict)
+			   REGFI_ENCODING output_encoding, bool strict)
 {
   REGFI_VK* ret_val = NULL;
   int32_t max_size;
@@ -1271,6 +1268,7 @@ REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32_t offset,
 }
 
 
+/* XXX: should give this boolean return type to indicate errors */
 void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, 
 			     REGFI_ENCODING output_encoding, bool strict)
 {
@@ -1287,31 +1285,29 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
   
   if(from_encoding == output_encoding)
   {
-    nk->keyname_raw = talloc_realloc(nk, nk->keyname_raw, uint8_t, nk->name_length+1);
-    nk->keyname_raw[nk->name_length] = '\0';
-    nk->keyname = (char*)nk->keyname_raw;
+    nk->name_raw[nk->name_length] = '\0';
+    nk->name = (char*)nk->name_raw;
   }
   else
   {
-    nk->keyname = talloc_array(nk, char, nk->name_length+1);
-    if(nk->keyname == NULL)
-    {
-      talloc_free(nk);
+    nk->name = talloc_array(nk, char, nk->name_length+1);
+    if(nk->name == NULL)
       return;
-    }
+
+    memset(nk->name,0,nk->name_length+1);
 
     tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
 				  regfi_encoding_int2str(output_encoding),
-				  nk->keyname_raw, nk->keyname,
+				  nk->name_raw, nk->name,
 				  nk->name_length, nk->name_length+1);
     if(tmp_size < 0)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
-			" keyname to encoding %s.  Error message: %s",
+			" key name to encoding %s.  Error message: %s",
 			regfi_encoding_int2str(output_encoding), 
 			strerror(-tmp_size));
-      talloc_free(nk->keyname);
-      nk->keyname = NULL;
+      talloc_free(nk->name);
+      nk->name = NULL;
     }
   }
 }
@@ -1321,7 +1317,7 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
  *
  ******************************************************************************/
 REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
-			     REGFI_ENCODING output_encoding, bool strict)
+			 REGFI_ENCODING output_encoding, bool strict)
 {
   REGFI_NK* nk;
   uint32_t off;
@@ -1465,7 +1461,7 @@ const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
 /******************************************************************************
  ******************************************************************************/
 REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin, 
-				 REGFI_ENCODING output_encoding)
+			     REGFI_ENCODING output_encoding)
 {
   REGFI_NK* nk = NULL;
   uint32_t cell_length;
@@ -1509,7 +1505,7 @@ REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_FILE* regfi_alloc(int fd)
+REGFI_FILE* regfi_alloc(int fd, REGFI_ENCODING output_encoding)
 {
   REGFI_FILE* ret_val;
   REGFI_RAW_FILE* file_cb = talloc(NULL, REGFI_RAW_FILE);
@@ -1526,7 +1522,7 @@ REGFI_FILE* regfi_alloc(int fd)
   file_cb->read = &regfi_raw_read;
   file_cb->seek = &regfi_raw_seek;
   
-  ret_val = regfi_alloc_cb(file_cb);
+  ret_val = regfi_alloc_cb(file_cb, output_encoding);
   if(ret_val == NULL)
     goto fail;
 
@@ -1556,7 +1552,8 @@ int regfi_free_cb(void* f)
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
+REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb, 
+			   REGFI_ENCODING output_encoding)
 {
   REGFI_FILE* rb;
   REGFI_HBIN* hbin = NULL;
@@ -1576,6 +1573,14 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
   }
   file_cb->seek(file_cb, 0, SEEK_SET);
 
+  if(output_encoding != REGFI_ENCODING_UTF8
+     && output_encoding != REGFI_ENCODING_ASCII)
+  { 
+    regfi_log_add(REGFI_LOG_ERROR, "Invalid output_encoding supplied"
+		  " in creation of regfi iterator.");
+    return NULL;
+  }
+
   /* Read file header */
   if ((rb = regfi_parse_regf(file_cb, false)) == NULL)
   {
@@ -1584,6 +1589,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb)
   }
   rb->file_length = file_length;
   rb->cb = file_cb;
+  rb->string_encoding = output_encoding;
 
   if(pthread_mutex_init(&rb->cb_lock, NULL) != 0)
   {
@@ -1663,7 +1669,7 @@ void regfi_free(REGFI_FILE* file)
  * First checks the offset given by the file header, then checks the
  * rest of the file if that fails.
  ******************************************************************************/
-REGFI_NK* regfi_rootkey(REGFI_FILE* file, REGFI_ENCODING output_encoding)
+REGFI_NK* regfi_rootkey(REGFI_FILE* file)
 {
   REGFI_NK* nk = NULL;
   REGFI_HBIN* hbin;
@@ -1673,7 +1679,7 @@ REGFI_NK* regfi_rootkey(REGFI_FILE* file, REGFI_ENCODING output_encoding)
     return NULL;
 
   root_offset = file->root_cell+REGFI_REGF_SIZE;
-  nk = regfi_load_key(file, root_offset, output_encoding, true);
+  nk = regfi_load_key(file, root_offset, file->string_encoding, true);
   if(nk != NULL)
   {
     if(nk->flags & REGFI_NK_FLAG_ROOT)
@@ -1695,7 +1701,7 @@ REGFI_NK* regfi_rootkey(REGFI_FILE* file, REGFI_ENCODING output_encoding)
   for(i=0; i < num_hbins && nk == NULL; i++)
   {
     hbin = (REGFI_HBIN*)range_list_get(file->hbins, i)->data;
-    nk = regfi_find_root_nk(file, hbin, output_encoding);
+    nk = regfi_find_root_nk(file, hbin, file->string_encoding);
   }
 
   if(!regfi_rw_unlock(file, &file->hbins_lock, "regfi_rootkey"))
@@ -1716,25 +1722,16 @@ void regfi_free_record(const void* record)
 
 /******************************************************************************
  *****************************************************************************/
-REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file, 
-				   REGFI_ENCODING output_encoding)
+REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
 {
   REGFI_NK* root;
   REGFI_ITERATOR* ret_val;
-
-  if(output_encoding != REGFI_ENCODING_UTF8
-     && output_encoding != REGFI_ENCODING_ASCII)
-  { 
-    regfi_log_add(REGFI_LOG_ERROR, "Invalid output_encoding supplied"
-		  " in creation of regfi iterator.");
-    return NULL;
-  }
 
   ret_val = talloc(NULL, REGFI_ITERATOR);
   if(ret_val == NULL)
     return NULL;
 
-  root = regfi_rootkey(file, output_encoding);
+  root = regfi_rootkey(file);
   if(root == NULL)
   {
     talloc_free(ret_val);
@@ -1754,7 +1751,6 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file,
   ret_val->f = file;
   ret_val->cur_subkey = 0;
   ret_val->cur_value = 0;
-  ret_val->string_encoding = output_encoding;
     
   return ret_val;
 }
@@ -1852,8 +1848,8 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
   regfi_iterator_first_subkey(i);
   while((subkey = regfi_iterator_cur_subkey(i)) != NULL && (found == false))
   {
-    if(subkey->keyname != NULL 
-       && strcasecmp(subkey->keyname, subkey_name) == 0)
+    if(subkey->name != NULL 
+       && strcasecmp(subkey->name, subkey_name) == 0)
       found = true;
     else
     {
@@ -1902,18 +1898,19 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
  *****************************************************************************/
 const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
+  /* XXX: do we need to add a NULL talloc reference here? */
   return i->cur_key;
 }
 
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_SK* regfi_iterator_cur_sk(REGFI_ITERATOR* i)
+const REGFI_SK* regfi_fetch_sk(REGFI_FILE* file, const REGFI_NK* key)
 {
-  if(i->cur_key == NULL || i->cur_key->sk_off == REGFI_OFFSET_NONE)
+  if(key == NULL || key->sk_off == REGFI_OFFSET_NONE)
     return NULL;
 
-  return regfi_load_sk(i->f, i->cur_key->sk_off + REGFI_REGF_SIZE, true);
+  return regfi_load_sk(file, key->sk_off + REGFI_REGF_SIZE, true);
 }
 
 
@@ -1940,7 +1937,7 @@ const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
     nk_offset = i->cur_key->subkeys->elements[i->cur_subkey].offset;
 
     return regfi_load_key(i->f, nk_offset+REGFI_REGF_SIZE, 
-			  i->string_encoding, true);
+			  i->f->string_encoding, true);
   }
 
   return NULL;
@@ -1966,7 +1963,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
   bool found = false;
   uint32_t old_value = i->cur_value;
 
-  /* XXX: cur->valuename can be NULL in the registry.  
+  /* XXX: cur->name can be NULL in the registry.  
    *      Should we allow for a way to search for that? 
    */
   if(value_name == NULL)
@@ -1975,8 +1972,8 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
   regfi_iterator_first_value(i);
   while((cur = regfi_iterator_cur_value(i)) != NULL && (found == false))
   {
-    if((cur->valuename != NULL)
-       && (strcasecmp(cur->valuename, value_name) == 0))
+    if((cur->name != NULL)
+       && (strcasecmp(cur->name, value_name) == 0))
       found = true;
     else
     {
@@ -2018,7 +2015,7 @@ const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
   {
     voffset = i->cur_key->values->elements[i->cur_value];
     ret_val = regfi_load_value(i->f, voffset+REGFI_REGF_SIZE, 
-			       i->string_encoding, true);
+			       i->f->string_encoding, true);
   }
 
   return ret_val;
@@ -2037,8 +2034,8 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
-						      const REGFI_NK* key)
+const REGFI_CLASSNAME* regfi_fetch_classname(REGFI_FILE* file,
+					     const REGFI_NK* key)
 {
   REGFI_CLASSNAME* ret_val;
   uint8_t* raw;
@@ -2051,12 +2048,12 @@ const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
     return NULL;
 
   offset = key->classname_off + REGFI_REGF_SIZE;
-  max_size = regfi_calc_maxsize(i->f, offset);
+  max_size = regfi_calc_maxsize(file, offset);
   if(max_size <= 0)
     return NULL;
 
   parse_length = key->classname_length;
-  raw = regfi_parse_classname(i->f, offset, &parse_length, max_size, true);
+  raw = regfi_parse_classname(file, offset, &parse_length, max_size, true);
   
   if(raw == NULL)
   {
@@ -2070,6 +2067,7 @@ const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
   if(ret_val == NULL)
     return NULL;
 
+  ret_val->offset = offset;
   ret_val->raw = raw;
   ret_val->size = parse_length;
   talloc_steal(ret_val, raw);
@@ -2077,14 +2075,14 @@ const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
   interpreted = talloc_array(NULL, char, parse_length);
 
   conv_size = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
-				 regfi_encoding_int2str(i->string_encoding),
+				 regfi_encoding_int2str(file->string_encoding),
 				 raw, interpreted,
 				 parse_length, parse_length);
   if(conv_size < 0)
   {
     regfi_log_add(REGFI_LOG_WARN, "Error occurred while"
 		  " converting classname to charset %s.  Error message: %s",
-		  i->string_encoding, strerror(-conv_size));
+		  file->string_encoding, strerror(-conv_size));
     talloc_free(interpreted);
     ret_val->interpreted = NULL;
   }
@@ -2101,15 +2099,15 @@ const REGFI_CLASSNAME* regfi_iterator_fetch_classname(REGFI_ITERATOR* i,
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i, 
-					    const REGFI_VK* value)
+const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file, 
+				   const REGFI_VK* value)
 {
   REGFI_DATA* ret_val = NULL;
   REGFI_BUFFER raw_data;
 
   if(value->data_size != 0)
   {
-    raw_data = regfi_load_data(i->f, value->data_off, value->data_size,
+    raw_data = regfi_load_data(file, value->data_off, value->data_size,
 			      value->data_in_offset, true);
     if(raw_data.buf == NULL)
     {
@@ -2131,7 +2129,8 @@ const REGFI_DATA* regfi_iterator_fetch_data(REGFI_ITERATOR* i,
 	return NULL;
       }
 
-      if(!regfi_interpret_data(i->f, i->string_encoding, value->type, ret_val))
+      if(!regfi_interpret_data(file, file->string_encoding, 
+			       value->type, ret_val))
       {
 	regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
 		      " interpreting data for VK record at offset 0x%.8X.",
@@ -2343,8 +2342,8 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
  * On error, returns a negative errno code.
  *****************************************************************************/
 int32_t regfi_conv_charset(const char* input_charset, const char* output_charset,
-			 uint8_t* input, char* output, 
-			 uint32_t input_len, uint32_t output_max)
+			   uint8_t* input, char* output, 
+			   uint32_t input_len, uint32_t output_max)
 {
   iconv_t conv_desc;
   char* inbuf = (char*)input;
@@ -2656,7 +2655,7 @@ REGFI_NK* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
 
   ret_val->name_length = SVAL(nk_header, 0x48);
   ret_val->classname_length = SVAL(nk_header, 0x4A);
-  ret_val->keyname = NULL;
+  ret_val->name = NULL;
 
   if(ret_val->name_length + REGFI_NK_MIN_LENGTH > ret_val->cell_size)
   {
@@ -2681,13 +2680,14 @@ REGFI_NK* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
       ret_val->cell_size = length;
   }
 
-  ret_val->keyname_raw = talloc_array(ret_val, uint8_t, ret_val->name_length);
-  if(ret_val->keyname_raw == NULL)
+  /* +1 to length in case we decided to use this directly as a string later */
+  ret_val->name_raw = talloc_array(ret_val, uint8_t, ret_val->name_length+1);
+  if(ret_val->name_raw == NULL)
     goto fail_locked;
 
   /* Don't need to seek, should be at the right offset */
   length = ret_val->name_length;
-  if((regfi_read(file->cb, (uint8_t*)ret_val->keyname_raw, &length) != 0)
+  if((regfi_read(file->cb, (uint8_t*)ret_val->name_raw, &length) != 0)
      || length != ret_val->name_length)
   {
     regfi_log_add(REGFI_LOG_ERROR, "Failed to read key name"
@@ -2709,7 +2709,7 @@ REGFI_NK* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
 
 
 uint8_t* regfi_parse_classname(REGFI_FILE* file, uint32_t offset, 
-			     uint16_t* name_length, uint32_t max_size, bool strict)
+			       uint16_t* name_length, uint32_t max_size, bool strict)
 {
   uint8_t* ret_val = NULL;
   uint32_t length;
@@ -2810,8 +2810,8 @@ REGFI_VK* regfi_parse_vk(REGFI_FILE* file, uint32_t offset,
 
   ret_val->offset = offset;
   ret_val->cell_size = cell_length;
-  ret_val->valuename = NULL;
-  ret_val->valuename_raw = NULL;
+  ret_val->name = NULL;
+  ret_val->name_raw = NULL;
   
   if(ret_val->cell_size > max_size)
     ret_val->cell_size = max_size & 0xFFFFFFF8;
@@ -2866,12 +2866,13 @@ REGFI_VK* regfi_parse_vk(REGFI_FILE* file, uint32_t offset,
     if(cell_length < ret_val->name_length + REGFI_VK_MIN_LENGTH + 4)
       cell_length+=8;
 
-    ret_val->valuename_raw = talloc_array(ret_val, uint8_t, ret_val->name_length);
-    if(ret_val->valuename_raw == NULL)
+    /* +1 to length in case we decided to use this directly as a string later */
+    ret_val->name_raw = talloc_array(ret_val, uint8_t, ret_val->name_length+1);
+    if(ret_val->name_raw == NULL)
       goto fail_locked;
 
     length = ret_val->name_length;
-    if((regfi_read(file->cb, (uint8_t*)ret_val->valuename_raw, &length) != 0)
+    if((regfi_read(file->cb, (uint8_t*)ret_val->name_raw, &length) != 0)
        || length != ret_val->name_length)
     {
       regfi_log_add(REGFI_LOG_ERROR, "Could not read value name"

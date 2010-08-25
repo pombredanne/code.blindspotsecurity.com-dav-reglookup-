@@ -831,7 +831,8 @@ int main(int argc, char** argv)
   else
     regfi_log_set_mask(REGFI_LOG_ERROR);
 
-  f = regfi_alloc(fd);
+  /* XXX: add command line option to choose output encoding */
+  f = regfi_alloc(fd, REGFI_ENCODING_ASCII);
   if(f == NULL)
   {
     close(fd);
