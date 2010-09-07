@@ -962,6 +962,36 @@ _EXPORT
 void regfi_free_record(const void* record);
 
 
+/** Retrieves number of subkeys referenced by this key.
+ *
+ * Number of subkeyss in key structure and subkey list structure could differ,
+ * so this provides a standard/sane way of determining the number.
+ *
+ * @param key  the key whose number of subkeys is desired
+ *
+ * @return Returns the number of subkeys referenced by this key.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+uint32_t regfi_fetch_num_subkeys(const REGFI_NK* key);
+
+
+/** Retrieves number of values referenced by this key.
+ *
+ * Number of values in key structure and value list structure could differ,
+ * so this provides a standard/sane way of determining the number.
+ *
+ * @param key  the key whose number of values is desired
+ *
+ * @return Returns the number of values referenced by this key.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+uint32_t regfi_fetch_num_values(const REGFI_NK* key);
+
+
 /** Retrieves classname for a given key.
  *
  * @param file the file from which key is derived
@@ -1003,6 +1033,75 @@ const REGFI_SK* regfi_fetch_sk(REGFI_FILE* file, const REGFI_NK* key);
 _EXPORT
 const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file,
 				   const REGFI_VK* value);
+
+
+/** Locates a specific subkey of a given key.
+ *
+ * @param file  the file from which key is derived
+ * @param key   the key whose subkey is desired
+ * @param name  name of the desired subkey
+ * @param index a return value: the index of the desired subkey.
+ *              undefined on error
+ *
+ * @return true if the subkey is found, false if an error occurred or if the
+ *         specified name could not be found. If an error occurs, messages
+ *         will be written explaining the issue. (See regfi_log_get_str.)
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key, 
+		       const char* name, uint32_t* index);
+
+
+/** Locates a specific value of a given key.
+ *
+ * @param file  the file from which key is derived
+ * @param key   the key whose value is desired
+ * @param name  name of the desired value
+ * @param index a return value: the index of the desired value.  
+ *              undefined on error
+ *
+ * @return true if the value is found, false if an error occurred or if the
+ *         specified name could not be found. If an error occurs, messages
+ *         will be written explaining the issue. (See regfi_log_get_str.)
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+bool regfi_find_value(REGFI_FILE* file, const REGFI_NK* key,
+		      const char* name, uint32_t* index);
+
+
+/** Retrieves a specific subkey of a given key.
+ *
+ * @param file  the file from which key is derived
+ * @param key   the key whose subkey is desired
+ * @param index the index of the desired subkey
+ *
+ * @return the requested subkey or NULL on error.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_NK* regfi_get_subkey(REGFI_FILE* file, const REGFI_NK* key, 
+				 uint32_t index);
+
+
+/** Retrieves a specific value of a given key.
+ *
+ * @param file  the file from which key is derived
+ * @param key   the key whose value is desired
+ * @param index the index of the desired value
+ *
+ * @return the requested value or NULL on error.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key, 
+				uint32_t index);
+
 
 
 /******************************************************************************/
@@ -1165,8 +1264,8 @@ bool regfi_iterator_next_subkey(REGFI_ITERATOR* i);
 
 /** Searches for a subkey with a given name under the current key.
  *
- * @param i           the iterator
- * @param subkey_name subkey name to search for
+ * @param i     the iterator
+ * @param name  subkey name to search for
  *
  * @return True if such a subkey was found, false otherwise.  If a subkey is
  *         found, the current subkey index is set to that subkey.  Otherwise,
@@ -1175,7 +1274,7 @@ bool regfi_iterator_next_subkey(REGFI_ITERATOR* i);
  * @ingroup regfiIteratorLayer
  */
 _EXPORT
-bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name);
+bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* name);
 
 
 /** Sets the internal value index to the first value referenced by the current
@@ -1219,8 +1318,8 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i);
 
 /** Searches for a value with a given name under the current key.
  *
- * @param i          the iterator
- * @param value_name value name to search for
+ * @param i     the iterator
+ * @param name  value name to search for
  *
  * @return True if such a value was found, false otherwise.  If a value is 
  *         found, the current value index is set to that value.  Otherwise,
@@ -1229,8 +1328,7 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i);
  * @ingroup regfiIteratorLayer
  */
 _EXPORT
-bool regfi_iterator_find_value(REGFI_ITERATOR* i, 
-			       const char* value_name);
+bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name);
 
 
 /******************************************************************************/
