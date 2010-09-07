@@ -5,7 +5,7 @@ from pyregfi.structures import *
 
 import ctypes
 import ctypes.util
-from ctypes import c_char,c_char_p,c_int,c_uint16,c_bool,POINTER
+from ctypes import c_char,c_char_p,c_int,c_uint16,c_uint32,c_bool,POINTER
 
 regfi = ctypes.CDLL(ctypes.util.find_library('regfi'), use_errno=True)
 
@@ -28,6 +28,12 @@ regfi.regfi_log_set_mask.restype = c_bool
 regfi.regfi_free_record.argtypes = [c_void_p]
 regfi.regfi_free_record.restype = None
 
+regfi.regfi_fetch_num_subkeys.argtypes = [POINTER(REGFI_NK)]
+regfi.regfi_fetch_num_subkeys.restype = c_uint32
+
+regfi.regfi_fetch_num_values.argtypes = [POINTER(REGFI_NK)]
+regfi.regfi_fetch_num_values.restype = c_uint32
+
 regfi.regfi_fetch_classname.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
 regfi.regfi_fetch_classname.restype = POINTER(REGFI_CLASSNAME)
 
@@ -36,6 +42,22 @@ regfi.regfi_fetch_sk.restype = POINTER(REGFI_SK)
 
 regfi.regfi_fetch_data.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_VK)]
 regfi.regfi_fetch_data.restype = POINTER(REGFI_DATA)
+
+regfi.regfi_find_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
+                                    c_char_p, POINTER(c_uint32)]
+regfi.regfi_find_subkey.restype = c_bool
+
+regfi.regfi_find_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
+                                    c_char_p, POINTER(c_uint32)]
+regfi.regfi_find_value.restype = c_bool
+
+regfi.regfi_get_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
+                                   c_uint32]
+regfi.regfi_get_subkey.restype = POINTER(REGFI_NK)
+
+regfi.regfi_get_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
+                                   c_uint32]
+regfi.regfi_get_value.restype = POINTER(REGFI_VK)
 
 regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE), REGFI_ENCODING]
 regfi.regfi_iterator_new.restype = POINTER(REGFI_ITERATOR)
@@ -83,6 +105,9 @@ regfi.regfi_iterator_find_value.argtypes = [POINTER(REGFI_ITERATOR), c_char_p]
 regfi.regfi_iterator_find_value.restype = c_bool
 
 
+
+regfi.regfi_get_value
+
 regfi.regfi_init.argtypes = []
 regfi.regfi_init.restype = None
 regfi.regfi_init()
@@ -92,14 +117,16 @@ def GetLogMessages():
     msgs = regfi.regfi_log_get_str()
     if msgs == None:
         return ''
-    return msgs
+    return msgs.decode('ascii')
 
 
 class _StructureWrapper():
     "Handles memory management and proxies attribute access to base structures"
+    hive = None
     base = None
 
-    def __init__(self, base):
+    def __init__(self, hive, base):
+        self.hive = hive
         # XXX: check for NULL here, throw an exception if so.
         self.base = base
 
@@ -116,17 +143,67 @@ class _StructureWrapper():
         return (not self.__eq__(other))
 
 
-class Key(_StructureWrapper):
-    pass
-
 class Value(_StructureWrapper):
     pass
+
 
 class Data(_StructureWrapper):
     pass
 
+
 class Security(_StructureWrapper):
     pass
+
+
+class _ValueList():
+    hive = None
+    key = None
+    length = None
+    current = None
+
+    def __init__(self, key):
+        self.hive = key.hive
+        # XXX: check for NULL here, throw an exception if so.
+        self.key = key
+        self.length = regfi.regfi_fetch_num_values(key.base)
+    
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, name):
+        index = c_uint32()
+        # XXX: need to do any funky unicode conversions on name?
+        if regfi.regfi_find_value(self.hive.file, self.key.base,
+                                  create_string_buffer(name), byref(index)):
+            return Value(hive,
+                         regfi.regfi_get_value(hive.file, key.base, index))
+        raise KeyError('')
+
+    def __iter__(self):
+        self.current = 0
+        return self
+    
+    def __next__(self):
+        if self.current >= self.length:
+            raise StopIteration('')
+
+        vk = regfi.regfi_get_value(self.hive.file, self.key.base,
+                                   c_uint32(self.current))
+        self.current += 1
+        return vk.contents
+    
+
+class Key(_StructureWrapper):
+    values = None
+
+    def __init__(self, hive, base):
+        super(Key, self).__init__(hive, base)
+        self.values = _ValueList(self)
+
+    def fetch_security(self):
+        return Security(self.hive,
+                        regfi.regfi_fetch_sk(self.hive.file, self.base))
+
 
 class Hive():    
     file = None
@@ -228,4 +305,4 @@ class HiveIterator():
             raise Exception('Could not locate path.\n'+GetLogMessages())
 
     def current_key(self):
-        return Key(regfi.regfi_iterator_cur_key(self.iter))
+        return Key(self.hive, regfi.regfi_iterator_cur_key(self.iter))

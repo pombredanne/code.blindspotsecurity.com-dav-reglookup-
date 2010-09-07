@@ -1720,6 +1720,47 @@ void regfi_free_record(const void* record)
 
 
 
+
+/******************************************************************************
+ *****************************************************************************/
+uint32_t regfi_fetch_num_subkeys(const REGFI_NK* key)
+{
+  uint32_t num_in_list = 0;
+  if(key->subkeys != NULL)
+    num_in_list = key->subkeys->num_keys;
+
+  if(num_in_list != key->num_subkeys)
+  {
+    regfi_log_add(REGFI_LOG_INFO, "Key at offset 0x%.8X contains %d keys in its"
+		  " subkey list but reports %d should be available.", 
+		  key->offset, num_in_list, key->num_subkeys);
+    return (num_in_list < key->num_subkeys)?num_in_list:key->num_subkeys;
+  }
+  
+  return num_in_list;
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+uint32_t regfi_fetch_num_values(const REGFI_NK* key)
+{
+  uint32_t num_in_list = 0;
+  if(key->values != NULL)
+    num_in_list = key->values->num_values;
+
+  if(num_in_list != key->num_values)
+  {
+    regfi_log_add(REGFI_LOG_INFO, "Key at offset 0x%.8X contains %d values in"
+		  " its value list but reports %d should be available.",
+		  key->offset, num_in_list, key->num_values);
+    return (num_in_list < key->num_values)?num_in_list:key->num_values;
+  }
+  
+  return num_in_list;
+}
+
+
 /******************************************************************************
  *****************************************************************************/
 REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
@@ -1835,37 +1876,17 @@ bool regfi_iterator_to_root(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* subkey_name)
+bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* name)
 {
-  REGFI_NK* subkey;
-  bool found = false;
-  uint32_t old_subkey = i->cur_subkey;
+  uint32_t new_index;
 
-  if(subkey_name == NULL)
-    return false;
-
-  /* XXX: this alloc/free of each sub key might be a bit excessive */
-  regfi_iterator_first_subkey(i);
-  while((subkey = regfi_iterator_cur_subkey(i)) != NULL && (found == false))
+  if(regfi_find_subkey(i->f, i->cur_key, name, &new_index))
   {
-    if(subkey->name != NULL 
-       && strcasecmp(subkey->name, subkey_name) == 0)
-      found = true;
-    else
-    {
-      talloc_unlink(NULL, subkey);
-      regfi_iterator_next_subkey(i);
-    }
+    i->cur_subkey = new_index;
+    return true;
   }
 
-  if(found == false)
-  {
-    i->cur_subkey = old_subkey;
-    return false;
-  }
-
-  talloc_unlink(NULL, subkey);
-  return true;
+  return false;
 }
 
 
@@ -1921,7 +1942,7 @@ bool regfi_iterator_first_subkey(REGFI_ITERATOR* i)
   i->cur_subkey = 0;
   
   return ((i->cur_key != NULL) && (i->cur_key->subkeys_off!=REGFI_OFFSET_NONE) 
-	  && (i->cur_subkey < i->cur_key->num_subkeys)); 
+	  && (i->cur_subkey < regfi_fetch_num_subkeys(i->cur_key)));
 }
 
 
@@ -1929,18 +1950,7 @@ bool regfi_iterator_first_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
 {
-  uint32_t nk_offset;
-
-  if((i->cur_key != NULL) && (i->cur_key->subkeys_off!=REGFI_OFFSET_NONE) 
-     && (i->cur_subkey < i->cur_key->num_subkeys))
-  {
-    nk_offset = i->cur_key->subkeys->elements[i->cur_subkey].offset;
-
-    return regfi_load_key(i->f, nk_offset+REGFI_REGF_SIZE, 
-			  i->f->string_encoding, true);
-  }
-
-  return NULL;
+  return regfi_get_subkey(i->f, i->cur_key, i->cur_subkey);
 }
 
 
@@ -1951,45 +1961,23 @@ bool regfi_iterator_next_subkey(REGFI_ITERATOR* i)
   i->cur_subkey++;
 
   return ((i->cur_key != NULL) && (i->cur_key->subkeys_off!=REGFI_OFFSET_NONE) 
-	  && (i->cur_subkey < i->cur_key->num_subkeys)); 
+	  && (i->cur_subkey < regfi_fetch_num_subkeys(i->cur_key))); 
 }
 
 
 /******************************************************************************
  *****************************************************************************/
-bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* value_name)
+bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name)
 {
-  const REGFI_VK* cur;
-  bool found = false;
-  uint32_t old_value = i->cur_value;
+  uint32_t new_index;
 
-  /* XXX: cur->name can be NULL in the registry.  
-   *      Should we allow for a way to search for that? 
-   */
-  if(value_name == NULL)
-    return false;
-
-  regfi_iterator_first_value(i);
-  while((cur = regfi_iterator_cur_value(i)) != NULL && (found == false))
+  if(regfi_find_value(i->f, i->cur_key, name, &new_index))
   {
-    if((cur->name != NULL)
-       && (strcasecmp(cur->name, value_name) == 0))
-      found = true;
-    else
-    {
-      regfi_free_record(cur);
-      regfi_iterator_next_value(i);
-    }
-  }
-  
-  if(found == false)
-  {
-    i->cur_value = old_value;
-    return false;
+    i->cur_value = new_index;
+    return true;
   }
 
-  regfi_free_record(cur);
-  return true;
+  return false;
 }
 
 
@@ -1999,7 +1987,7 @@ bool regfi_iterator_first_value(REGFI_ITERATOR* i)
 {
   i->cur_value = 0;
   return (i->cur_key->values != NULL && i->cur_key->values->elements != NULL 
-	  && (i->cur_value < i->cur_key->values->num_values));
+	  && (i->cur_value < regfi_fetch_num_values(i->cur_key)));
 }
 
 
@@ -2007,18 +1995,7 @@ bool regfi_iterator_first_value(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
-  REGFI_VK* ret_val = NULL;
-  uint32_t voffset;
-
-  if(i->cur_key->values != NULL && i->cur_key->values->elements != NULL 
-     && (i->cur_value < i->cur_key->values->num_values))
-  {
-    voffset = i->cur_key->values->elements[i->cur_value];
-    ret_val = regfi_load_value(i->f, voffset+REGFI_REGF_SIZE, 
-			       i->f->string_encoding, true);
-  }
-
-  return ret_val;
+  return regfi_get_value(i->f, i->cur_key, i->cur_value);
 }
 
 
@@ -2028,7 +2005,7 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i)
 {
   i->cur_value++;
   return (i->cur_key->values != NULL && i->cur_key->values->elements != NULL 
-	  && (i->cur_value < i->cur_key->values->num_values));
+	  && (i->cur_value < regfi_fetch_num_values(i->cur_key)));
 }
 
 
@@ -2140,6 +2117,114 @@ const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file,
   }
   
   return ret_val;
+}
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key, 
+		       const char* name, uint32_t* index)
+{
+  const REGFI_NK* cur;
+  uint32_t i;
+  uint32_t num_subkeys = regfi_fetch_num_subkeys(key);
+  bool found = false;
+
+  /* XXX: cur->name can be NULL in the registry.  
+   *      Should we allow for a way to search for that? 
+   */
+  if(name == NULL)
+    return false;
+
+  for(i=0; (i < num_subkeys) && (found == false); i++)
+  {
+    cur = regfi_get_subkey(file, key, i);
+    if(cur == NULL)
+      return false;
+
+    if((cur->name != NULL)
+       && (strcasecmp(cur->name, name) == 0))
+    {
+      found = true;
+      *index = i;
+    }
+
+    regfi_free_record(cur);
+  }
+
+  return found;
+}
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_find_value(REGFI_FILE* file, const REGFI_NK* key, 
+		      const char* name, uint32_t* index)
+{
+  const REGFI_VK* cur;
+  uint32_t i;
+  uint32_t num_values = regfi_fetch_num_values(key);
+  bool found = false;
+
+  /* XXX: cur->name can be NULL in the registry.  
+   *      Should we allow for a way to search for that? 
+   */
+  if(name == NULL)
+    return false;
+
+  for(i=0; (i < num_values) && (found == false); i++)
+  {
+    cur = regfi_get_value(file, key, i);
+    if(cur == NULL)
+      return false;
+
+    if((cur->name != NULL)
+       && (strcasecmp(cur->name, name) == 0))
+    {
+      found = true;
+      *index = i;
+    }
+
+    regfi_free_record(cur);
+  }
+
+  return found;
+}
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGFI_NK* regfi_get_subkey(REGFI_FILE* file, const REGFI_NK* key, 
+				 uint32_t index)
+{
+  if(index < regfi_fetch_num_subkeys(key))
+  {
+    return regfi_load_key(file, 
+			  key->subkeys->elements[index].offset+REGFI_REGF_SIZE,
+			  file->string_encoding, true);
+  }
+
+  return NULL;
+}
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key, 
+				uint32_t index)
+{
+  if(index < regfi_fetch_num_values(key))
+  {
+    return regfi_load_value(file, 
+			    key->values->elements[index]+REGFI_REGF_SIZE,
+			    file->string_encoding, true);
+  }
+
+  return NULL;  
 }
 
 
