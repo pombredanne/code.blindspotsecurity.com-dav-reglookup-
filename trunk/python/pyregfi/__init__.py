@@ -120,6 +120,19 @@ def GetLogMessages():
     return msgs.decode('ascii')
 
 
+def _buffer2bytearray(char_pointer, length):
+    if length == 0 or char_pointer == None:
+        return None
+    
+    ret_val = bytearray(length)
+    for i in range(0,length):
+        ret_val[i] = char_pointer[i][0]
+
+    return ret_val
+
+
+
+
 class _StructureWrapper():
     "Handles memory management and proxies attribute access to base structures"
     hive = None
@@ -143,41 +156,52 @@ class _StructureWrapper():
         return (not self.__eq__(other))
 
 
+class Key(_StructureWrapper):
+    pass
+
 class Value(_StructureWrapper):
     pass
 
-
 class Data(_StructureWrapper):
     pass
-
 
 class Security(_StructureWrapper):
     pass
 
 
-class _ValueList():
+class _GenericList():
     hive = None
     key = None
     length = None
     current = None
 
+    # implementation-specific functions
+    fetch_num = None
+    find_element = None
+    get_element = None
+    constructor = None
+
     def __init__(self, key):
         self.hive = key.hive
         # XXX: check for NULL here, throw an exception if so.
         self.key = key
-        self.length = regfi.regfi_fetch_num_values(key.base)
+        self.length = self.fetch_num(key.base)
     
     def __len__(self):
         return self.length
 
     def __getitem__(self, name):
         index = c_uint32()
-        # XXX: need to do any funky unicode conversions on name?
-        if regfi.regfi_find_value(self.hive.file, self.key.base,
-                                  create_string_buffer(name), byref(index)):
-            return Value(hive,
-                         regfi.regfi_get_value(hive.file, key.base, index))
+        if isinstance(name, str):
+            name = name.encode('utf-8')
+
+        if self.find_element(self.hive.file, self.key.base,
+                             create_string_buffer(name), byref(index)):
+            return self.constructor(self.hive, self.get_element(self.hive.file,
+                                                                self.key.base,
+                                                                index))
         raise KeyError('')
+
 
     def __iter__(self):
         self.current = 0
@@ -187,22 +211,72 @@ class _ValueList():
         if self.current >= self.length:
             raise StopIteration('')
 
-        vk = regfi.regfi_get_value(self.hive.file, self.key.base,
-                                   c_uint32(self.current))
+        elem = self.get_element(self.hive.file, self.key.base,
+                                c_uint32(self.current))
         self.current += 1
-        return vk.contents
+        return elem.contents
     
+
+class _SubkeyList(_GenericList):
+    fetch_num = regfi.regfi_fetch_num_subkeys
+    find_element = regfi.regfi_find_subkey
+    get_element = regfi.regfi_get_subkey
+
+
+class _ValueList(_GenericList):
+    fetch_num = regfi.regfi_fetch_num_values
+    find_element = regfi.regfi_find_value
+    get_element = regfi.regfi_get_value
+
 
 class Key(_StructureWrapper):
     values = None
+    subkeys = None
 
     def __init__(self, hive, base):
         super(Key, self).__init__(hive, base)
         self.values = _ValueList(self)
+        self.subkeys = _SubkeyList(self)
+
+    def __getattr__(self, name):
+        ret_val = super(Key, self).__getattr__(name)
+        if ret_val == None:
+            return None
+        
+        if name == "name":
+            ret_val = ret_val.decode('utf-8')
+        elif name == "name_raw":
+            length = super(Key, self).__getattr__('name_length')
+            ret_val = _buffer2bytearray(ret_val, length)
+        
+        return ret_val
+
 
     def fetch_security(self):
         return Security(self.hive,
                         regfi.regfi_fetch_sk(self.hive.file, self.base))
+
+
+class Value(_StructureWrapper):
+    def __getattr__(self, name):
+        ret_val = super(Value, self).__getattr__(name)
+        if ret_val == None:
+            return None
+
+        if name == "name":
+            ret_val = ret_val.decode('utf-8')
+        elif name == "name_raw":
+            length = super(Value, self).__getattr__('name_length')
+            ret_val = _buffer2bytearray(ret_val, length)
+        
+        return ret_val
+
+
+# Avoids chicken/egg class definitions.
+# Also makes for convenient code reuse in these lists' parent classes.
+_SubkeyList.constructor = Key
+_ValueList.constructor = Value
+
 
 
 class Hive():    
