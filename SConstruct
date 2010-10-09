@@ -5,11 +5,12 @@ libpthreads_path='win32/libpthreads/'
 libpthread_name='pthreadGC2'
 libtalloc_path='win32/libtalloc/'
 
-source_targets=('reglookup-trunk.tar.gz',)
-win32_targets=('reglookup-trunk-win32.zip',)
+source_targets=('reglookup-src-trunk.tar.gz',)
+win32_targets=('reglookup-win32-trunk.zip',)
+doc_targets=('reglookup-doc-trunk.tar.gz',)
 
 def target2version(target):
-    return target.split('-')[1].split('.')[0]
+    return target.split('-')[2].split('.')[0]
 
 def version2input(version):
     if version == 'trunk':
@@ -32,6 +33,15 @@ cp %s/src/*.exe .release/%s
 cp win32/libiconv/bin/*.dll win32/libpthreads/bin/*.dll win32/libtalloc/bin/*.dll .release/%s
 cd .release && zip -r %s.zip %s
 mv .release/%s.zip . && rm -rf .release
+'''
+
+doc_cmds='''
+rm -rf .release;
+svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/ .release;
+cd .release && doxygen Doxyfile.regfi
+mv .release/doc .release/%s
+cd .release && tar cf %s.tar %s && gzip -9 %s.tar;
+mv .release/%s.tar.gz . && rm -rf .release
 '''
 
 def generate_cmds(source, target, env, for_signature):
@@ -85,8 +95,12 @@ def generate_cmds(source, target, env, for_signature):
             ret_val += win32_cmds % (t_base,input_prefix,
                                      t_base,t_base,t_base,t_base,t_base)
 
+        elif t in doc_targets:
+            ret_val += doc_cmds % (t_base,t_base,t_base,t_base,t_base)
+
         else:
-            return '#ERROR: cannot build "%s".  Acceptable targets: %s' % (t, repr(buildable_files))
+            return '#ERROR: cannot build "%s".  Acceptable targets: %s'\
+                   % (t, repr(source_targets+win32_targets+doc_targets))
         
     return ret_val
 

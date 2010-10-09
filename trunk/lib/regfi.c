@@ -2085,7 +2085,7 @@ const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file,
   if(value->data_size != 0)
   {
     raw_data = regfi_load_data(file, value->data_off, value->data_size,
-			      value->data_in_offset, true);
+			       value->data_in_offset, true);
     if(raw_data.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Could not parse data record"
@@ -2373,7 +2373,7 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
     tmp_array[0] = tmp_str;
     for(i=0,j=1; i < tmp_size && j < array_size-1; i++)
     {
-      if(tmp_str[i] == '\0' && (i+1 < tmp_size))
+      if(tmp_str[i] == '\0' && (i+1 < tmp_size) && tmp_str[i+1] != '\0')
 	tmp_array[j++] = tmp_str+i+1;
     }
     tmp_array[j] = NULL;

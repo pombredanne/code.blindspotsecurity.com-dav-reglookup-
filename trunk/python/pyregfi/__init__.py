@@ -131,7 +131,17 @@ def _buffer2bytearray(char_pointer, length):
     return ret_val
 
 
+def _charss2strlist(chars_pointer):
+    ret_val = []
+    i = 0
+    s = chars_pointer[i]
+    while s != None:
+        ret_val.append(s.decode('utf-8'))
+        i += 1
+        s = chars_pointer[i]
 
+    return ret_val
+                
 
 class _StructureWrapper():
     "Handles memory management and proxies attribute access to base structures"
@@ -195,14 +205,21 @@ class _GenericList():
         if isinstance(name, str):
             name = name.encode('utf-8')
 
-        if self.find_element(self.hive.file, self.key.base,
-                             create_string_buffer(name), byref(index)):
+        if name != None:
+            name = create_string_buffer(bytes(name))
+
+        if self.find_element(self.hive.file, self.key.base, name, byref(index)):
             return self.constructor(self.hive, self.get_element(self.hive.file,
                                                                 self.key.base,
                                                                 index))
         raise KeyError('')
 
-
+    def get(self, name, default):
+        try:
+            return self[name]
+        except KeyError:
+            return default
+    
     def __iter__(self):
         self.current = 0
         return self
@@ -214,7 +231,7 @@ class _GenericList():
         elem = self.get_element(self.hive.file, self.key.base,
                                 c_uint32(self.current))
         self.current += 1
-        return elem.contents
+        return self.constructor(self.hive, elem)
     
 
 class _SubkeyList(_GenericList):
@@ -240,11 +257,13 @@ class Key(_StructureWrapper):
 
     def __getattr__(self, name):
         ret_val = super(Key, self).__getattr__(name)
-        if ret_val == None:
-            return None
         
         if name == "name":
-            ret_val = ret_val.decode('utf-8')
+            if ret_val == None:
+                ret_val = self.name_raw
+            else:
+                ret_val = ret_val.decode('utf-8')
+                
         elif name == "name_raw":
             length = super(Key, self).__getattr__('name_length')
             ret_val = _buffer2bytearray(ret_val, length)
@@ -259,16 +278,60 @@ class Key(_StructureWrapper):
 
 class Value(_StructureWrapper):
     def __getattr__(self, name):
-        ret_val = super(Value, self).__getattr__(name)
-        if ret_val == None:
-            return None
+        ret_val = None
+        if name == "data":
+            data_p = regfi.regfi_fetch_data(self.hive.file, self.base)
+            try:
+                data_struct = data_p.contents
+            except Exception:
+                return None
 
-        if name == "name":
-            ret_val = ret_val.decode('utf-8')
-        elif name == "name_raw":
-            length = super(Value, self).__getattr__('name_length')
-            ret_val = _buffer2bytearray(ret_val, length)
-        
+            if data_struct.interpreted_size == 0:
+                ret_val = None
+            elif data_struct.type in (REG_SZ, REG_EXPAND_SZ, REG_LINK):
+                # Unicode strings
+                ret_val = data_struct.interpreted.string.decode('utf-8')
+            elif data_struct.type in (REG_DWORD, REG_DWORD_BE):
+                # 32 bit integers
+                ret_val = data_struct.interpreted.dword
+            elif data_struct.type == REG_QWORD:
+                # 64 bit integers
+                ret_val = data_struct.interpreted.qword
+            elif data_struct.type == REG_MULTI_SZ:
+                ret_val = _charss2strlist(data_struct.interpreted.multiple_string)
+            elif data_struct.type in (REG_NONE, REG_RESOURCE_LIST,
+                                      REG_FULL_RESOURCE_DESCRIPTOR,
+                                      REG_RESOURCE_REQUIREMENTS_LIST,
+                                      REG_BINARY):
+                ret_val = _buffer2bytearray(data_struct.interpreted.none,
+                                            data_struct.interpreted_size)
+
+            regfi.regfi_free_record(data_p)
+            
+        elif name == "data_raw":
+            # XXX: should we load the data without interpretation instead?
+            data_p = regfi.regfi_fetch_data(self.hive.file, self.base)
+            try:
+                data_struct = data_p.contents
+            except Exception:
+                return None
+
+            ret_val = _buffer2bytearray(data_struct.raw,
+                                        data_struct.size)
+            regfi.regfi_free_record(data_p)            
+            
+        else:
+            ret_val = super(Value, self).__getattr__(name)
+            if name == "name":
+                if ret_val == None:
+                    ret_val = self.name_raw
+                else:
+                    ret_val = ret_val.decode('utf-8')
+
+            elif name == "name_raw":
+                length = super(Value, self).__getattr__('name_length')
+                ret_val = _buffer2bytearray(ret_val, length)
+
         return ret_val
 
 
@@ -284,7 +347,7 @@ class Hive():
     raw_file = None
     
     def __init__(self, fh):
-        # The fileno method may not exist, or it may thrown an exception
+        # The fileno method may not exist, or it may throw an exception
         # when called if the file isn't backed with a descriptor.
         try:
             if hasattr(fh, 'fileno'):

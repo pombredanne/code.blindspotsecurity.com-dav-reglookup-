@@ -22,9 +22,18 @@ for f in files:
     num_values = 0
     # The iterator now walks the entire registry hive, depth-first
     for key in iter:
-        print key.key.keyname
+        #print key.key.keyname
         num_keys +=1
         num_values += iter_values(key)
 
     print "keys: %d" % num_keys
     print "values: %d" % num_values
+
+
+iter = rf.TreeIterator()
+root = iter.current()
+for key in root.subkeys():
+    for subkey in key.subkeys():
+        for subsubkey in subkey.subkeys():
+            print key.key.keyname
+
