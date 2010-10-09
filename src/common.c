@@ -258,7 +258,7 @@ static char* data_to_ascii(const REGFI_DATA* data, char** error_msg)
     {
       cur_quoted = quote_string((char*)data->interpreted.multiple_string[i],
 				subfield_special_chars);
-      if(cur_quoted != NULL && cur_quoted[0] != '\0')
+      if(cur_quoted != NULL)
       {
 	tmp_len = snprintf(tmp_ptr, ret_val_left, "%s%s",delim, cur_quoted);
 	tmp_ptr += tmp_len;

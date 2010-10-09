@@ -402,6 +402,11 @@ typedef struct _regfi_classname
  */
 typedef struct _regfi_data
 {
+  /* XXX: this isn't populated yet. Should set it to start of data cell
+   *      or big data cell. 
+   */
+  uint32_t offset;
+
   /** Data type of this data, as indicated by the referencing VK record. */
   REGFI_DATA_TYPE type;
 
@@ -411,7 +416,9 @@ typedef struct _regfi_data
   /** This is always present, representing the raw data cell contents. */
   uint8_t* raw;
 
-  /** Represents the length of the interpreted value. Meaning is type-specific. */
+  /** Represents the length of the interpreted value. Meaning is type-specific. 
+   *  Will be 0 if interpretation failed for any reason.
+   */
   uint32_t interpreted_size;
 
   /** These items represent interpreted versions of the REGFI_DATA::raw field.

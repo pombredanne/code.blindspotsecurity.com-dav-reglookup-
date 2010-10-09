@@ -11,6 +11,21 @@ from ctypes import *
 REGFI_ENCODING = c_uint32
 REGFI_DATA_TYPE = c_uint32
 
+# Registry value data types
+REG_NONE                       =  0
+REG_SZ		               =  1
+REG_EXPAND_SZ                  =  2
+REG_BINARY 	               =  3
+REG_DWORD	               =  4
+REG_DWORD_LE	               =  4 # DWORD, little endian
+REG_DWORD_BE	               =  5 # DWORD, big endian
+REG_LINK                       =  6
+REG_MULTI_SZ  	               =  7
+REG_RESOURCE_LIST              =  8
+REG_FULL_RESOURCE_DESCRIPTOR   =  9
+REG_RESOURCE_REQUIREMENTS_LIST = 10
+REG_QWORD                      = 11 # 64-bit little endian
+
 
 # Prototype everything first so we don't have to worry about reference order
 class REGFI_NTTIME(Structure):
@@ -175,7 +190,7 @@ class REGFI_DATA__interpreted(Union):
                 ('resource_list',POINTER(c_char)),
                 ('full_resource_descriptor',POINTER(c_char)),
                 ('resource_requirements_list',POINTER(c_char)),
-                ]    
+                ]
 REGFI_DATA._fields_ = [('offset', c_uint32),
                        ('type', REGFI_DATA_TYPE),
                        ('size', c_uint32),
@@ -184,7 +199,7 @@ REGFI_DATA._fields_ = [('offset', c_uint32),
                        ('interpreted', REGFI_DATA__interpreted),
                        ]
 
-   
+
 REGFI_FILE._fields_ = [('magic', c_char * 4),
                        ('sequence1', c_uint32),
                        ('sequence2', c_uint32),
