@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+## @package pyregfi
+# Python interface to the regfi library.
+#
+
 import sys
 from pyregfi.structures import *
 
@@ -105,14 +109,13 @@ regfi.regfi_iterator_find_value.argtypes = [POINTER(REGFI_ITERATOR), c_char_p]
 regfi.regfi_iterator_find_value.restype = c_bool
 
 
-
-regfi.regfi_get_value
-
 regfi.regfi_init.argtypes = []
 regfi.regfi_init.restype = None
 regfi.regfi_init()
 
 
+## Retrieves messages produced by regfi during parsing and interpretation
+#
 def GetLogMessages():
     msgs = regfi.regfi_log_get_str()
     if msgs == None:
@@ -141,10 +144,12 @@ def _charss2strlist(chars_pointer):
         s = chars_pointer[i]
 
     return ret_val
-                
 
+
+## Abstract class which Handles memory management and proxies attribute
+#  access to base structures  
 class _StructureWrapper():
-    "Handles memory management and proxies attribute access to base structures"
+
     hive = None
     base = None
 
@@ -165,16 +170,18 @@ class _StructureWrapper():
     def __ne__(self, other):
         return (not self.__eq__(other))
 
-
+## Registry key 
 class Key(_StructureWrapper):
     pass
 
 class Value(_StructureWrapper):
     pass
 
+## Registry value data
 class Data(_StructureWrapper):
     pass
 
+## Registry security record/permissions
 class Security(_StructureWrapper):
     pass
 
@@ -276,6 +283,11 @@ class Key(_StructureWrapper):
                         regfi.regfi_fetch_sk(self.hive.file, self.base))
 
 
+## Registry value (metadata)
+#
+# These represent registry values (@ref REGFI_VK records) and provide
+# access to their associated data.
+# 
 class Value(_StructureWrapper):
     def __getattr__(self, name):
         ret_val = None
@@ -342,7 +354,9 @@ _ValueList.constructor = Value
 
 
 
-class Hive():    
+## Represents a single registry hive (file)
+#
+class Hive():
     file = None
     raw_file = None
     
@@ -365,7 +379,7 @@ class Hive():
     def __getattr__(self, name):
         return getattr(self.file.contents, name)
     
-    def __del__(self):    
+    def __del__(self):
         regfi.regfi_free(self.file)
         if self.raw_file != None:
             regfi.regfi_free(self.file)
@@ -374,12 +388,28 @@ class Hive():
     def __iter__(self):
         return HiveIterator(self)
 
+    ## Creates a @ref HiveIterator initialized at the specified path in
+    #  the hive. 
+    #
+    # Raises an Exception if the path could not be found/traversed.
     def subtree(self, path):
         hi = HiveIterator(self)
         hi.descend(path)
         return hi
 
 
+## A special purpose iterator for registry hives
+#
+# Iterating over an object of this type causes all keys in a specific
+# hive subtree to be returned in a depth-first manner. These iterators
+# are typically created using the @ref Hive.subtree() function on a @ref Hive
+# object.
+#
+# HiveIterators can also be used to manually traverse up and down a
+# registry hive as they retain information about the current position in
+# the hive, along with which iteration state for subkeys and values for
+# every parent key.  See the @ref up and @ref down methods for more
+# information.
 class HiveIterator():
     hive = None
     iter = None
@@ -418,6 +448,7 @@ class HiveIterator():
             if not up_ret:
                 raise StopIteration('')
             
+            # XXX: Use non-generic exception
             if not regfi.regfi_iterator_down(self.iter):
                 raise Exception('Error traversing iterator downward.'+
                                 ' Current log:\n'+ GetLogMessages())
@@ -438,8 +469,11 @@ class HiveIterator():
         # evaluate generator and create char* array
         apath = (c_char_p*len(path))(*cpath)
 
+        # XXX: Use non-generic exception
         if not regfi.regfi_iterator_walk_path(self.iter,apath):
             raise Exception('Could not locate path.\n'+GetLogMessages())
 
     def current_key(self):
         return Key(self.hive, regfi.regfi_iterator_cur_key(self.iter))
+
+    #XXX Add subkey/value search accessor functions (?)
