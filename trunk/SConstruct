@@ -1,3 +1,6 @@
+import sys
+import distutils.sysconfig
+
 #cflags = '-std=gnu99 -pedantic -Wall'
 cflags = '-std=gnu99 -pedantic -Wall -fvisibility=hidden -ggdb'
 
@@ -42,13 +45,18 @@ man_reglookup_timeline = env.ManPage('doc/reglookup-timeline.1.docbook')
 prefix='/usr/local/'
 env.Install(prefix+'bin', [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
 env.Install(prefix+'lib', [libregfi, libregfi_static])
+env.Install(distutils.sysconfig.get_python_lib()+'/pyregfi', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'])
 env.Install(prefix+'include/regfi', Glob('include/*.h'))
 env.Install(prefix+'man/man1', [man_reglookup, man_reglookup_recover,
                                 man_reglookup_timeline])
 
+# Could do this instead, but not sure how to ensure cleanup afterward.
+#from distutils.core import setup
+#setup(name='pyregfi', version='0.1', package_dir={'':'python'}, packages=['pyregfi'])
 
 # User Friendly Targets
 env.Alias('libregfi', libregfi)
+env.Alias('pyregfi', distutils.sysconfig.get_python_lib()+'/pyregfi')
 env.Alias('reglookup', reglookup)
 env.Alias('reglookup-recover', reglookup_recover)
 env.Alias('bin', [reglookup_recover, reglookup])
@@ -56,6 +64,7 @@ env.Alias('doc', [man_reglookup,man_reglookup_recover,man_reglookup_timeline])
 env.Alias('install', [prefix+'bin',
                       prefix+'lib', 
                       prefix+'include/regfi',
+                      distutils.sysconfig.get_python_lib()+'/pyregfi',
                       prefix+'man'])
 
 Default('bin', libregfi)
