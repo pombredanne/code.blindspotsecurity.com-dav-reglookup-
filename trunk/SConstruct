@@ -1,5 +1,6 @@
 import sys
-import distutils.sysconfig
+import os
+#import distutils.sysconfig
 
 #cflags = '-std=gnu99 -pedantic -Wall'
 cflags = '-std=gnu99 -pedantic -Wall -fvisibility=hidden -ggdb'
@@ -40,31 +41,37 @@ man_reglookup = env.ManPage('doc/reglookup.1.docbook')
 man_reglookup_recover = env.ManPage('doc/reglookup-recover.1.docbook')
 man_reglookup_timeline = env.ManPage('doc/reglookup-timeline.1.docbook')
 
-
 # Installation
 prefix='/usr/local/'
+install_items = [prefix+'bin',
+                 prefix+'lib', 
+                 prefix+'include/regfi',
+                 prefix+'man']
+
 env.Install(prefix+'bin', [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
 env.Install(prefix+'lib', [libregfi, libregfi_static])
-env.Install(distutils.sysconfig.get_python_lib()+'/pyregfi', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'])
 env.Install(prefix+'include/regfi', Glob('include/*.h'))
 env.Install(prefix+'man/man1', [man_reglookup, man_reglookup_recover,
                                 man_reglookup_timeline])
 
-# Could do this instead, but not sure how to ensure cleanup afterward.
-#from distutils.core import setup
-#setup(name='pyregfi', version='0.1', package_dir={'':'python'}, packages=['pyregfi'])
+if sys.version_info[0] == 2:
+   install_items.append('pyregfi2-install.log')
+   env.Command('pyregfi2-install.log', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'], 
+               "python pyregfi-distutils.py install | tee pyregfi2-install.log")
+
+python_path = os.popen('which python3').read()
+if python_path != '':
+   install_items.append('pyregfi3-install.log')
+   env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'], 
+               "python3 pyregfi-distutils.py install | tee pyregfi3-install.log")
+
 
 # User Friendly Targets
 env.Alias('libregfi', libregfi)
-env.Alias('pyregfi', distutils.sysconfig.get_python_lib()+'/pyregfi')
 env.Alias('reglookup', reglookup)
 env.Alias('reglookup-recover', reglookup_recover)
 env.Alias('bin', [reglookup_recover, reglookup])
 env.Alias('doc', [man_reglookup,man_reglookup_recover,man_reglookup_timeline])
-env.Alias('install', [prefix+'bin',
-                      prefix+'lib', 
-                      prefix+'include/regfi',
-                      distutils.sysconfig.get_python_lib()+'/pyregfi',
-                      prefix+'man'])
+env.Alias('install', install_items)
 
 Default('bin', libregfi)
