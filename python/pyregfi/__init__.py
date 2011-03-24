@@ -148,7 +148,7 @@ def _charss2strlist(chars_pointer):
 
 ## Abstract class which Handles memory management and proxies attribute
 #  access to base structures  
-class _StructureWrapper():
+class _StructureWrapper(object):
 
     hive = None
     base = None
@@ -186,7 +186,7 @@ class Security(_StructureWrapper):
     pass
 
 
-class _GenericList():
+class _GenericList(object):
     hive = None
     key = None
     length = None
@@ -240,6 +240,10 @@ class _GenericList():
         self.current += 1
         return self.constructor(self.hive, elem)
     
+    # For Python 2.x
+    def next(self):
+        return self.__next__()
+
 
 class _SubkeyList(_GenericList):
     fetch_num = regfi.regfi_fetch_num_subkeys
@@ -455,6 +459,10 @@ class HiveIterator():
 
         regfi.regfi_iterator_first_subkey(self.iter)
         return self.current_key()
+
+    # For Python 2.x
+    def next(self):
+        return self.__next__()
 
     def down(self):
         pass
