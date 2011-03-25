@@ -1779,7 +1779,7 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
     return NULL;
   }
   ret_val->cur_key = root;
-  talloc_reference(ret_val, root);
+  talloc_reparent(NULL, ret_val, root);
 
   ret_val->key_positions = void_stack_new(REGFI_MAX_DEPTH);
   if(ret_val->key_positions == NULL)
@@ -1833,7 +1833,7 @@ bool regfi_iterator_down(REGFI_ITERATOR* i)
     talloc_unlink(NULL, subkey);
     return false;
   }
-  talloc_reference(i, subkey);
+  talloc_reparent(NULL, i, subkey);
 
   i->cur_key = subkey;
   i->cur_subkey = 0;
@@ -1919,7 +1919,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
  *****************************************************************************/
 const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
-  /* XXX: do we need to add a NULL talloc reference here? */
+  talloc_reference(NULL, i->cur_key);
   return i->cur_key;
 }
 

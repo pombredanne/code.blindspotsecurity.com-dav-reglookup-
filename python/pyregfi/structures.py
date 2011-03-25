@@ -9,6 +9,8 @@ from ctypes import *
 
 # XXX: can we always be sure enums are this size?
 REGFI_ENCODING = c_uint32
+REGFI_ENCODING_UTF8 = 1
+
 REGFI_DATA_TYPE = c_uint32
 
 # Registry value data types

@@ -14,10 +14,10 @@ from ctypes import c_char,c_char_p,c_int,c_uint16,c_uint32,c_bool,POINTER
 regfi = ctypes.CDLL(ctypes.util.find_library('regfi'), use_errno=True)
 
 
-regfi.regfi_alloc.argtypes = [c_int]
+regfi.regfi_alloc.argtypes = [c_int, REGFI_ENCODING]
 regfi.regfi_alloc.restype = POINTER(REGFI_FILE)
 
-regfi.regfi_alloc_cb.argtypes = [POINTER(REGFI_RAW_FILE)]
+regfi.regfi_alloc_cb.argtypes = [POINTER(REGFI_RAW_FILE), REGFI_ENCODING]
 regfi.regfi_alloc_cb.restype = POINTER(REGFI_FILE)
 
 regfi.regfi_free.argtypes = [POINTER(REGFI_FILE)]
@@ -139,7 +139,7 @@ def _charss2strlist(chars_pointer):
     i = 0
     s = chars_pointer[i]
     while s != None:
-        ret_val.append(s.decode('utf-8'))
+        ret_val.append(s.decode('utf-8', 'replace'))
         i += 1
         s = chars_pointer[i]
 
@@ -149,7 +149,6 @@ def _charss2strlist(chars_pointer):
 ## Abstract class which Handles memory management and proxies attribute
 #  access to base structures  
 class _StructureWrapper(object):
-
     hive = None
     base = None
 
@@ -160,6 +159,7 @@ class _StructureWrapper(object):
 
     def __del__(self):
         regfi.regfi_free_record(self.base)
+        hive = None
 
     def __getattr__(self, name):
         return getattr(self.base.contents, name)
@@ -204,6 +204,9 @@ class _GenericList(object):
         self.key = key
         self.length = self.fetch_num(key.base)
     
+    def __del__(self):
+        self.key = None
+
     def __len__(self):
         return self.length
 
@@ -273,7 +276,7 @@ class Key(_StructureWrapper):
             if ret_val == None:
                 ret_val = self.name_raw
             else:
-                ret_val = ret_val.decode('utf-8')
+                ret_val = ret_val.decode('utf-8', 'replace')
                 
         elif name == "name_raw":
             length = super(Key, self).__getattr__('name_length')
@@ -306,7 +309,7 @@ class Value(_StructureWrapper):
                 ret_val = None
             elif data_struct.type in (REG_SZ, REG_EXPAND_SZ, REG_LINK):
                 # Unicode strings
-                ret_val = data_struct.interpreted.string.decode('utf-8')
+                ret_val = data_struct.interpreted.string.decode('utf-8', 'replace')
             elif data_struct.type in (REG_DWORD, REG_DWORD_BE):
                 # 32 bit integers
                 ret_val = data_struct.interpreted.dword
@@ -342,7 +345,7 @@ class Value(_StructureWrapper):
                 if ret_val == None:
                     ret_val = self.name_raw
                 else:
-                    ret_val = ret_val.decode('utf-8')
+                    ret_val = ret_val.decode('utf-8', 'replace')
 
             elif name == "name_raw":
                 length = super(Value, self).__getattr__('name_length')
@@ -369,7 +372,7 @@ class Hive():
         # when called if the file isn't backed with a descriptor.
         try:
             if hasattr(fh, 'fileno'):
-                self.file = regfi.regfi_alloc(fh.fileno())
+                self.file = regfi.regfi_alloc(fh.fileno(), REGFI_ENCODING_UTF8)
                 return
         except:
             pass
@@ -378,7 +381,7 @@ class Hive():
         self.raw_file.fh = fh
         self.raw_file.seek = seek_cb_type(self.raw_file.cb_seek)
         self.raw_file.read = read_cb_type(self.raw_file.cb_read)
-        self.file = regfi.regfi_alloc_cb(self.raw_file)
+        self.file = regfi.regfi_alloc_cb(self.raw_file, REGFI_ENCODING_UTF8)
 
     def __getattr__(self, name):
         return getattr(self.file.contents, name)
@@ -386,8 +389,7 @@ class Hive():
     def __del__(self):
         regfi.regfi_free(self.file)
         if self.raw_file != None:
-            regfi.regfi_free(self.file)
-            
+            self.raw_file = None
 
     def __iter__(self):
         return HiveIterator(self)
@@ -420,8 +422,7 @@ class HiveIterator():
     iteration_root = None
 
     def __init__(self, hive):
-        # REGFI_ENCODING_UTF8==1
-        self.iter = regfi.regfi_iterator_new(hive.file, 1)
+        self.iter = regfi.regfi_iterator_new(hive.file, REGFI_ENCODING_UTF8)
         if self.iter == None:
             raise Exception("Could not create iterator.  Current log:\n"
                             + GetLogMessages())
@@ -431,7 +432,7 @@ class HiveIterator():
         return getattr(self.file.contents, name)
 
     def __del__(self):    
-        regfi.regfi_iterator_free(self.iter)        
+        regfi.regfi_iterator_free(self.iter)
 
     def __iter__(self):
         self.iteration_root = None
@@ -439,7 +440,7 @@ class HiveIterator():
 
     def __next__(self):
         if self.iteration_root == None:
-            self.iteration_root = self.current_key()            
+            self.iteration_root = self.current_key()
         elif not regfi.regfi_iterator_down(self.iter):
             up_ret = regfi.regfi_iterator_up(self.iter)
             while (up_ret and

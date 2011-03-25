@@ -405,6 +405,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     {
       if(cur != root)
       {
+        regfi_free_record(cur);
 	/* We're done with this sub-tree, going up and hitting other branches. */
 	if(!regfi_iterator_up(iter))
 	{
@@ -428,6 +429,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     { /* We have unexplored sub-keys.  
        * Let's move down and print this first sub-tree out. 
        */
+      regfi_free_record(cur);
       if(!regfi_iterator_down(iter))
       {
 	printMsgs(iter->f);
@@ -442,6 +444,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     }
     printMsgs(iter->f);
   } while(!((cur == root) && (sub == NULL)));
+  regfi_free_record(root);
 
   if(print_verbose)
     fprintf(stderr, "INFO: Finished printing key tree.\n");
