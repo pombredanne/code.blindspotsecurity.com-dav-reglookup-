@@ -33,9 +33,9 @@ def iterTally(hive):
             if v.name_raw != None:
                 value_rawlens += len(v.name_raw)
 
-    print("  Counts: keys=%d, values=%d\n" % (key_count, value_count))
-    print("  Total name length: keys=%d, values=%d\n" % (key_lens, value_lens))
-    print("  Total raw name lengths: keys=%d, values=%d\n" % (key_rawlens, value_rawlens))
+    print("  Counts: keys=%d, values=%d" % (key_count, value_count))
+    print("  Total name length: keys=%d, values=%d" % (key_lens, value_lens))
+    print("  Total raw name lengths: keys=%d, values=%d" % (key_rawlens, value_rawlens))
 
 
 
@@ -59,9 +59,8 @@ for hname,fh in files:
         print(pyregfi.GetLogMessages())
         print
     hive = None
-    gc.collect()
 
 files = None
 tests = None
 gc.collect()
-print gc.garbage
+#print(gc.garbage)

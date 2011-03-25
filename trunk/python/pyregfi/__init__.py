@@ -5,6 +5,7 @@
 #
 
 import sys
+import weakref
 from pyregfi.structures import *
 
 import ctypes
@@ -149,20 +150,20 @@ def _charss2strlist(chars_pointer):
 ## Abstract class which Handles memory management and proxies attribute
 #  access to base structures  
 class _StructureWrapper(object):
-    hive = None
-    base = None
+    _hive = None
+    _base = None
 
     def __init__(self, hive, base):
-        self.hive = hive
+        self._hive = hive
         # XXX: check for NULL here, throw an exception if so.
-        self.base = base
+        self._base = base
 
     def __del__(self):
-        regfi.regfi_free_record(self.base)
+        regfi.regfi_free_record(self._base)
         hive = None
 
     def __getattr__(self, name):
-        return getattr(self.base.contents, name)
+        return getattr(self._base.contents, name)
 
     def __eq__(self, other):
         return (type(self) == type(other)) and (self.offset == other.offset)
@@ -187,28 +188,34 @@ class Security(_StructureWrapper):
 
 
 class _GenericList(object):
-    hive = None
-    key = None
-    length = None
-    current = None
+    _hive = None
+    _key = None
+    _length = None
+    _current = None
 
-    # implementation-specific functions
-    fetch_num = None
-    find_element = None
-    get_element = None
-    constructor = None
+    # implementation-specific functions for _SubkeyList and _ValueList
+    _fetch_num = None
+    _find_element = None
+    _get_element = None
+    _constructor = None
 
     def __init__(self, key):
-        self.hive = key.hive
-        # XXX: check for NULL here, throw an exception if so.
-        self.key = key
-        self.length = self.fetch_num(key.base)
-    
-    def __del__(self):
-        self.key = None
+        self._hive = key._hive
 
+        # Normally it's good to avoid cyclic references like this 
+        # (key.list.key...) but in this case it makes ctypes memory
+        # management easier to reference the Key instead of the base
+        # structure.  We use a weak reference in order to allow for garbage 
+        # collection, since value/subkey lists should not be usable if their
+        # parent Key is freed anyway.
+
+        # XXX: check for NULL here, throw an exception if so.
+        self._key = weakref.proxy(key)
+        self._length = self._fetch_num(key._base)
+
+    
     def __len__(self):
-        return self.length
+        return self._length
 
     def __getitem__(self, name):
         index = c_uint32()
@@ -218,10 +225,11 @@ class _GenericList(object):
         if name != None:
             name = create_string_buffer(bytes(name))
 
-        if self.find_element(self.hive.file, self.key.base, name, byref(index)):
-            return self.constructor(self.hive, self.get_element(self.hive.file,
-                                                                self.key.base,
-                                                                index))
+        if self._find_element(self._hive.file, self._key.base, name, byref(index)):
+            return self._constructor(self._hive, 
+                                     self._get_element(self._hive.file,
+                                                       self._key.base,
+                                                       index))
         raise KeyError('')
 
     def get(self, name, default):
@@ -231,33 +239,32 @@ class _GenericList(object):
             return default
     
     def __iter__(self):
-        self.current = 0
+        self._current = 0
         return self
     
     def __next__(self):
-        if self.current >= self.length:
+        if self._current >= self._length:
             raise StopIteration('')
 
-        elem = self.get_element(self.hive.file, self.key.base,
-                                c_uint32(self.current))
-        self.current += 1
-        return self.constructor(self.hive, elem)
+        elem = self._get_element(self._hive.file, self._key._base,
+                                c_uint32(self._current))
+        self._current += 1
+        return self._constructor(self._hive, elem)
     
     # For Python 2.x
-    def next(self):
-        return self.__next__()
+    next = __next__
 
 
 class _SubkeyList(_GenericList):
-    fetch_num = regfi.regfi_fetch_num_subkeys
-    find_element = regfi.regfi_find_subkey
-    get_element = regfi.regfi_get_subkey
+    _fetch_num = regfi.regfi_fetch_num_subkeys
+    _find_element = regfi.regfi_find_subkey
+    _get_element = regfi.regfi_get_subkey
 
 
 class _ValueList(_GenericList):
-    fetch_num = regfi.regfi_fetch_num_values
-    find_element = regfi.regfi_find_value
-    get_element = regfi.regfi_get_value
+    _fetch_num = regfi.regfi_fetch_num_values
+    _find_element = regfi.regfi_find_value
+    _get_element = regfi.regfi_get_value
 
 
 class Key(_StructureWrapper):
@@ -286,8 +293,8 @@ class Key(_StructureWrapper):
 
 
     def fetch_security(self):
-        return Security(self.hive,
-                        regfi.regfi_fetch_sk(self.hive.file, self.base))
+        return Security(self._hive,
+                        regfi.regfi_fetch_sk(self._hive.file, self.base))
 
 
 ## Registry value (metadata)
@@ -299,7 +306,7 @@ class Value(_StructureWrapper):
     def __getattr__(self, name):
         ret_val = None
         if name == "data":
-            data_p = regfi.regfi_fetch_data(self.hive.file, self.base)
+            data_p = regfi.regfi_fetch_data(self._hive.file, self.base)
             try:
                 data_struct = data_p.contents
             except Exception:
@@ -329,7 +336,7 @@ class Value(_StructureWrapper):
             
         elif name == "data_raw":
             # XXX: should we load the data without interpretation instead?
-            data_p = regfi.regfi_fetch_data(self.hive.file, self.base)
+            data_p = regfi.regfi_fetch_data(self._hive.file, self.base)
             try:
                 data_struct = data_p.contents
             except Exception:
@@ -356,8 +363,8 @@ class Value(_StructureWrapper):
 
 # Avoids chicken/egg class definitions.
 # Also makes for convenient code reuse in these lists' parent classes.
-_SubkeyList.constructor = Key
-_ValueList.constructor = Value
+_SubkeyList._constructor = Key
+_ValueList._constructor = Value
 
 
 
@@ -426,7 +433,7 @@ class HiveIterator():
         if self.iter == None:
             raise Exception("Could not create iterator.  Current log:\n"
                             + GetLogMessages())
-        self.hive = hive
+        self._hive = hive
         
     def __getattr__(self, name):
         return getattr(self.file.contents, name)
@@ -462,8 +469,7 @@ class HiveIterator():
         return self.current_key()
 
     # For Python 2.x
-    def next(self):
-        return self.__next__()
+    next = __next__
 
     def down(self):
         pass
@@ -483,6 +489,6 @@ class HiveIterator():
             raise Exception('Could not locate path.\n'+GetLogMessages())
 
     def current_key(self):
-        return Key(self.hive, regfi.regfi_iterator_cur_key(self.iter))
+        return Key(self._hive, regfi.regfi_iterator_cur_key(self.iter))
 
     #XXX Add subkey/value search accessor functions (?)
