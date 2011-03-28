@@ -2,10 +2,29 @@
 
 import sys
 import gc
+import time
 import pyregfi
 
 def usage():
     sys.stderr.write("USAGE: pyregfi-smoketest.py hive1 [hive2 ...]\n")
+
+
+# helper function
+def getCurrentPath(key):
+    if key == None:
+        return ''
+    path = []
+    p = key
+    while p != None:
+        path.append(p.name)
+        if p.is_root():
+            break
+        else:
+            p = p.get_parent()
+    path.reverse()
+    del path[0]
+
+    return path
 
 
 # Uses the HiveIterator to walk all keys
@@ -38,29 +57,53 @@ def iterTally(hive):
     print("  Total raw name lengths: keys=%d, values=%d" % (key_rawlens, value_rawlens))
 
 
+# For each key in the hive, this traverses the parent links up to the root, 
+# recording the path as it goes, and then uses the subtree/descend method
+# to find the same key again, verifying it is the same.  This test is currently
+# very slow because no key caching is used.
+def iterParentWalk(hive):
+    i = 1
+    for k in hive:
+        path = getCurrentPath(k)
+        try:
+            hive_iter = hive.subtree(path)
+            if hive_iter.current_key() != k:
+                print("WARNING: k != current_key for path '%s'." % path)
+            else:
+                i += 1
+        except Exception as e:
+            print("WARNING: Could not decend to path '%s'.\nError:\n %s\n%s" % (path,e.args,e))
+    print("   Successfully tested paths on %d keys." % i)
+
 
 if len(sys.argv) < 2:
     usage()
     sys.exit(1)
 
+
+tests = [("iterTally",iterTally),("iterParentWalk",iterParentWalk),]
+
 files = []
 for f in sys.argv[1:]:
     files.append((f, open(f,"r+b")))
 
-tests = [("iterTally",iterTally),]
 
+start_time = time.time()
 for hname,fh in files:
     hive = pyregfi.Hive(fh)
     for tname,t in tests:
+        teststart = time.time()
         tstr = "'%s' on '%s'" % (tname,hname)
         print("##BEGIN %s:" % tstr)
         t(hive)
-        print("##END %s; messages:" % tstr)
+        print("##END %s; runtime=%f; messages:" % (tstr, time.time() - teststart))
         print(pyregfi.GetLogMessages())
         print
-    hive = None
+        sys.stdout.flush()
 
+hive = None
 files = None
 tests = None
 gc.collect()
+print("### Tests Completed, runtime: %f ###" % (time.time() -  start_time))
 #print(gc.garbage)

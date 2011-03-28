@@ -30,6 +30,9 @@ regfi.regfi_log_get_str.restype = c_char_p
 regfi.regfi_log_set_mask.argtypes = [c_uint16]
 regfi.regfi_log_set_mask.restype = c_bool
 
+regfi.regfi_get_rootkey.argtypes = [POINTER(REGFI_FILE)]
+regfi.regfi_get_rootkey.restype = POINTER(REGFI_NK)
+
 regfi.regfi_free_record.argtypes = [c_void_p]
 regfi.regfi_free_record.restype = None
 
@@ -63,6 +66,9 @@ regfi.regfi_get_subkey.restype = POINTER(REGFI_NK)
 regfi.regfi_get_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
                                    c_uint32]
 regfi.regfi_get_value.restype = POINTER(REGFI_VK)
+
+regfi.regfi_get_parentkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
+regfi.regfi_get_parentkey.restype = POINTER(REGFI_NK)
 
 regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE), REGFI_ENCODING]
 regfi.regfi_iterator_new.restype = POINTER(REGFI_ITERATOR)
@@ -121,7 +127,7 @@ def GetLogMessages():
     msgs = regfi.regfi_log_get_str()
     if msgs == None:
         return ''
-    return msgs.decode('ascii')
+    return msgs.decode('utf-8')
 
 
 def _buffer2bytearray(char_pointer, length):
@@ -131,6 +137,18 @@ def _buffer2bytearray(char_pointer, length):
     ret_val = bytearray(length)
     for i in range(0,length):
         ret_val[i] = char_pointer[i][0]
+
+    return ret_val
+
+
+def _strlist2charss(str_list):
+    ret_val = []
+    for s in str_list:
+        ret_val.append(s.encode('utf-8', 'replace'))
+
+    ret_val = (c_char_p*(len(str_list)+1))(*ret_val)
+    # Terminate the char** with a NULL pointer
+    ret_val[-1] = 0
 
     return ret_val
 
@@ -154,13 +172,19 @@ class _StructureWrapper(object):
     _base = None
 
     def __init__(self, hive, base):
+        if not hive:
+            raise Exception("Could not create _StructureWrapper,"
+                            + " hive is NULL.  Current log:\n"
+                            + GetLogMessages())
+        if not base:
+            raise Exception("Could not create _StructureWrapper,"
+                            + " base is NULL.  Current log:\n"
+                            + GetLogMessages())
         self._hive = hive
-        # XXX: check for NULL here, throw an exception if so.
         self._base = base
 
     def __del__(self):
         regfi.regfi_free_record(self._base)
-        hive = None
 
     def __getattr__(self, name):
         return getattr(self._base.contents, name)
@@ -171,7 +195,6 @@ class _StructureWrapper(object):
     def __ne__(self, other):
         return (not self.__eq__(other))
 
-## Registry key 
 class Key(_StructureWrapper):
     pass
 
@@ -247,7 +270,7 @@ class _GenericList(object):
             raise StopIteration('')
 
         elem = self._get_element(self._hive.file, self._key._base,
-                                c_uint32(self._current))
+                                 c_uint32(self._current))
         self._current += 1
         return self._constructor(self._hive, elem)
     
@@ -267,6 +290,7 @@ class _ValueList(_GenericList):
     _get_element = regfi.regfi_get_value
 
 
+## Registry key 
 class Key(_StructureWrapper):
     values = None
     subkeys = None
@@ -294,7 +318,19 @@ class Key(_StructureWrapper):
 
     def fetch_security(self):
         return Security(self._hive,
-                        regfi.regfi_fetch_sk(self._hive.file, self.base))
+                        regfi.regfi_fetch_sk(self._hive.file, self._base))
+
+    def get_parent(self):
+        parent_base = regfi.regfi_get_parentkey(self._hive.file, self._base)
+        if parent_base:
+            return Key(self._hive, parent_base)
+
+        return None
+
+    def is_root(self):
+        # This is quicker than retrieving the root key for comparison and
+        # is more trustworthy than trusting the key's flags.
+        return ((self._hive.root_cell+REGFI_REGF_SIZE) == self.offset)
 
 
 ## Registry value (metadata)
@@ -401,6 +437,10 @@ class Hive():
     def __iter__(self):
         return HiveIterator(self)
 
+    def get_root(self):
+        return Key(self, regfi.regfi_get_rootkey(self.file))
+
+
     ## Creates a @ref HiveIterator initialized at the specified path in
     #  the hive. 
     #
@@ -478,14 +518,10 @@ class HiveIterator():
         pass
 
     def descend(self, path):
-        #set up generator
-        cpath = (bytes(p,'ascii') for p in path) 
-
-        # evaluate generator and create char* array
-        apath = (c_char_p*len(path))(*cpath)
+        cpath = _strlist2charss(path)
 
         # XXX: Use non-generic exception
-        if not regfi.regfi_iterator_walk_path(self.iter,apath):
+        if not regfi.regfi_iterator_walk_path(self.iter, cpath):
             raise Exception('Could not locate path.\n'+GetLogMessages())
 
     def current_key(self):
