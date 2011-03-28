@@ -1669,7 +1669,7 @@ void regfi_free(REGFI_FILE* file)
  * First checks the offset given by the file header, then checks the
  * rest of the file if that fails.
  ******************************************************************************/
-REGFI_NK* regfi_rootkey(REGFI_FILE* file)
+const REGFI_NK* regfi_get_rootkey(REGFI_FILE* file)
 {
   REGFI_NK* nk = NULL;
   REGFI_HBIN* hbin;
@@ -1694,7 +1694,7 @@ REGFI_NK* regfi_rootkey(REGFI_FILE* file)
    * block at a time looking for an NK record with a root key type.
    */
   
-  if(!regfi_read_lock(file, &file->hbins_lock, "regfi_rootkey"))
+  if(!regfi_read_lock(file, &file->hbins_lock, "regfi_get_rootkey"))
     return NULL;
 
   num_hbins = range_list_size(file->hbins);
@@ -1704,7 +1704,7 @@ REGFI_NK* regfi_rootkey(REGFI_FILE* file)
     nk = regfi_find_root_nk(file, hbin, file->string_encoding);
   }
 
-  if(!regfi_rw_unlock(file, &file->hbins_lock, "regfi_rootkey"))
+  if(!regfi_rw_unlock(file, &file->hbins_lock, "regfi_get_rootkey"))
     return NULL;
 
   return nk;
@@ -1726,6 +1726,9 @@ void regfi_free_record(const void* record)
 uint32_t regfi_fetch_num_subkeys(const REGFI_NK* key)
 {
   uint32_t num_in_list = 0;
+  if(key == NULL)
+    return 0;
+
   if(key->subkeys != NULL)
     num_in_list = key->subkeys->num_keys;
 
@@ -1746,6 +1749,9 @@ uint32_t regfi_fetch_num_subkeys(const REGFI_NK* key)
 uint32_t regfi_fetch_num_values(const REGFI_NK* key)
 {
   uint32_t num_in_list = 0;
+  if(key == NULL)
+    return 0;
+
   if(key->values != NULL)
     num_in_list = key->values->num_values;
 
@@ -1772,7 +1778,7 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
   if(ret_val == NULL)
     return NULL;
 
-  root = regfi_rootkey(file);
+  root = (REGFI_NK*)regfi_get_rootkey(file);
   if(root == NULL)
   {
     talloc_free(ret_val);
@@ -1905,8 +1911,10 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
   { continue; }
 
   if(path[x] == NULL)
+  {
     return true;
-  
+  }
+
   /* XXX: is this the right number of times? */
   for(; x > 0; x--)
     regfi_iterator_up(i);
@@ -2211,7 +2219,6 @@ const REGFI_NK* regfi_get_subkey(REGFI_FILE* file, const REGFI_NK* key,
 }
 
 
-
 /******************************************************************************
  *****************************************************************************/
 const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key, 
@@ -2226,6 +2233,24 @@ const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key,
 
   return NULL;  
 }
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGFI_NK* regfi_get_parentkey(REGFI_FILE* file, const REGFI_NK* key)
+{
+  if(key != NULL && key->parent_off != REGFI_OFFSET_NONE)
+  {
+    /*    fprintf(stderr, "key->parent_off=%.8X\n", key->parent_off);*/
+    return regfi_load_key(file, 
+                          key->parent_off+REGFI_REGF_SIZE,
+                          file->string_encoding, true);
+  }
+  
+  return NULL;
+}
+
 
 
 /******************************************************************************

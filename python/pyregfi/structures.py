@@ -12,6 +12,7 @@ REGFI_ENCODING = c_uint32
 REGFI_ENCODING_UTF8 = 1
 
 REGFI_DATA_TYPE = c_uint32
+REGFI_REGF_SIZE = 0x1000 
 
 # Registry value data types
 REG_NONE                       =  0

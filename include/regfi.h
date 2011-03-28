@@ -665,10 +665,10 @@ typedef struct _regfi_nk
    */
   uint8_t* name_raw;
 
-  /** Virutal offset of parent key */
+  /** Virtual offset of parent key */
   uint32_t parent_off;
 
-  /** Virutal offset of classname key */
+  /** Virtual offset of classname key */
   uint32_t classname_off;
   
   /* XXX: max subkey name * 2 */
@@ -951,7 +951,16 @@ _EXPORT
 bool regfi_log_set_mask(uint16_t mask);
 
 
-/* Dispose of previously parsed records */
+/** Fetches a hive's root key.
+ *
+ * @return Returns the root key or NULL on failure.  Key must be freed using
+ *         @ref regfi_free_record.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_NK*       regfi_get_rootkey(REGFI_FILE* file);
+
 
 /** Frees a record previously returned by one of the API functions.
  *
@@ -961,7 +970,7 @@ bool regfi_log_set_mask(uint16_t mask);
  * @note The "const" in the data type is a bit misleading and is there just for
  * convenience.  Since records returned previously must not be modified by users
  * of the API due to internal caching, these are returned as const, so this
- * function is const to make passing back in easy.
+ * function is const to make passing those records back easy.
  *
  * @ingroup regfiBase
  */
@@ -1109,6 +1118,19 @@ _EXPORT
 const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key, 
 				uint32_t index);
 
+
+
+/** Uses a key's parent_off reference to retrieve it's parent.
+ *
+ * @param file  the file from which key is derived
+ * @param key   the key whose parent is desired
+ *
+ * @return the requested subkey or NULL on error.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const REGFI_NK* regfi_get_parentkey(REGFI_FILE* file, const REGFI_NK* key);
 
 
 /******************************************************************************/
@@ -1344,7 +1366,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name);
  */
 /******************************************************************************/
 
-/** Loads a key at a given file offset along with associated data structures.
+/** Loads a key and associated data structures given a file offset.
  *
  * XXX: finish documenting
  *
@@ -1352,8 +1374,8 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name);
  */
 _EXPORT
 REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset, 
-			     REGFI_ENCODING output_encoding, 
-			     bool strict);
+                         REGFI_ENCODING output_encoding, 
+                         bool strict);
 
 
 /** Loads a value at a given file offset alng with associated data structures.
@@ -1583,10 +1605,8 @@ REGFI_BUFFER regfi_parse_little_data(REGFI_FILE* file, uint32_t voffset,
 
 
 /******************************************************************************/
-/*    Private Functions                                                       */
+/*    Private (and undocumented) Functions                                    */
 /******************************************************************************/
-REGFI_NK*             regfi_rootkey(REGFI_FILE* file);
-
 off_t                 regfi_raw_seek(REGFI_RAW_FILE* self, 
 				     off_t offset, int whence);
 ssize_t               regfi_raw_read(REGFI_RAW_FILE* self, 
