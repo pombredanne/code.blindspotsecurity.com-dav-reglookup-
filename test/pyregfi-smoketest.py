@@ -30,7 +30,7 @@ def getCurrentPath(key):
 # Uses the HiveIterator to walk all keys
 # Gathers various (meaningless) statistics to exercise simple attribute access
 # and to hopefully smoke out any bugs that can be identified by changing stats
-def iterTally(hive):
+def iterTallyNames(hive):
     key_count = 0
     key_lens = 0
     key_rawlens = 0
@@ -76,12 +76,40 @@ def iterParentWalk(hive):
     print("   Successfully tested paths on %d keys." % i)
 
 
+# Uses the HiveIterator to walk all keys
+# Gathers various (meaningless) statistics about data/data_raw attributes
+def iterTallyData(hive):
+    data_stat = 0.0
+    dataraw_stat = 0.0
+    
+    for k in hive:
+        for v in k.values:
+            d = v.data
+            if d == None:
+                data_stat += 0.1
+            elif hasattr(d, "__len__"):
+                data_stat += len(d)
+            else:
+                data_stat += d/2.0**64
+
+            d = v.data_raw
+            if d == None:
+                dataraw_stat += 0.1
+            else:
+                dataraw_stat += len(d)
+
+    print("  Data stat: %f" % data_stat)
+    print("  Raw data stat: %f" % dataraw_stat)
+
+
+
 if len(sys.argv) < 2:
     usage()
     sys.exit(1)
 
 
-tests = [("iterTally",iterTally),("iterParentWalk",iterParentWalk),]
+#tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),]
+tests = [("iterTallyData",iterTallyData),]
 
 files = []
 for f in sys.argv[1:]:
