@@ -248,10 +248,10 @@ class _GenericList(object):
         if name != None:
             name = create_string_buffer(bytes(name))
 
-        if self._find_element(self._hive.file, self._key.base, name, byref(index)):
+        if self._find_element(self._hive.file, self._key._base, name, byref(index)):
             return self._constructor(self._hive, 
                                      self._get_element(self._hive.file,
-                                                       self._key.base,
+                                                       self._key._base,
                                                        index))
         raise KeyError('')
 
@@ -342,7 +342,7 @@ class Value(_StructureWrapper):
     def __getattr__(self, name):
         ret_val = None
         if name == "data":
-            data_p = regfi.regfi_fetch_data(self._hive.file, self.base)
+            data_p = regfi.regfi_fetch_data(self._hive.file, self._base)
             try:
                 data_struct = data_p.contents
             except Exception:
@@ -372,7 +372,7 @@ class Value(_StructureWrapper):
             
         elif name == "data_raw":
             # XXX: should we load the data without interpretation instead?
-            data_p = regfi.regfi_fetch_data(self._hive.file, self.base)
+            data_p = regfi.regfi_fetch_data(self._hive.file, self._base)
             try:
                 data_struct = data_p.contents
             except Exception:
@@ -380,7 +380,7 @@ class Value(_StructureWrapper):
 
             ret_val = _buffer2bytearray(data_struct.raw,
                                         data_struct.size)
-            regfi.regfi_free_record(data_p)            
+            regfi.regfi_free_record(data_p)
             
         else:
             ret_val = super(Value, self).__getattr__(name)
