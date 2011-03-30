@@ -17,10 +17,7 @@ def getCurrentPath(key):
     p = key
     while p != None:
         path.append(p.name)
-        if p.is_root():
-            break
-        else:
-            p = p.get_parent()
+        p = p.get_parent()
     path.reverse()
     del path[0]
 
@@ -129,9 +126,8 @@ def recurseTree(cur, operation):
 # list dictionary access.  Also builds nonsensical statistics as an excuse
 # to access various base structure attributes.
 def recurseKeyTally(hive):
-    root = hive.get_root()
-    checkValues(root)
-    recurseTree(root, checkValues)
+    checkValues(hive.root)
+    recurseTree(hive.root, checkValues)
     print("  Key stat: %f" % recurseKey_stat)
     print("  Value stat: %f" % recurseValue_stat)
 
@@ -142,7 +138,7 @@ if len(sys.argv) < 2:
 
 
 #tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),("iterTallyData",iterTallyData),]
-tests = [("recurseKeyTally",recurseKeyTally),]
+tests = [("recurseKeyTally",recurseKeyTally),("iterParentWalk",iterParentWalk),]
 
 files = []
 for f in sys.argv[1:]:

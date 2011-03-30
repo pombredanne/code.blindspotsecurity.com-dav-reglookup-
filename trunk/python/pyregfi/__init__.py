@@ -321,14 +321,15 @@ class Key(_StructureWrapper):
                         regfi.regfi_fetch_sk(self._hive.file, self._base))
 
     def get_parent(self):
+        if self.is_root():
+            return None
         parent_base = regfi.regfi_get_parentkey(self._hive.file, self._base)
         if parent_base:
             return Key(self._hive, parent_base)
-
         return None
 
     def is_root(self):
-        return (self._hive.get_root() == self)
+        return (self._hive.root == self)
 
 
 ## Registry value (metadata)
@@ -407,7 +408,8 @@ _ValueList._constructor = Value
 class Hive():
     file = None
     raw_file = None
-    
+    _root = None
+
     def __init__(self, fh):
         # The fileno method may not exist, or it may throw an exception
         # when called if the file isn't backed with a descriptor.
@@ -425,6 +427,11 @@ class Hive():
         self.file = regfi.regfi_alloc_cb(self.raw_file, REGFI_ENCODING_UTF8)
 
     def __getattr__(self, name):
+        if name == "root":
+            if self._root == None:
+                self._root = Key(self, regfi.regfi_get_rootkey(self.file))
+            return self._root
+
         return getattr(self.file.contents, name)
     
     def __del__(self):
@@ -434,9 +441,6 @@ class Hive():
 
     def __iter__(self):
         return HiveIterator(self)
-
-    def get_root(self):
-        return Key(self, regfi.regfi_get_rootkey(self.file))
 
 
     ## Creates a @ref HiveIterator initialized at the specified path in
