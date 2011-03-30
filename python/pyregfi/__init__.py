@@ -328,9 +328,7 @@ class Key(_StructureWrapper):
         return None
 
     def is_root(self):
-        # This is quicker than retrieving the root key for comparison and
-        # is more trustworthy than trusting the key's flags.
-        return ((self._hive.root_cell+REGFI_REGF_SIZE) == self.offset)
+        return (self._hive.get_root() == self)
 
 
 ## Registry value (metadata)
