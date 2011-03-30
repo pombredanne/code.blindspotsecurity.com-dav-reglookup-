@@ -102,14 +102,47 @@ def iterTallyData(hive):
     print("  Raw data stat: %f" % dataraw_stat)
 
 
+recurseKey_stat = 0.0
+recurseValue_stat = 0.0
+def checkValues(key):
+    global recurseKey_stat
+    global recurseValue_stat
+    recurseKey_stat += (key.mtime.low^key.mtime.high - key.max_bytes_subkeyname) * key.flags
+    for v in key.values:
+        recurseValue_stat += (v.data_off - v.data_size) / (1.0 + v.flags) + v.data_in_offset
+        value = key.values[v.name]
+        if v != value:
+            print("WARNING: iterator value '%s' does not match dictionary value '%s'." 
+                  % (v.name, value.name))
+
+def recurseTree(cur, operation):
+    for k in cur.subkeys:
+        key = cur.subkeys[k.name]
+        if k != key:
+            print("WARNING: iterator subkey '%s' does not match dictionary subkey '%s'." 
+                  % (k.name, key.name))
+        del key
+        operation(k)
+        recurseTree(k, operation)
+
+# Retrieves all keys by recursion, rather than the iterator, and validates
+# list dictionary access.  Also builds nonsensical statistics as an excuse
+# to access various base structure attributes.
+def recurseKeyTally(hive):
+    root = hive.get_root()
+    checkValues(root)
+    recurseTree(root, checkValues)
+    print("  Key stat: %f" % recurseKey_stat)
+    print("  Value stat: %f" % recurseValue_stat)
+
 
 if len(sys.argv) < 2:
     usage()
     sys.exit(1)
 
 
-#tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),]
-tests = [("iterTallyData",iterTallyData),]
+#tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),("iterTallyData",iterTallyData),]
+tests = [("recurseKeyTally",recurseKeyTally),]
 
 files = []
 for f in sys.argv[1:]:
