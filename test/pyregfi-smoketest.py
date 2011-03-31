@@ -81,7 +81,7 @@ def iterTallyData(hive):
     
     for k in hive:
         for v in k.values:
-            d = v.data
+            d = v.fetch_data()
             if d == None:
                 data_stat += 0.1
             elif hasattr(d, "__len__"):
@@ -89,7 +89,7 @@ def iterTallyData(hive):
             else:
                 data_stat += d/2.0**64
 
-            d = v.data_raw
+            d = v.fetch_raw_data()
             if d == None:
                 dataraw_stat += 0.1
             else:
@@ -132,13 +132,34 @@ def recurseKeyTally(hive):
     print("  Value stat: %f" % recurseValue_stat)
 
 
+# Iterates hive gathering stats about security and classname records
+def iterFetchRelated(hive):
+    security_stat = 0.0
+    classname_stat = 0.0
+    modified_stat = 0.0
+
+    for k in hive:
+        cn = k.fetch_classname()
+        if cn == None:
+            classname_stat += 0.000001
+        elif type(cn) == bytearray:
+            classname_stat += len(cn)/2**32
+        else:
+            classname_stat += len(cn)
+
+        modified_stat += k.modified
+        
+    print("  Security stat: %f" % security_stat)
+    print("  Classname stat: %f" % classname_stat)
+    print("  Modified stat: %f" % modified_stat)
+
 if len(sys.argv) < 2:
     usage()
     sys.exit(1)
 
 
-#tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),("iterTallyData",iterTallyData),]
-tests = [("recurseKeyTally",recurseKeyTally),("iterParentWalk",iterParentWalk),]
+#tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),("iterTallyData",iterTallyData),("recurseKeyTally",recurseKeyTally),("iterFetchRelated",iterFetchRelated),]
+tests = [("iterFetchRelated",iterFetchRelated),]
 
 files = []
 for f in sys.argv[1:]:

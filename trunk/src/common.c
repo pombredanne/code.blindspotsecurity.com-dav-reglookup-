@@ -367,7 +367,7 @@ void formatTime(const REGFI_NTTIME* nttime, char* output)
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
 
-  *tmp_time = regfi_nt2unix_time(nttime);
+  *tmp_time = (time_t)regfi_nt2unix_time(nttime);
   tmp_time_s = gmtime(tmp_time);
   strftime(output, 
 	   (4+1+2+1+2)+1+(2+1+2+1+2)+1, 

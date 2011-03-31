@@ -5,6 +5,7 @@
 #
 
 import sys
+import time
 import weakref
 from pyregfi.structures import *
 
@@ -69,6 +70,9 @@ regfi.regfi_get_value.restype = POINTER(REGFI_VK)
 
 regfi.regfi_get_parentkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
 regfi.regfi_get_parentkey.restype = POINTER(REGFI_NK)
+
+regfi.regfi_nt2unix_time.argtypes = [POINTER(REGFI_NTTIME)]
+regfi.regfi_nt2unix_time.restype = c_double
 
 regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE), REGFI_ENCODING]
 regfi.regfi_iterator_new.restype = POINTER(REGFI_ITERATOR)
@@ -301,24 +305,44 @@ class Key(_StructureWrapper):
         self.subkeys = _SubkeyList(self)
 
     def __getattr__(self, name):
-        ret_val = super(Key, self).__getattr__(name)
-        
         if name == "name":
+            ret_val = super(Key, self).__getattr__(name)
+
             if ret_val == None:
                 ret_val = self.name_raw
             else:
                 ret_val = ret_val.decode('utf-8', 'replace')
                 
         elif name == "name_raw":
+            ret_val = super(Key, self).__getattr__(name)
             length = super(Key, self).__getattr__('name_length')
             ret_val = _buffer2bytearray(ret_val, length)
         
-        return ret_val
+        elif name == "modified":
+            ret_val = regfi.regfi_nt2unix_time(byref(self._base.contents.mtime))
 
+        else:
+            ret_val = super(Key, self).__getattr__(name)
+
+        return ret_val
 
     def fetch_security(self):
         return Security(self._hive,
                         regfi.regfi_fetch_sk(self._hive.file, self._base))
+
+    def fetch_classname(self):
+        ret_val = None
+        cn_p = regfi.regfi_fetch_classname(self._hive.file, self._base)
+        if cn_p:
+            cn_struct = cn_p.contents
+            if cn_struct.interpreted:
+                ret_val = cn_struct.interpreted.decode('utf-8', 'replace')
+            else:
+                ret_val = _buffer2bytearray(cn_struct.raw,
+                                            cn_struct.size)
+            regfi.regfi_free_record(cn_p)
+
+        return ret_val
 
     def get_parent(self):
         if self.is_root():
@@ -338,60 +362,62 @@ class Key(_StructureWrapper):
 # access to their associated data.
 # 
 class Value(_StructureWrapper):
-    def __getattr__(self, name):
+    def fetch_data(self):
         ret_val = None
-        if name == "data":
-            data_p = regfi.regfi_fetch_data(self._hive.file, self._base)
-            try:
-                data_struct = data_p.contents
-            except Exception:
-                return None
+        data_p = regfi.regfi_fetch_data(self._hive.file, self._base)
+        if not data_p:
+            return None
+        data_struct = data_p.contents
 
-            if data_struct.interpreted_size == 0:
-                ret_val = None
-            elif data_struct.type in (REG_SZ, REG_EXPAND_SZ, REG_LINK):
-                # Unicode strings
-                ret_val = data_struct.interpreted.string.decode('utf-8', 'replace')
-            elif data_struct.type in (REG_DWORD, REG_DWORD_BE):
-                # 32 bit integers
-                ret_val = data_struct.interpreted.dword
-            elif data_struct.type == REG_QWORD:
-                # 64 bit integers
-                ret_val = data_struct.interpreted.qword
-            elif data_struct.type == REG_MULTI_SZ:
-                ret_val = _charss2strlist(data_struct.interpreted.multiple_string)
-            elif data_struct.type in (REG_NONE, REG_RESOURCE_LIST,
-                                      REG_FULL_RESOURCE_DESCRIPTOR,
-                                      REG_RESOURCE_REQUIREMENTS_LIST,
-                                      REG_BINARY):
-                ret_val = _buffer2bytearray(data_struct.interpreted.none,
-                                            data_struct.interpreted_size)
+        if data_struct.interpreted_size == 0:
+            ret_val = None
+        elif data_struct.type in (REG_SZ, REG_EXPAND_SZ, REG_LINK):
+            # Unicode strings
+            ret_val = data_struct.interpreted.string.decode('utf-8', 'replace')
+        elif data_struct.type in (REG_DWORD, REG_DWORD_BE):
+            # 32 bit integers
+            ret_val = data_struct.interpreted.dword
+        elif data_struct.type == REG_QWORD:
+            # 64 bit integers
+            ret_val = data_struct.interpreted.qword
+        elif data_struct.type == REG_MULTI_SZ:
+            ret_val = _charss2strlist(data_struct.interpreted.multiple_string)
+        elif data_struct.type in (REG_NONE, REG_RESOURCE_LIST,
+                                  REG_FULL_RESOURCE_DESCRIPTOR,
+                                  REG_RESOURCE_REQUIREMENTS_LIST,
+                                  REG_BINARY):
+            ret_val = _buffer2bytearray(data_struct.interpreted.none,
+                                        data_struct.interpreted_size)
 
-            regfi.regfi_free_record(data_p)
-            
-        elif name == "data_raw":
-            # XXX: should we load the data without interpretation instead?
-            data_p = regfi.regfi_fetch_data(self._hive.file, self._base)
-            try:
-                data_struct = data_p.contents
-            except Exception:
-                return None
+        regfi.regfi_free_record(data_p)
+        return ret_val
+        
+    def fetch_raw_data(self):
+        ret_val = None
 
-            ret_val = _buffer2bytearray(data_struct.raw,
-                                        data_struct.size)
-            regfi.regfi_free_record(data_p)
-            
-        else:
-            ret_val = super(Value, self).__getattr__(name)
-            if name == "name":
-                if ret_val == None:
-                    ret_val = self.name_raw
-                else:
-                    ret_val = ret_val.decode('utf-8', 'replace')
+        # XXX: should we load the data without interpretation instead?
+        data_p = regfi.regfi_fetch_data(self._hive.file, self._base)
+        if not data_p:
+            return None
 
-            elif name == "name_raw":
-                length = super(Value, self).__getattr__('name_length')
-                ret_val = _buffer2bytearray(ret_val, length)
+        data_struct = data_p.contents
+        ret_val = _buffer2bytearray(data_struct.raw,
+                                    data_struct.size)
+        regfi.regfi_free_record(data_p)
+
+        return ret_val
+
+    def __getattr__(self, name):
+        ret_val = super(Value, self).__getattr__(name)
+        if name == "name":
+            if ret_val == None:
+                ret_val = self.name_raw
+            else:
+                ret_val = ret_val.decode('utf-8', 'replace')
+
+        elif name == "name_raw":
+            length = super(Value, self).__getattr__('name_length')
+            ret_val = _buffer2bytearray(ret_val, length)
 
         return ret_val
 
