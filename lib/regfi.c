@@ -3648,10 +3648,10 @@ void regfi_unix2nt_time(REGFI_NTTIME *nt, time_t t)
  serverzone. This is NOT the same as GMT in some cases. This routine
  converts this to real GMT.
 ****************************************************************************/
-time_t regfi_nt2unix_time(const REGFI_NTTIME* nt)
+double regfi_nt2unix_time(const REGFI_NTTIME* nt)
 {
-  double d;
-  time_t ret;
+  double ret_val;
+
   /* The next two lines are a fix needed for the 
      broken SCO compiler. JRA. */
   time_t l_time_min = TIME_T_MIN;
@@ -3660,20 +3660,19 @@ time_t regfi_nt2unix_time(const REGFI_NTTIME* nt)
   if (nt->high == 0 || (nt->high == 0xffffffff && nt->low == 0xffffffff))
     return(0);
   
-  d = ((double)nt->high)*4.0*(double)(1<<30);
-  d += (nt->low&0xFFF00000);
-  d *= 1.0e-7;
+  ret_val = ((double)nt->high)*4.0*(double)(1<<30);
+  ret_val += nt->low;
+  ret_val *= 1.0e-7;
   
   /* now adjust by 369 years to make the secs since 1970 */
-  d -= TIME_FIXUP_CONSTANT;
+  ret_val -= TIME_FIXUP_CONSTANT;
   
-  if (d <= l_time_min)
+  /* XXX: should these sanity checks be removed? */
+  if (ret_val <= l_time_min)
     return (l_time_min);
   
-  if (d >= l_time_max)
+  if (ret_val >= l_time_max)
     return (l_time_max);
-  
-  ret = (time_t)(d+0.5);
   
   /* this takes us from kludge-GMT to real GMT */
   /* XXX: This was removed due to difficult dependency requirements.  
@@ -3685,7 +3684,7 @@ time_t regfi_nt2unix_time(const REGFI_NTTIME* nt)
     ret += LocTimeDiff(ret);
   */
 
-  return(ret);
+  return ret_val;
 }
 
 /* End of stuff from lib/time.c */

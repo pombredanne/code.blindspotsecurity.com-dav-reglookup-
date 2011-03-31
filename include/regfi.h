@@ -1655,7 +1655,7 @@ REGFI_DATA*           regfi_buffer_to_data(REGFI_BUFFER raw_data);
 _EXPORT
 void                  regfi_unix2nt_time(REGFI_NTTIME* nt, time_t t);
 _EXPORT
-time_t                regfi_nt2unix_time(const REGFI_NTTIME* nt);
+double                regfi_nt2unix_time(const REGFI_NTTIME* nt);
 
 
 _EXPORT
