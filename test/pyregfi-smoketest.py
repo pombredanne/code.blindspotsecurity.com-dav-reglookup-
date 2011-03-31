@@ -9,19 +9,6 @@ def usage():
     sys.stderr.write("USAGE: pyregfi-smoketest.py hive1 [hive2 ...]\n")
 
 
-# helper function
-def getCurrentPath(key):
-    if key == None:
-        return ''
-    path = []
-    p = key
-    while p != None:
-        path.append(p.name)
-        p = p.get_parent()
-    path.reverse()
-    del path[0]
-
-    return path
 
 
 # Uses the HiveIterator to walk all keys
@@ -53,6 +40,20 @@ def iterTallyNames(hive):
     print("  Total name length: keys=%d, values=%d" % (key_lens, value_lens))
     print("  Total raw name lengths: keys=%d, values=%d" % (key_rawlens, value_rawlens))
 
+
+# helper function
+def getCurrentPath(key):
+    if key == None:
+        return ''
+    path = []
+    p = key
+    while p != None:
+        path.append(p.name)
+        p = p.get_parent()
+    path.reverse()
+    del path[0]
+
+    return path
 
 # For each key in the hive, this traverses the parent links up to the root, 
 # recording the path as it goes, and then uses the subtree/descend method
@@ -153,13 +154,49 @@ def iterFetchRelated(hive):
     print("  Classname stat: %f" % classname_stat)
     print("  Modified stat: %f" % modified_stat)
 
+
+
+def iterIterWalk(hive):
+    sk_stat = 0.0
+    v_stat = 0.0
+    iter = pyregfi.HiveIterator(hive)
+    for k in iter:
+        path = getCurrentPath(k)
+        try:
+            hive_iter = hive.subtree(path)
+            sk = hive_iter.first_subkey()
+            while sk != None:
+                ssk = hive_iter.find_subkey(sk.name)
+                sk_stat += len(ssk.name)
+                sk = hive_iter.next_subkey()
+
+            v = hive_iter.first_value()
+            while v != None:
+                vv = hive_iter.find_value(v.name)
+                v_stat += len(vv.name)
+                v = hive_iter.next_value()
+
+        except Exception as e:
+            print("WARNING: Could not decend to path '%s'.\nError:\n %s\n%s" % (path,e.args,e))
+    print("   Subkey stat: %f" % sk_stat)
+    print("   Value stat: %f" % v_stat)
+
+
+
 if len(sys.argv) < 2:
     usage()
     sys.exit(1)
 
 
-#tests = [("iterTallyNames",iterTallyNames),("iterParentWalk",iterParentWalk),("iterTallyData",iterTallyData),("recurseKeyTally",recurseKeyTally),("iterFetchRelated",iterFetchRelated),]
-tests = [("iterFetchRelated",iterFetchRelated),]
+tests = [("iterTallyNames",iterTallyNames),
+         ("iterParentWalk",iterParentWalk),
+         ("iterTallyData",iterTallyData),
+         ("recurseKeyTally",recurseKeyTally),
+         ("iterFetchRelated",iterFetchRelated),
+         ("iterIterWalk",iterIterWalk),]
+
+tests = [("iterIterWalk",iterIterWalk),]
+
 
 files = []
 for f in sys.argv[1:]:

@@ -11,118 +11,6 @@ from pyregfi.structures import *
 
 import ctypes
 import ctypes.util
-from ctypes import c_char,c_char_p,c_int,c_uint16,c_uint32,c_bool,POINTER
-
-regfi = ctypes.CDLL(ctypes.util.find_library('regfi'), use_errno=True)
-
-
-regfi.regfi_alloc.argtypes = [c_int, REGFI_ENCODING]
-regfi.regfi_alloc.restype = POINTER(REGFI_FILE)
-
-regfi.regfi_alloc_cb.argtypes = [POINTER(REGFI_RAW_FILE), REGFI_ENCODING]
-regfi.regfi_alloc_cb.restype = POINTER(REGFI_FILE)
-
-regfi.regfi_free.argtypes = [POINTER(REGFI_FILE)]
-regfi.regfi_free.restype = None
-
-regfi.regfi_log_get_str.argtypes = []
-regfi.regfi_log_get_str.restype = c_char_p
-
-regfi.regfi_log_set_mask.argtypes = [c_uint16]
-regfi.regfi_log_set_mask.restype = c_bool
-
-regfi.regfi_get_rootkey.argtypes = [POINTER(REGFI_FILE)]
-regfi.regfi_get_rootkey.restype = POINTER(REGFI_NK)
-
-regfi.regfi_free_record.argtypes = [c_void_p]
-regfi.regfi_free_record.restype = None
-
-regfi.regfi_fetch_num_subkeys.argtypes = [POINTER(REGFI_NK)]
-regfi.regfi_fetch_num_subkeys.restype = c_uint32
-
-regfi.regfi_fetch_num_values.argtypes = [POINTER(REGFI_NK)]
-regfi.regfi_fetch_num_values.restype = c_uint32
-
-regfi.regfi_fetch_classname.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
-regfi.regfi_fetch_classname.restype = POINTER(REGFI_CLASSNAME)
-
-regfi.regfi_fetch_sk.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
-regfi.regfi_fetch_sk.restype = POINTER(REGFI_SK)
-
-regfi.regfi_fetch_data.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_VK)]
-regfi.regfi_fetch_data.restype = POINTER(REGFI_DATA)
-
-regfi.regfi_find_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
-                                    c_char_p, POINTER(c_uint32)]
-regfi.regfi_find_subkey.restype = c_bool
-
-regfi.regfi_find_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
-                                    c_char_p, POINTER(c_uint32)]
-regfi.regfi_find_value.restype = c_bool
-
-regfi.regfi_get_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
-                                   c_uint32]
-regfi.regfi_get_subkey.restype = POINTER(REGFI_NK)
-
-regfi.regfi_get_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
-                                   c_uint32]
-regfi.regfi_get_value.restype = POINTER(REGFI_VK)
-
-regfi.regfi_get_parentkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
-regfi.regfi_get_parentkey.restype = POINTER(REGFI_NK)
-
-regfi.regfi_nt2unix_time.argtypes = [POINTER(REGFI_NTTIME)]
-regfi.regfi_nt2unix_time.restype = c_double
-
-regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE), REGFI_ENCODING]
-regfi.regfi_iterator_new.restype = POINTER(REGFI_ITERATOR)
-
-regfi.regfi_iterator_free.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_free.restype = None
-
-regfi.regfi_iterator_down.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_down.restype = c_bool
-
-regfi.regfi_iterator_up.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_up.restype = c_bool
-
-regfi.regfi_iterator_to_root.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_to_root.restype = c_bool
-
-regfi.regfi_iterator_walk_path.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_walk_path.restype = c_bool
-
-regfi.regfi_iterator_cur_key.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_cur_key.restype = POINTER(REGFI_NK)
-
-regfi.regfi_iterator_first_subkey.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_first_subkey.restype = c_bool
-
-regfi.regfi_iterator_cur_subkey.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_cur_subkey.restype = POINTER(REGFI_NK)
-
-regfi.regfi_iterator_next_subkey.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_next_subkey.restype = c_bool
-
-regfi.regfi_iterator_find_subkey.argtypes = [POINTER(REGFI_ITERATOR), c_char_p]
-regfi.regfi_iterator_find_subkey.restype = c_bool
-
-regfi.regfi_iterator_first_value.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_first_value.restype = c_bool
-
-regfi.regfi_iterator_cur_value.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_cur_value.restype = POINTER(REGFI_VK)
-
-regfi.regfi_iterator_next_value.argtypes = [POINTER(REGFI_ITERATOR)]
-regfi.regfi_iterator_next_value.restype = c_bool
-
-regfi.regfi_iterator_find_value.argtypes = [POINTER(REGFI_ITERATOR), c_char_p]
-regfi.regfi_iterator_find_value.restype = c_bool
-
-
-regfi.regfi_init.argtypes = []
-regfi.regfi_init.restype = None
-regfi.regfi_init()
 
 
 ## Retrieves messages produced by regfi during parsing and interpretation
@@ -150,7 +38,7 @@ def _strlist2charss(str_list):
     for s in str_list:
         ret_val.append(s.encode('utf-8', 'replace'))
 
-    ret_val = (c_char_p*(len(str_list)+1))(*ret_val)
+    ret_val = (ctypes.c_char_p*(len(str_list)+1))(*ret_val)
     # Terminate the char** with a NULL pointer
     ret_val[-1] = 0
 
@@ -245,15 +133,16 @@ class _GenericList(object):
         return self._length
 
     def __getitem__(self, name):
-        index = c_uint32()
+        index = ctypes.c_uint32()
         if isinstance(name, str):
             name = name.encode('utf-8')
 
         if name != None:
             name = create_string_buffer(bytes(name))
 
-        if self._find_element(self._hive.file, self._key._base, name, byref(index)):
-            return self._constructor(self._hive, 
+        if self._find_element(self._hive.file, self._key._base, 
+                              name, byref(index)):
+            return self._constructor(self._hive,
                                      self._get_element(self._hive.file,
                                                        self._key._base,
                                                        index))
@@ -274,7 +163,7 @@ class _GenericList(object):
             raise StopIteration('')
 
         elem = self._get_element(self._hive.file, self._key._base,
-                                 c_uint32(self._current))
+                                 ctypes.c_uint32(self._current))
         self._current += 1
         return self._constructor(self._hive, elem)
     
@@ -492,13 +381,13 @@ class Hive():
 # every parent key.  See the @ref up and @ref down methods for more
 # information.
 class HiveIterator():
-    hive = None
-    iter = None
-    iteration_root = None
+    _hive = None
+    _iter = None
+    _iteration_root = None
 
     def __init__(self, hive):
-        self.iter = regfi.regfi_iterator_new(hive.file, REGFI_ENCODING_UTF8)
-        if self.iter == None:
+        self._iter = regfi.regfi_iterator_new(hive.file, REGFI_ENCODING_UTF8)
+        if self._iter == None:
             raise Exception("Could not create iterator.  Current log:\n"
                             + GetLogMessages())
         self._hive = hive
@@ -507,52 +396,96 @@ class HiveIterator():
         return getattr(self.file.contents, name)
 
     def __del__(self):    
-        regfi.regfi_iterator_free(self.iter)
+        regfi.regfi_iterator_free(self._iter)
 
     def __iter__(self):
-        self.iteration_root = None
+        self._iteration_root = None
         return self
 
     def __next__(self):
-        if self.iteration_root == None:
-            self.iteration_root = self.current_key()
-        elif not regfi.regfi_iterator_down(self.iter):
-            up_ret = regfi.regfi_iterator_up(self.iter)
+        if self._iteration_root == None:
+            self._iteration_root = self.current_key()
+        elif not regfi.regfi_iterator_down(self._iter):
+            up_ret = regfi.regfi_iterator_up(self._iter)
             while (up_ret and
-                   not regfi.regfi_iterator_next_subkey(self.iter)):
-                if self.iteration_root == self.current_key():
-                    self.iteration_root = None
+                   not regfi.regfi_iterator_next_subkey(self._iter)):
+                if self._iteration_root == self.current_key():
+                    self._iteration_root = None
                     raise StopIteration('')
-                up_ret = regfi.regfi_iterator_up(self.iter)
+                up_ret = regfi.regfi_iterator_up(self._iter)
 
             if not up_ret:
                 raise StopIteration('')
             
             # XXX: Use non-generic exception
-            if not regfi.regfi_iterator_down(self.iter):
+            if not regfi.regfi_iterator_down(self._iter):
                 raise Exception('Error traversing iterator downward.'+
                                 ' Current log:\n'+ GetLogMessages())
 
-        regfi.regfi_iterator_first_subkey(self.iter)
+        regfi.regfi_iterator_first_subkey(self._iter)
         return self.current_key()
 
     # For Python 2.x
     next = __next__
 
-    def down(self):
-        pass
+    def down(self, subkey_name=None):
+        if subkey_name == None:
+            return regfi.regfi_iterator_down(self._iter)
+        else:
+            if name != None:
+                name = name.encode('utf-8')
+            return (regfi.regfi_iterator_find_subkey(self._iter, name) 
+                    and regfi.regfi_iterator_down(self._iter))
 
     def up(self):
-        pass
+        return regfi.regfi_iterator_up(self._iter)
+
+    def first_subkey(self):
+        if regfi.regfi_iterator_first_subkey(self._iter):
+            return self.current_subkey()
+        return None
+
+    def first_value(self):
+        if regfi.regfi_iterator_first_value(self._iter):
+            return self.current_value()
+        return None
+
+    def next_subkey(self):
+        if regfi.regfi_iterator_next_subkey(self._iter):
+            return self.current_subkey()
+        return None
+
+    def next_value(self):
+        if regfi.regfi_iterator_next_value(self._iter):
+            return self.current_value()
+        return None
+
+    def find_subkey(self, name):
+        if name != None:
+            name = name.encode('utf-8')
+        if regfi.regfi_iterator_find_subkey(self._iter, name):
+            return self.current_subkey()
+        return None
+
+    def find_value(self, name):
+        if name != None:
+            name = name.encode('utf-8')
+        if regfi.regfi_iterator_find_value(self._iter, name):
+            return self.current_value()
+        return None
+
+    def current_subkey(self):
+        return Key(self._hive, regfi.regfi_iterator_cur_subkey(self._iter))
+
+    def current_value(self):
+        return Value(self._hive, regfi.regfi_iterator_cur_value(self._iter))
+
+    def current_key(self):
+        return Key(self._hive, regfi.regfi_iterator_cur_key(self._iter))
 
     def descend(self, path):
         cpath = _strlist2charss(path)
 
         # XXX: Use non-generic exception
-        if not regfi.regfi_iterator_walk_path(self.iter, cpath):
+        if not regfi.regfi_iterator_walk_path(self._iter, cpath):
             raise Exception('Could not locate path.\n'+GetLogMessages())
-
-    def current_key(self):
-        return Key(self._hive, regfi.regfi_iterator_cur_key(self.iter))
-
-    #XXX Add subkey/value search accessor functions (?)
