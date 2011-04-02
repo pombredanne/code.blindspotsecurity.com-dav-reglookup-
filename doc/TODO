@@ -22,12 +22,6 @@ things you could look into:
    randomly truncate an existing registry file, which will help improve
    reglookup's parsing on fragmentary files.
 
- - Build system.  I do not wish to use automake/autoconf in this
-   project.  I have also now decided that make is painful to use for
-   everything.  I'd like to switch to a suite of shell scripts driven by
-   minimal make rules.  If you got any ideas on this, shoot them my way.
-   scons?
-
  - Unicode support still needs improvement.  While parsing strings seems
    to be decent, UTF-8 output would be nice.
 

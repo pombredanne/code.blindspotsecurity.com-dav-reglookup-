@@ -39,6 +39,7 @@ doc_cmds='''
 rm -rf .release;
 svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/ .release;
 cd .release && doxygen Doxyfile.regfi
+cd .release && doxygen Doxyfile.pyregfi
 mv .release/doc .release/%s
 cd .release && tar cf %s.tar %s && gzip -9 %s.tar;
 mv .release/%s.tar.gz . && rm -rf .release
