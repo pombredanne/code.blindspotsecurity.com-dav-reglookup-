@@ -8,9 +8,13 @@ libtalloc_path='win32/libtalloc/'
 source_targets=('reglookup-src-trunk.tar.gz',)
 win32_targets=('reglookup-win32-trunk.zip',)
 doc_targets=('reglookup-doc-trunk.tar.gz',)
+all_targets = source_targets+win32_targets+doc_targets 
 
 def target2version(target):
-    return target.split('-')[2].split('.')[0]
+    chunks = target.split('-')
+    if len(chunks) != 3:
+        return None
+    return chunks[2].split('.')[0]
 
 def version2input(version):
     if version == 'trunk':
@@ -30,7 +34,7 @@ mv .release/%s.tar.gz . && rm -rf .release
 win32_cmds='''
 rm -rf .release && mkdir -p .release/%s
 cp %s/src/*.exe .release/%s
-cp win32/libiconv/bin/*.dll win32/libpthreads/bin/*.dll win32/libtalloc/bin/*.dll .release/%s
+cp win32/libiconv/bin/*.dll win32/libpthreads/bin/*.dll win32/libtalloc/bin/*.dll trunk/lib/*.dll .release/%s
 cd .release && zip -r %s.zip %s
 mv .release/%s.zip . && rm -rf .release
 '''
@@ -72,20 +76,35 @@ def generate_cmds(source, target, env, for_signature):
                             libpthreads_path+'lib',
                             libtalloc_path+'lib']
             env['LIBS']=['m', libpthread_name, 'iconv', 'regfi', 'talloc']
-
             
-            # Libraries
+            # Third-party dependencies
+            extra_obj=['%s/lib/lib%s.a' % (libpthreads_path, libpthread_name),
+                       libiconv_path+'/lib/libiconv.dll.a',
+                       libtalloc_path+'/lib/libtalloc.dll.a']
+
+            # Build libregfi.dll
+            #   Core regfi source
             lib_src = [input_prefix+'lib/regfi.c',
                        input_prefix+'lib/winsec.c',
                        input_prefix+'lib/range_list.c',
                        input_prefix+'lib/lru_cache.c',
                        input_prefix+'lib/void_stack.c']
-            libregfi_static = env.Library(lib_src)
+            regfi_o = env.Object(lib_src)
 
-            extra_obj=['%s/lib/lib%s.a' % (libpthreads_path, libpthread_name),
-                       libiconv_path+'/lib/libiconv.dll.a',
-                       libtalloc_path+'/lib/libtalloc.dll.a',
-                       input_prefix+'lib/libregfi.a',]
+            regfi_obj = []
+            for s in lib_src:
+                regfi_obj.append(s[0:-1]+'o')
+
+            env.Command(input_prefix+'lib/libregfi.o', regfi_o+extra_obj,
+                        'i586-mingw32msvc-dlltool --export-all-symbols'
+                        +' --dllname libregfi.dll -e $TARGET'
+                        +' -l %slib/libregfi.dll.a %s' 
+                        % (input_prefix, ' '.join(regfi_obj)))
+
+            env.Command(input_prefix+'lib/libregfi.dll',
+                        input_prefix+'lib/libregfi.o',
+                        'i586-mingw32msvc-gcc --shared -o $TARGET $SOURCE %s'
+                        % ' '.join(regfi_obj+extra_obj))
 
             # Executables
             reglookup = env.Program(input_prefix+'src/reglookup.exe',
@@ -98,10 +117,6 @@ def generate_cmds(source, target, env, for_signature):
 
         elif t in doc_targets:
             ret_val += doc_cmds % (t_base,t_base,t_base,t_base,t_base)
-
-        else:
-            return '#ERROR: cannot build "%s".  Acceptable targets: %s'\
-                   % (t, repr(source_targets+win32_targets+doc_targets))
         
     return ret_val
 
@@ -116,9 +131,15 @@ release_builder = Builder(generator = generate_cmds,
 env = Environment()
 env['BUILDERS']['Release'] = release_builder
 
+if len(COMMAND_LINE_TARGETS) == 0:
+    print('Acceptable targets: %s' % repr(all_targets))
 
 for target in COMMAND_LINE_TARGETS:
+    AlwaysBuild(target)
+    if target not in all_targets:
+        print('ERROR: cannot build "%s".  Acceptable targets: %s'
+              % (target, repr(all_targets)))
+        break
     env.Release(target, Dir(version2input(target2version(target))))
-
 
 Default(None)
