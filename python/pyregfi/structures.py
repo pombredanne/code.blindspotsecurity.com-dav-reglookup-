@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+## @package pyregfi.structures
+# Low-level data structures and C API mappings.
+#
+# Most users need not venture here.  For more information, see the source.
+
 import sys
 import os
 import traceback
@@ -7,27 +12,13 @@ import ctypes
 import ctypes.util
 from ctypes import *
 
+
 # XXX: can we always be sure enums are this size?
 REGFI_ENCODING = c_uint32
 REGFI_ENCODING_UTF8 = 1
 
 REGFI_DATA_TYPE = c_uint32
-REGFI_REGF_SIZE = 0x1000 
-
-# Registry value data types
-REG_NONE                       =  0
-REG_SZ		               =  1
-REG_EXPAND_SZ                  =  2
-REG_BINARY 	               =  3
-REG_DWORD	               =  4
-REG_DWORD_LE	               =  4 # DWORD, little endian
-REG_DWORD_BE	               =  5 # DWORD, big endian
-REG_LINK                       =  6
-REG_MULTI_SZ  	               =  7
-REG_RESOURCE_LIST              =  8
-REG_FULL_RESOURCE_DESCRIPTOR   =  9
-REG_RESOURCE_REQUIREMENTS_LIST = 10
-REG_QWORD                      = 11 # 64-bit little endian
+REGFI_REGF_SIZE = 0x1000
 
 
 # Prototype everything first so we don't have to worry about reference order

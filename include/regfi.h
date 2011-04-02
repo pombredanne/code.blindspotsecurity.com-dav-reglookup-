@@ -1245,6 +1245,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
  * @param i the iterator
  *
  * @return A read-only key structure for the current key, or NULL on failure.
+ *         Data structures must be freed with @ref regfi_free_record.
  *
  * @ingroup regfiIteratorLayer
  */
