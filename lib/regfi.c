@@ -1367,7 +1367,7 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 	  return NULL;
 	}
       }
-      talloc_steal(nk, nk->values);
+      talloc_reparent(NULL, nk, nk->values);
     }
   }
 
@@ -1397,7 +1397,7 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
 		      " while parsing NK record at offset 0x%.8X.", offset);
 	nk->num_subkeys = 0;
       }
-      talloc_steal(nk, nk->subkeys);
+      talloc_reparent(NULL, nk, nk->subkeys);
     }
   }
 
@@ -1527,7 +1527,7 @@ REGFI_FILE* regfi_alloc(int fd, REGFI_ENCODING output_encoding)
     goto fail;
 
   /* In this case, we want file_cb to be freed when ret_val is */
-  talloc_steal(ret_val, file_cb);
+  talloc_reparent(NULL, ret_val, file_cb);
   return ret_val;
 
  fail:
@@ -1538,7 +1538,7 @@ REGFI_FILE* regfi_alloc(int fd, REGFI_ENCODING output_encoding)
 
 /******************************************************************************
  ******************************************************************************/
-int regfi_free_cb(void* f)
+static int regfi_free_cb(void* f)
 {
   REGFI_FILE* file = (REGFI_FILE*)f;
 
@@ -1615,7 +1615,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
     regfi_log_add(REGFI_LOG_ERROR, "Failed to create HBIN range_list.");
     goto fail;
   }
-  talloc_steal(rb, rb->hbins);
+  talloc_reparent(NULL, rb, rb->hbins);
 
   rla = true;
   hbin_off = REGFI_REGF_SIZE;
@@ -1624,7 +1624,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
   {
     rla = range_list_add(rb->hbins, hbin->file_off, hbin->block_size, hbin);
     if(rla)
-      talloc_steal(rb->hbins, hbin);
+      talloc_reparent(NULL, rb->hbins, hbin);
 
     hbin_off = hbin->file_off + hbin->block_size;
     hbin = regfi_parse_hbin(rb, hbin_off, true);
@@ -1793,7 +1793,7 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
     talloc_free(ret_val);
     return NULL;
   }
-  talloc_steal(ret_val, ret_val->key_positions);
+  talloc_reparent(NULL, ret_val, ret_val->key_positions);
 
   ret_val->f = file;
   ret_val->cur_subkey = 0;
@@ -1927,8 +1927,7 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
  *****************************************************************************/
 const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
-  talloc_reference(NULL, i->cur_key);
-  return i->cur_key;
+  return talloc_reference(NULL, i->cur_key);
 }
 
 
@@ -2055,7 +2054,7 @@ const REGFI_CLASSNAME* regfi_fetch_classname(REGFI_FILE* file,
   ret_val->offset = offset;
   ret_val->raw = raw;
   ret_val->size = parse_length;
-  talloc_steal(ret_val, raw);
+  talloc_reparent(NULL, ret_val, raw);
 
   interpreted = talloc_array(NULL, char, parse_length);
 
@@ -2073,9 +2072,10 @@ const REGFI_CLASSNAME* regfi_fetch_classname(REGFI_FILE* file,
   }
   else
   {
+    /* XXX: check for NULL return here? */
     interpreted = talloc_realloc(NULL, interpreted, char, conv_size);
     ret_val->interpreted = interpreted;
-    talloc_steal(ret_val, interpreted);
+    talloc_reparent(NULL, ret_val, interpreted);
   }
 
   return ret_val;
@@ -2266,7 +2266,7 @@ REGFI_DATA* regfi_buffer_to_data(REGFI_BUFFER raw_data)
   if(ret_val == NULL)
     return NULL;
   
-  talloc_steal(ret_val, raw_data.buf);
+  talloc_reparent(NULL, ret_val, raw_data.buf);
   ret_val->raw = raw_data.buf;
   ret_val->size = raw_data.len;
   ret_val->interpreted_size = 0;
@@ -2318,10 +2318,11 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
       return false;
     }
 
+    /* XXX: check for NULL */
     tmp_str = talloc_realloc(NULL, tmp_str, uint8_t, tmp_size);
     data->interpreted.string = tmp_str;
     data->interpreted_size = tmp_size;
-    talloc_steal(data, tmp_str);
+    talloc_reparent(NULL, data, tmp_str);
     break;
 
   case REG_DWORD:
@@ -2406,8 +2407,8 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
     data->interpreted.multiple_string = tmp_array;
     /* XXX: how meaningful is this?  should we store number of strings instead? */
     data->interpreted_size = tmp_size;
-    talloc_steal(tmp_array, tmp_str);
-    talloc_steal(data, tmp_array);
+    talloc_reparent(NULL, tmp_array, tmp_str);
+    talloc_reparent(NULL, data, tmp_array);
     break;
 
   /* XXX: Dont know how to interpret these yet, just treat as binary */
