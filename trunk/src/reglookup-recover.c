@@ -572,7 +572,7 @@ int extractDataCells(REGFI_FILE* file,
        *      vk->data item can be removed from the structure.
        */
       vk->data = regfi_buffer_to_data(data);
-      talloc_steal(vk, vk->data);
+      talloc_reparent(NULL, vk, vk->data);
     }
   }
 
@@ -611,7 +611,7 @@ int extractKeys(REGFI_FILE* f,
 	  error_code = 20;
 	  goto fail;
 	}
-	talloc_steal(unalloc_keys, key);
+	talloc_reparent(NULL, unalloc_keys, key);
 	j+=key->cell_size-8;
       }
     }
@@ -752,7 +752,7 @@ int extractSKs(REGFI_FILE* f,
 	  fprintf(stderr, "ERROR: Couldn't add sk to unalloc_sks.\n");
 	  return 20;
 	}
-	talloc_steal(unalloc_sks, sk);
+	talloc_reparent(NULL, unalloc_sks, sk);
 	j+=sk->cell_size-8;
       }
     }
