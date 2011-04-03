@@ -1719,6 +1719,14 @@ void regfi_free_record(const void* record)
 }
 
 
+/******************************************************************************
+ *****************************************************************************/
+bool regfi_reference_record(const void* record)
+{
+  if(talloc_reference(NULL, record) != NULL)
+    return true;
+  return false;
+}
 
 
 /******************************************************************************
