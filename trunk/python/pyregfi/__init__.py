@@ -199,14 +199,17 @@ class _StructureWrapper(object):
         self._hive = hive
         self._base = base
 
+
     # Memory management for most regfi structures is taken care of here
     def __del__(self):
         regfi.regfi_free_record(self._base)
+
 
     # Any attribute requests not explicitly defined in subclasses gets passed
     # to the equivalent REGFI_* structure defined in structures.py
     def __getattr__(self, name):
         return getattr(self._base.contents, name)
+
     
     ## Test for equality
     #
@@ -222,6 +225,7 @@ class _StructureWrapper(object):
     # @endcode
     def __eq__(self, other):
         return (type(self) == type(other)) and (self.offset == other.offset)
+
 
     def __ne__(self, other):
         return (not self.__eq__(other))
@@ -243,7 +247,7 @@ class Security(_StructureWrapper):
 ## Abstract class for ValueList and SubkeyList
 class _GenericList(object):
     _hive = None
-    _key = None
+    _key_base = None
     _length = None
     _current = None
 
@@ -254,20 +258,22 @@ class _GenericList(object):
     _constructor = None
 
     def __init__(self, key):
+        if not key:
+            raise Exception("Could not create _GenericList; key is NULL."
+                            + "Current log:\n" + GetLogMessages())
+        
+        if not regfi.regfi_reference_record(key._base):
+            raise Exception("Could not create _GenericList; memory error."
+                            + "Current log:\n" + GetLogMessages())
+        self._key_base = key._base
+        self._length = self._fetch_num(self._key_base)
         self._hive = key._hive
 
-        # Normally it's good to avoid cyclic references like this 
-        # (key.list.key...) but in this case it makes ctypes memory
-        # management easier to reference the Key instead of the base
-        # structure.  We use a weak reference in order to allow for garbage 
-        # collection, since value/subkey lists should not be usable if their
-        # parent Key is freed anyway.
+    
+    def __del__(self):
+        regfi.regfi_free_record(self._key_base)
+    
 
-        # XXX: check for NULL here, throw an exception if so.
-        self._key = weakref.proxy(key)
-        self._length = self._fetch_num(key._base)
-    
-    
     ## Length of list
     def __len__(self):
         return self._length
@@ -285,11 +291,11 @@ class _GenericList(object):
         if name != None:
             name = create_string_buffer(bytes(name))
 
-        if self._find_element(self._hive.file, self._key._base, 
+        if self._find_element(self._hive.file, self._key_base, 
                               name, byref(index)):
             return self._constructor(self._hive,
                                      self._get_element(self._hive.file,
-                                                       self._key._base,
+                                                       self._key_base,
                                                        index))
         raise KeyError('')
 
@@ -307,7 +313,7 @@ class _GenericList(object):
         if self._current >= self._length:
             raise StopIteration('')
 
-        elem = self._get_element(self._hive.file, self._key._base,
+        elem = self._get_element(self._hive.file, self._key_base,
                                  ctypes.c_uint32(self._current))
         self._current += 1
         return self._constructor(self._hive, elem)
@@ -637,9 +643,11 @@ class Hive():
 
     def __getattr__(self, name):
         if name == "root":
-            if self._root == None:
-                self._root = Key(self, regfi.regfi_get_rootkey(self.file))
-            return self._root
+            # XXX: This creates reference loops.  Need to cache better inside regfi
+            #if self._root == None:
+            #    self._root = Key(self, regfi.regfi_get_rootkey(self.file))
+            #return self._root
+            return Key(self, regfi.regfi_get_rootkey(self.file))
 
         elif name == "modified":
             return regfi.regfi_nt2unix_time(byref(self._base.contents.mtime))

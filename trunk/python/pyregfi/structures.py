@@ -240,6 +240,9 @@ regfi.regfi_get_rootkey.restype = POINTER(REGFI_NK)
 regfi.regfi_free_record.argtypes = [c_void_p]
 regfi.regfi_free_record.restype = None
 
+regfi.regfi_reference_record.argtypes = [c_void_p]
+regfi.regfi_reference_record.restype = c_bool
+
 regfi.regfi_fetch_num_subkeys.argtypes = [POINTER(REGFI_NK)]
 regfi.regfi_fetch_num_subkeys.restype = c_uint32
 

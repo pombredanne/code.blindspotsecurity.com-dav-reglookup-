@@ -978,6 +978,24 @@ _EXPORT
 void regfi_free_record(const void* record);
 
 
+/** Increments reference count on record
+ *
+ * Adds an extra internal reference to specified record, making it necessary to
+ * call regfi_free_record on it an additional time before it is freed.  This is
+ * useful in cases where multiple threads/structures need access to a record, 
+ * without requiring them to be in sync with when it is freed.
+ *
+ * Can be used on REGFI_NK, REGFI_VK, REGFI_SK, REGFI_DATA, and
+ * REGFI_CLASSNAME records.
+ *
+ * @return true on success, false otherwise
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+bool regfi_reference_record(const void* record);
+
+
 /** Retrieves number of subkeys referenced by this key.
  *
  * Number of subkeyss in key structure and subkey list structure could differ,

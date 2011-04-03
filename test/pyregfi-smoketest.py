@@ -200,7 +200,7 @@ tests = [("iterIterWalk",iterIterWalk),]
 
 files = []
 for f in sys.argv[1:]:
-    files.append((f, open(f,"r+b")))
+    files.append((f, open(f,"rb")))
 
 
 start_time = time.time()
@@ -215,6 +215,7 @@ for hname,fh in files:
         print(pyregfi.GetLogMessages())
         print
         sys.stdout.flush()
+    fh.close()
 
 hive = None
 files = None
