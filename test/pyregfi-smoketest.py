@@ -2,8 +2,10 @@
 
 import sys
 import gc
+import io
 import time
 import pyregfi
+
 
 def usage():
     sys.stderr.write("USAGE: pyregfi-smoketest.py hive1 [hive2 ...]\n")
@@ -14,7 +16,7 @@ def usage():
 # Uses the HiveIterator to walk all keys
 # Gathers various (meaningless) statistics to exercise simple attribute access
 # and to hopefully smoke out any bugs that can be identified by changing stats
-def iterTallyNames(hive):
+def iterTallyNames(hive, fh):
     key_count = 0
     key_lens = 0
     key_rawlens = 0
@@ -59,7 +61,7 @@ def getCurrentPath(key):
 # recording the path as it goes, and then uses the subtree/descend method
 # to find the same key again, verifying it is the same.  This test is currently
 # very slow because no key caching is used.
-def iterParentWalk(hive):
+def iterParentWalk(hive, fh):
     i = 1
     for k in hive:
         path = getCurrentPath(k)
@@ -76,7 +78,7 @@ def iterParentWalk(hive):
 
 # Uses the HiveIterator to walk all keys
 # Gathers various (meaningless) statistics about data/data_raw attributes
-def iterTallyData(hive):
+def iterTallyData(hive, fh):
     data_stat = 0.0
     dataraw_stat = 0.0
     
@@ -126,7 +128,7 @@ def recurseTree(cur, operation):
 # Retrieves all keys by recursion, rather than the iterator, and validates
 # list dictionary access.  Also builds nonsensical statistics as an excuse
 # to access various base structure attributes.
-def recurseKeyTally(hive):
+def recurseKeyTally(hive, fh):
     checkValues(hive.root)
     recurseTree(hive.root, checkValues)
     print("  Key stat: %f" % recurseKey_stat)
@@ -134,7 +136,7 @@ def recurseKeyTally(hive):
 
 
 # Iterates hive gathering stats about security and classname records
-def iterFetchRelated(hive):
+def iterFetchRelated(hive, fh):
     security_stat = 0.0
     classname_stat = 0.0
     modified_stat = 0.0
@@ -156,7 +158,7 @@ def iterFetchRelated(hive):
 
 
 
-def iterIterWalk(hive):
+def iterIterWalk(hive, fh):
     sk_stat = 0.0
     v_stat = 0.0
     iter = pyregfi.HiveIterator(hive)
@@ -182,7 +184,14 @@ def iterIterWalk(hive):
     print("   Value stat: %f" % v_stat)
 
 
+def iterCallbackIO(hive, fh):
+    fh.seek(0)
+    new_fh = io.BytesIO(fh.read())
+    new_hive = pyregfi.Hive(new_fh)
+    for k in new_hive:
+        pass
 
+    
 if len(sys.argv) < 2:
     usage()
     sys.exit(1)
@@ -195,7 +204,7 @@ tests = [("iterTallyNames",iterTallyNames),
          ("iterFetchRelated",iterFetchRelated),
          ("iterIterWalk",iterIterWalk),]
 
-tests = [("iterIterWalk",iterIterWalk),]
+tests = [("iterCallbackIO",iterCallbackIO),]
 
 
 files = []
@@ -210,7 +219,7 @@ for hname,fh in files:
         teststart = time.time()
         tstr = "'%s' on '%s'" % (tname,hname)
         print("##BEGIN %s:" % tstr)
-        t(hive)
+        t(hive, fh)
         print("##END %s; runtime=%f; messages:" % (tstr, time.time() - teststart))
         print(pyregfi.GetLogMessages())
         print

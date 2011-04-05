@@ -81,9 +81,23 @@ class REGFI_RAW_FILE(Structure):
         return len(tmp)
 
 
-# XXX: how can we know for sure the size of off_t and size_t?
-seek_cb_type = CFUNCTYPE(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use_errno=True)
-read_cb_type = CFUNCTYPE(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_uint64, use_errno=True)
+# Load libregfi according to platform
+regfi = None
+if hasattr(ctypes, 'windll'):
+    #regfi = ctypes.windll.libregfi
+    regfi = ctypes.WinDLL('libregfi.dll', use_errno=True)
+    CB_FACTORY = ctypes.WINFUNCTYPE
+else:
+    regfi = ctypes.CDLL(ctypes.util.find_library('regfi'), use_errno=True)
+    CB_FACTORY = ctypes.CFUNCTYPE
+
+# XXX: how can we know for sure the size of off_t?  
+#      -D_FILE_OFFSET_BITS=64 might help, need to research this
+#      Also, may need to use something like ctypes_configure
+#seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use_errno=True)
+seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int)
+#read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t, use_errno=True)
+read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t)
 
 
 REGFI_NTTIME._fields_ = [('low', c_uint32),
@@ -216,9 +230,7 @@ REGFI_RAW_FILE._fields_ = [('seek', seek_cb_type),
                            ]
 
 
-# Load libregfi and define function prototypes
-regfi = ctypes.CDLL(ctypes.util.find_library('regfi'), use_errno=True)
-
+# Define function prototypes
 regfi.regfi_alloc.argtypes = [c_int, REGFI_ENCODING]
 regfi.regfi_alloc.restype = POINTER(REGFI_FILE)
 

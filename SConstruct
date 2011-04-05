@@ -32,8 +32,12 @@ mv .release/%s.tar.gz . && rm -rf .release
 '''
 
 win32_cmds='''
-rm -rf .release && mkdir -p .release/%s
+rm -rf .release && mkdir -p .release/%s/python/pyregfi
 cp %s/src/*.exe .release/%s
+
+cp %s/pyregfi-distutils.py .release/%s/setup.py
+cp %s/python/pyregfi/*.py .release/%s/python/pyregfi
+
 cp win32/libiconv/bin/*.dll win32/libpthreads/bin/*.dll win32/libtalloc/bin/*.dll trunk/lib/*.dll .release/%s
 cd .release && zip -r %s.zip %s
 mv .release/%s.zip . && rm -rf .release
@@ -112,7 +116,8 @@ def generate_cmds(source, target, env, for_signature):
             reglookup_recover = env.Program(input_prefix+'src/reglookup-recover.exe',
                                             [input_prefix+'src/reglookup-recover.c']+extra_obj)
 
-            ret_val += win32_cmds % (t_base,input_prefix,
+            ret_val += win32_cmds % (t_base,input_prefix,t_base,input_prefix,
+                                     t_base,input_prefix,
                                      t_base,t_base,t_base,t_base,t_base)
 
         elif t in doc_targets:
