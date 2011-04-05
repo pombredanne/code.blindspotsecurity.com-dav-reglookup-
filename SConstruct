@@ -1,10 +1,8 @@
 import sys
 import os
-#import distutils.sysconfig
 
-#cflags = '-std=gnu99 -pedantic -Wall'
-cflags = '-std=gnu99 -pedantic -Wall -fvisibility=hidden -ggdb'
-
+cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
+cflags += ' -ggdb'
 
 lib_src = ['lib/regfi.c',
            'lib/winsec.c',

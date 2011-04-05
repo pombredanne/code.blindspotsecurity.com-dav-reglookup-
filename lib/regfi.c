@@ -611,7 +611,9 @@ uint32_t regfi_read(REGFI_RAW_FILE* file_cb, uint8_t* buf, uint32_t* length)
 
   do
   {
-    rret = file_cb->read(file_cb, buf + rsize, *length - rsize);
+    rret = file_cb->read(file_cb, 
+                         buf + rsize, 
+                         *length - rsize);
     if(rret > 0)
       rsize += rret;
   }while(*length - rsize > 0 

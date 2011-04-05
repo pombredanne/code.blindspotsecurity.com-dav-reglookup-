@@ -94,7 +94,6 @@
 #
 import sys
 import time
-import weakref
 from pyregfi.structures import *
 
 import ctypes
@@ -634,12 +633,16 @@ class Hive():
         except:
             pass
         
+        fh.seek(0)
         self.raw_file = structures.REGFI_RAW_FILE()
         self.raw_file.fh = fh
         self.raw_file.seek = seek_cb_type(self.raw_file.cb_seek)
         self.raw_file.read = read_cb_type(self.raw_file.cb_read)
-        self.file = regfi.regfi_alloc_cb(self.raw_file, REGFI_ENCODING_UTF8)
-
+        self.file = regfi.regfi_alloc_cb(pointer(self.raw_file), REGFI_ENCODING_UTF8)
+        if not self.file:
+            # XXX: switch to non-generic exception
+            raise Exception("Could not open registry file.  Current log:\n"
+                            + GetLogMessages())
 
     def __getattr__(self, name):
         if name == "root":
