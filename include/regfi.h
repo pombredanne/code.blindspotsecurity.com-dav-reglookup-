@@ -83,9 +83,15 @@
 #ifdef _EXPORT
 #undef _EXPORT
 #endif
+#ifdef REGFI_WIN32
+#define _EXPORT __declspec(dllexport)
+#else
 #define _EXPORT __attribute__((visibility("default")))
+#endif
 
-
+#ifndef EOVERFLOW
+# define EOVERFLOW E2BIG
+#endif
 
 /******************************************************************************/
 /* Constants for use while interacting with the library                       */
@@ -708,7 +714,7 @@ typedef struct _regfi_nk
 
 typedef struct _regfi_raw_file
 {
-  off_t    (* seek)(); /* (REGFI_RAW_FILE* self, off_t offset, int whence) */
+  int64_t  (* seek)(); /* (REGFI_RAW_FILE* self, uint64_t offset, int whence) */
   ssize_t  (* read)(); /* (REGFI_RAW_FILE* self, void* buf, size_t count) */
 
   uint64_t cur_off;
@@ -1626,13 +1632,13 @@ REGFI_BUFFER regfi_parse_little_data(REGFI_FILE* file, uint32_t voffset,
 /******************************************************************************/
 /*    Private (and undocumented) Functions                                    */
 /******************************************************************************/
-off_t                 regfi_raw_seek(REGFI_RAW_FILE* self, 
-				     off_t offset, int whence);
+int64_t               regfi_raw_seek(REGFI_RAW_FILE* self, 
+				     uint64_t offset, int whence);
 ssize_t               regfi_raw_read(REGFI_RAW_FILE* self, 
 				     void* buf, size_t count);
 _EXPORT
-off_t                 regfi_seek(REGFI_RAW_FILE* file_cb, 
-				 off_t offset, int whence);
+uint64_t              regfi_seek(REGFI_RAW_FILE* file_cb, 
+				 uint64_t offset, int whence);
 _EXPORT
 uint32_t              regfi_read(REGFI_RAW_FILE* file_cb, 
 				 uint8_t* buf, uint32_t* length);

@@ -176,7 +176,7 @@ def _charss2strlist(chars_pointer):
 # excessive memory consumption.
 def GetLogMessages():
     msgs = regfi.regfi_log_get_str()
-    if msgs == None:
+    if not msgs:
         return ''
     return msgs.decode('utf-8')
 
@@ -624,25 +624,35 @@ class Hive():
     #
     # @note Supplied file must be seekable
     def __init__(self, fh):
+        # The fileno method may not exist, or it may throw an exception
+        # when called if the file isn't backed with a descriptor.
+        fn = None
         try:
-            # The fileno method may not exist, or it may throw an exception
-            # when called if the file isn't backed with a descriptor.
-            if hasattr(fh, 'fileno'):
-                self.file = regfi.regfi_alloc(fh.fileno(), REGFI_ENCODING_UTF8)
-                return
+            # XXX: Native calls to Windows filenos don't seem to work.  
+            #      Need to investigate why.
+            if not is_win32 and hasattr(fh, 'fileno'):
+                fn = fh.fileno()
         except:
             pass
-        
-        fh.seek(0)
-        self.raw_file = structures.REGFI_RAW_FILE()
-        self.raw_file.fh = fh
-        self.raw_file.seek = seek_cb_type(self.raw_file.cb_seek)
-        self.raw_file.read = read_cb_type(self.raw_file.cb_read)
-        self.file = regfi.regfi_alloc_cb(pointer(self.raw_file), REGFI_ENCODING_UTF8)
-        if not self.file:
-            # XXX: switch to non-generic exception
-            raise Exception("Could not open registry file.  Current log:\n"
-                            + GetLogMessages())
+
+        if fn != None:
+            self.file = regfi.regfi_alloc(fn, REGFI_ENCODING_UTF8)
+            if not self.file:
+                # XXX: switch to non-generic exception
+                raise Exception("Could not open registry file.  Current log:\n"
+                                + GetLogMessages())
+        else:
+            fh.seek(0)
+            self.raw_file = structures.REGFI_RAW_FILE()
+            self.raw_file.fh = fh
+            self.raw_file.seek = seek_cb_type(self.raw_file.cb_seek)
+            self.raw_file.read = read_cb_type(self.raw_file.cb_read)
+            self.file = regfi.regfi_alloc_cb(pointer(self.raw_file), REGFI_ENCODING_UTF8)
+            if not self.file:
+                # XXX: switch to non-generic exception
+                raise Exception("Could not open registry file.  Current log:\n"
+                                + GetLogMessages())
+
 
     def __getattr__(self, name):
         if name == "root":
@@ -702,7 +712,7 @@ class HiveIterator():
 
     def __init__(self, hive):
         self._iter = regfi.regfi_iterator_new(hive.file, REGFI_ENCODING_UTF8)
-        if self._iter == None:
+        if not self._iter:
             raise Exception("Could not create iterator.  Current log:\n"
                             + GetLogMessages())
         self._hive = hive

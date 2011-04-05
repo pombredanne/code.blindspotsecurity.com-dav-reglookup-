@@ -572,8 +572,13 @@ bool regfi_unlock(REGFI_FILE* file, pthread_mutex_t* lock, const char* context)
 }
 
 
-off_t regfi_raw_seek(REGFI_RAW_FILE* self, off_t offset, int whence)
+int64_t regfi_raw_seek(REGFI_RAW_FILE* self, uint64_t offset, int whence)
 {
+  if(sizeof(off_t) == 4 && offset > 2147483647)
+  {
+    errno = EOVERFLOW;
+    return -1;
+  }
   return lseek(*(int*)self->state, offset, whence);
 }
 
@@ -586,7 +591,7 @@ ssize_t regfi_raw_read(REGFI_RAW_FILE* self, void* buf, size_t count)
 /*****************************************************************************
  * Convenience function to wrap up the ugly callback stuff
  *****************************************************************************/
-off_t regfi_seek(REGFI_RAW_FILE* file_cb, off_t offset, int whence)
+uint64_t regfi_seek(REGFI_RAW_FILE* file_cb, uint64_t offset, int whence)
 {
   return file_cb->seek(file_cb, offset, whence);
 }
@@ -1560,20 +1565,20 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
   REGFI_FILE* rb;
   REGFI_HBIN* hbin = NULL;
   uint32_t hbin_off, cache_secret;
-  int32_t file_length;
+  int64_t file_length;
   bool rla;
 
   /* Determine file length.  Must be at least big enough for the header
    * and one hbin.
    */
-  file_length = file_cb->seek(file_cb, 0, SEEK_END);
+  file_length = regfi_seek(file_cb, 0, SEEK_END);
   if(file_length < REGFI_REGF_SIZE+REGFI_HBIN_ALLOC)
   {
     regfi_log_add(REGFI_LOG_ERROR, "File length (%d) too short to contain a"
 		  " header and at least one HBIN.", file_length);
     return NULL;
   }
-  file_cb->seek(file_cb, 0, SEEK_SET);
+  regfi_seek(file_cb, 0, SEEK_SET);
 
   if(output_encoding != REGFI_ENCODING_UTF8
      && output_encoding != REGFI_ENCODING_ASCII)
