@@ -1,4 +1,4 @@
-cflags = '-std=gnu99 -pedantic -Wall'
+cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -DREGFI_WIN32'
 
 libiconv_path='win32/libiconv/'
 libpthreads_path='win32/libpthreads/'
@@ -99,15 +99,19 @@ def generate_cmds(source, target, env, for_signature):
             for s in lib_src:
                 regfi_obj.append(s[0:-1]+'o')
 
+            # XXX: Several options here may not be necessary.  
+            #      Need to investigate why stdcall interfaces don't seem to be 
+            #      working on Windows.
             env.Command(input_prefix+'lib/libregfi.o', regfi_o+extra_obj,
                         'i586-mingw32msvc-dlltool --export-all-symbols'
-                        +' --dllname libregfi.dll -e $TARGET'
+                        +' --add-stdcall-alias  --dllname libregfi.dll -e $TARGET'
                         +' -l %slib/libregfi.dll.a %s' 
                         % (input_prefix, ' '.join(regfi_obj)))
 
             env.Command(input_prefix+'lib/libregfi.dll',
                         input_prefix+'lib/libregfi.o',
-                        'i586-mingw32msvc-gcc --shared -o $TARGET $SOURCE %s'
+                        'i586-mingw32msvc-gcc ' + cflags 
+                        + ' --shared -Wl,--out-implib -add-stdcall-alias -o $TARGET $SOURCE %s'
                         % ' '.join(regfi_obj+extra_obj))
 
             # Executables

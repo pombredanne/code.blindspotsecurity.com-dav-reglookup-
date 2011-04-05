@@ -12,6 +12,7 @@ import ctypes
 import ctypes.util
 from ctypes import *
 
+is_win32 = hasattr(ctypes, 'windll')
 
 # XXX: can we always be sure enums are this size?
 REGFI_ENCODING = c_uint32
@@ -60,8 +61,7 @@ class REGFI_RAW_FILE(Structure):
             self.fh.seek(offset, whence)
         except Exception:
             traceback.print_exc()
-            # XXX: os.EX_IOERR may not be available on Windoze
-            set_errno(os.EX_IOERR)
+            set_errno(74) # os.EX_IOERR
             return -1
 
         return self.fh.tell()
@@ -75,29 +75,27 @@ class REGFI_RAW_FILE(Structure):
 
         except Exception:
             traceback.print_exc()
-            # XXX: os.EX_IOERR may not be available on Windoze
-            set_errno(os.EX_IOERR)
+            set_errno(74) # os.EX_IOERR
             return -1
         return len(tmp)
 
 
 # Load libregfi according to platform
 regfi = None
-if hasattr(ctypes, 'windll'):
+if is_win32:
+    # XXX: Using C calling conventions on cross-compiled DLLs seems to work fine
+    #      on Windows, but I'm not sure if stdcall symbols are supported 
+    #      correctly for native Windows binaries...
     #regfi = ctypes.windll.libregfi
-    regfi = ctypes.WinDLL('libregfi.dll', use_errno=True)
-    CB_FACTORY = ctypes.WINFUNCTYPE
+    #CB_FACTORY = ctypes.WINFUNCTYPE
+    regfi = ctypes.CDLL('libregfi.dll', use_errno=True)
+    CB_FACTORY = ctypes.CFUNCTYPE
 else:
     regfi = ctypes.CDLL(ctypes.util.find_library('regfi'), use_errno=True)
     CB_FACTORY = ctypes.CFUNCTYPE
 
-# XXX: how can we know for sure the size of off_t?  
-#      -D_FILE_OFFSET_BITS=64 might help, need to research this
-#      Also, may need to use something like ctypes_configure
-#seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use_errno=True)
-seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int)
-#read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t, use_errno=True)
-read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t)
+seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use_errno=True)
+read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t, use_errno=True)
 
 
 REGFI_NTTIME._fields_ = [('low', c_uint32),
