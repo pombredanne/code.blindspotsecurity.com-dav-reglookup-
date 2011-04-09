@@ -7,11 +7,8 @@ import time
 import pyregfi
 
 
-def usage():
-    sys.stderr.write("USAGE: pyregfi-smoketest.py hive1 [hive2 ...]\n")
 
-
-
+pyregfi.SetLogMask((pyregfi.LOG_TYPES.INFO, pyregfi.LOG_TYPES.WARN, pyregfi.LOG_TYPES.ERROR))
 
 # Uses the HiveIterator to walk all keys
 # Gathers various (meaningless) statistics to exercise simple attribute access
@@ -191,31 +188,44 @@ def iterCallbackIO(hive, fh):
     for k in new_hive:
         pass
 
-    
-if len(sys.argv) < 2:
+tests = {
+    "iterTallyNames":iterTallyNames,
+    "iterParentWalk":iterParentWalk,
+    "iterTallyData":iterTallyData,
+    "recurseKeyTally":recurseKeyTally,
+    "iterFetchRelated":iterFetchRelated,
+    "iterIterWalk":iterIterWalk,
+    "iterCallbackIO":iterCallbackIO,
+    }
+
+def usage():
+    sys.stderr.write("USAGE: pyregfi-smoketest.py test1[,test2[,...]] hive1 [hive2 ...]\n")
+    sys.stderr.write("\tAvailable tests:\n")
+    for t in tests.keys():
+        sys.stderr.write("\t\t%s\n" % t)
+
+
+if len(sys.argv) < 3:
     usage()
     sys.exit(1)
 
-
-tests = [("iterTallyNames",iterTallyNames),
-         ("iterParentWalk",iterParentWalk),
-         ("iterTallyData",iterTallyData),
-         ("recurseKeyTally",recurseKeyTally),
-         ("iterFetchRelated",iterFetchRelated),
-         ("iterIterWalk",iterIterWalk),]
-
-tests = [("iterCallbackIO",iterCallbackIO),]
-
+selected_tests = sys.argv[1].split(',')
+for st in selected_tests:
+    if st not in tests:
+        usage()
+        sys.stderr.write("ERROR: %s not a valid test type" % st)
+        sys.exit(1)
 
 files = []
-for f in sys.argv[1:]:
+for f in sys.argv[2:]:
     files.append((f, open(f,"rb")))
 
 
 start_time = time.time()
 for hname,fh in files:
     hive = pyregfi.Hive(fh)
-    for tname,t in tests:
+    for tname in selected_tests:
+        t = tests[tname]
         teststart = time.time()
         tstr = "'%s' on '%s'" % (tname,hname)
         print("##BEGIN %s:" % tstr)

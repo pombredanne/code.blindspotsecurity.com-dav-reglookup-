@@ -16,10 +16,9 @@ is_win32 = hasattr(ctypes, 'windll')
 
 # XXX: can we always be sure enums are this size?
 REGFI_ENCODING = c_uint32
-REGFI_ENCODING_UTF8 = 1
+REGFI_ENCODING_UTF8 = REGFI_ENCODING(1)
 
 REGFI_DATA_TYPE = c_uint32
-REGFI_REGF_SIZE = 0x1000
 
 
 # Prototype everything first so we don't have to worry about reference order
