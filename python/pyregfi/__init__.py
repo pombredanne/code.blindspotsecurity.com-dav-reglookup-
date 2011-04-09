@@ -132,6 +132,19 @@ class DATA_TYPES(object):
     QWORD                      = 11 # 64-bit little endian
 
 
+## An enumeration of log message types
+#
+# @note This is a static class, there is no need to instantiate it. 
+#       Just access its attributes directly as LOG_TYPES.INFO, etc
+class LOG_TYPES(object):
+    ## Informational messages, useful in debugging
+    INFO  =  0x01
+    ## Non-critical problems in structure parsing or intepretation
+    WARN  =  0x04
+    ## Major failures
+    ERROR =  0x10
+
+
 def _buffer2bytearray(char_pointer, length):
     if length == 0 or char_pointer == None:
         return None
@@ -179,6 +192,30 @@ def GetLogMessages():
     if not msgs:
         return ''
     return msgs.decode('utf-8')
+
+
+## Sets the types of log messages to record
+#
+# @param log_types A sequence of message types that regfi should generate.
+#                  Message types can be found in the LOG_TYPES enumeration.
+#
+# @return True on success, False on failure.  Failures are rare, but could
+#         indicate that global logging is not operating as expected.
+# 
+# Example:
+# @code
+# SetLogMask((LOG_TYPES.ERROR, LOG_TYPES.WARN, LOG_TYPES.INFO))
+# @endcode
+#
+# The message mask is a global (all hives, iterators), thread-specific value.
+# For more information, see @ref regfi_log_set_mask.
+#
+def SetLogMask(log_types):
+    mask = 0
+    for m in log_types:
+        mask |= m
+    return regfi.regfi_log_set_mask(mask)
+
 
 
 ## Abstract class for most objects returned by the library
