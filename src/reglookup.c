@@ -94,7 +94,7 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK* vk, char* prefix)
     else if(conv_error != NULL)
       fprintf(stderr, "WARN: While quoting value for '%s/%s', "
 	      "warning returned: %s\n", prefix, quoted_name, conv_error);
-    regfi_free_record(data);
+    regfi_free_record(iter->f, data);
   }
 
   if(print_value_mtime)
@@ -281,7 +281,7 @@ void printValueList(REGFI_ITERATOR* iter, char* prefix)
   {
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(iter, value, prefix);
-    regfi_free_record(value);
+    regfi_free_record(iter->f, value);
     regfi_iterator_next_value(iter);
     printMsgs(iter->f);
   }
@@ -309,7 +309,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
     group = regfi_get_group(sk->sec_desc);
     sacl = regfi_get_sacl(sk->sec_desc);
     dacl = regfi_get_dacl(sk->sec_desc);
-    regfi_free_record(sk);
+    regfi_free_record(iter->f, sk);
 
     if(owner == NULL)
       owner = empty_str;
@@ -344,7 +344,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
     }
     else
       quoted_classname = empty_str;
-    regfi_free_record(classname);
+    regfi_free_record(iter->f, classname);
 
     printMsgs(iter->f);
     printf("%s,KEY,,%s,%s,%s,%s,%s,%s\n", full_path, mtime, 
@@ -364,7 +364,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
   else
     printf("%s,KEY,,%s\n", full_path, mtime);
 
-  regfi_free_record(key);
+  regfi_free_record(iter->f, key);
 }
 
 
@@ -405,7 +405,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     {
       if(cur != root)
       {
-        regfi_free_record(cur);
+        regfi_free_record(iter->f, cur);
 	/* We're done with this sub-tree, going up and hitting other branches. */
 	if(!regfi_iterator_up(iter))
 	{
@@ -429,7 +429,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
     { /* We have unexplored sub-keys.  
        * Let's move down and print this first sub-tree out. 
        */
-      regfi_free_record(cur);
+      regfi_free_record(iter->f, cur);
       if(!regfi_iterator_down(iter))
       {
 	printMsgs(iter->f);
@@ -437,14 +437,14 @@ void printKeyTree(REGFI_ITERATOR* iter)
       }
 
       cur = regfi_iterator_cur_key(iter);
-      regfi_free_record(sub);
+      regfi_free_record(iter->f, sub);
       regfi_iterator_first_subkey(iter);
       sub = regfi_iterator_cur_subkey(iter);
       print_this = true;
     }
     printMsgs(iter->f);
   } while(!((cur == root) && (sub == NULL)));
-  regfi_free_record(root);
+  regfi_free_record(iter->f, root);
 
   if(print_verbose)
     fprintf(stderr, "INFO: Finished printing key tree.\n");
@@ -517,7 +517,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     if(!type_filter_enabled || (value->type == type_filter))
       printValue(iter, value, tmp_path_joined);
 
-    regfi_free_record(value);
+    regfi_free_record(iter->f, value);
     free(tmp_path);
     free(tmp_path_joined);
     return 1;

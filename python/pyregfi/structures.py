@@ -170,7 +170,6 @@ REGFI_SUBKEY_LIST._fields_ = [('offset', c_uint32),
 
 REGFI_VALUE_LIST._fields_ = [('offset', c_uint32),
                              ('cell_size', c_uint32),
-                             ('num_children', c_uint32),
                              ('num_values', c_uint32),
                              ('elements', c_void_p),
                              ]
@@ -246,10 +245,10 @@ regfi.regfi_log_set_mask.restype = c_bool
 regfi.regfi_get_rootkey.argtypes = [POINTER(REGFI_FILE)]
 regfi.regfi_get_rootkey.restype = POINTER(REGFI_NK)
 
-regfi.regfi_free_record.argtypes = [c_void_p]
+regfi.regfi_free_record.argtypes = [POINTER(REGFI_FILE), c_void_p]
 regfi.regfi_free_record.restype = None
 
-regfi.regfi_reference_record.argtypes = [c_void_p]
+regfi.regfi_reference_record.argtypes = [POINTER(REGFI_FILE), c_void_p]
 regfi.regfi_reference_record.restype = c_bool
 
 regfi.regfi_fetch_num_subkeys.argtypes = [POINTER(REGFI_NK)]
@@ -289,7 +288,7 @@ regfi.regfi_get_parentkey.restype = POINTER(REGFI_NK)
 regfi.regfi_nt2unix_time.argtypes = [POINTER(REGFI_NTTIME)]
 regfi.regfi_nt2unix_time.restype = c_double
 
-regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE), REGFI_ENCODING]
+regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE)]
 regfi.regfi_iterator_new.restype = POINTER(REGFI_ITERATOR)
 
 regfi.regfi_iterator_free.argtypes = [POINTER(REGFI_ITERATOR)]
@@ -304,7 +303,7 @@ regfi.regfi_iterator_up.restype = c_bool
 regfi.regfi_iterator_to_root.argtypes = [POINTER(REGFI_ITERATOR)]
 regfi.regfi_iterator_to_root.restype = c_bool
 
-regfi.regfi_iterator_walk_path.argtypes = [POINTER(REGFI_ITERATOR)]
+regfi.regfi_iterator_walk_path.argtypes = [POINTER(REGFI_ITERATOR), POINTER(c_char_p)]
 regfi.regfi_iterator_walk_path.restype = c_bool
 
 regfi.regfi_iterator_cur_key.argtypes = [POINTER(REGFI_ITERATOR)]

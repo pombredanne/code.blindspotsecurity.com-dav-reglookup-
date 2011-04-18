@@ -820,6 +820,9 @@ typedef struct _regfi_file
   /* Need exclusive access for LRUs, since lookups make changes */
   pthread_mutex_t sk_lock;
 
+  /* Needed to protect various talloc calls */
+  pthread_mutex_t mem_lock;
+
 } REGFI_FILE;
 
 
@@ -970,10 +973,13 @@ const REGFI_NK*       regfi_get_rootkey(REGFI_FILE* file);
 
 /** Frees a record previously returned by one of the API functions.
  *
- * Can be used to free REGFI_NK, REGFI_VK, REGFI_SK, REGFI_DATA, and
- * REGFI_CLASSNAME records.
+ * @param file The file from which the record originated.  
+ *             (This is needed for memory management reasons.)
+ * 
+ * @param record Any of the following record types: REGFI_NK, REGFI_VK, 
+ *        REGFI_SK, REGFI_DATA, and REGFI_CLASSNAME records.
  *
- * @note The "const" in the data type is a bit misleading and is there just for
+ * @note The "const" in the record data type is a bit misleading and is there just for
  * convenience.  Since records returned previously must not be modified by users
  * of the API due to internal caching, these are returned as const, so this
  * function is const to make passing those records back easy.
@@ -981,7 +987,7 @@ const REGFI_NK*       regfi_get_rootkey(REGFI_FILE* file);
  * @ingroup regfiBase
  */
 _EXPORT
-void regfi_free_record(const void* record);
+void regfi_free_record(REGFI_FILE* file, const void* record);
 
 
 /** Increments reference count on record
@@ -991,15 +997,18 @@ void regfi_free_record(const void* record);
  * useful in cases where multiple threads/structures need access to a record, 
  * without requiring them to be in sync with when it is freed.
  *
- * Can be used on REGFI_NK, REGFI_VK, REGFI_SK, REGFI_DATA, and
- * REGFI_CLASSNAME records.
+ * @param file The file from which the record originated.  
+ *             (This is needed for memory management reasons.)
+ * 
+ * @param record Any of the following record types: REGFI_NK, REGFI_VK, 
+ *        REGFI_SK, REGFI_DATA, and REGFI_CLASSNAME records.
  *
  * @return true on success, false otherwise
  *
  * @ingroup regfiBase
  */
 _EXPORT
-bool regfi_reference_record(const void* record);
+bool regfi_reference_record(REGFI_FILE* file, const void* record);
 
 
 /** Retrieves number of subkeys referenced by this key.
