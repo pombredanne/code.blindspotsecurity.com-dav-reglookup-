@@ -4,7 +4,7 @@
 CC=gcc
 OPTS=-std=gnu99 -pedantic -Wall -ggdb
 INC:=-I../trunk/include -I../trunk/src -I/usr/local/include 
-LIB=-L/usr/local/lib -lm -lpthread
+LIB=-L/usr/local/lib -lm -lpthread -ltalloc
 
 REGFI_THREADTEST=regfi-threadtest
 OBJ=$(wildcard ../trunk/lib/*.o)
@@ -13,8 +13,7 @@ FILES=$(REGFI_THREADTEST)
 all: deps $(FILES)
 
 deps:
-	cd ../trunk && $(MAKE) clean
-	cd ../trunk && $(MAKE) lib
+	cd ../trunk && scons libregfi
 
 $(REGFI_THREADTEST): regfi-threadtest.o
 	$(CC) $(CFLAGS) $(OPTS) $(LIB) -o $@ regfi-threadtest.o $(OBJ) $(EXTRA_OBJ)

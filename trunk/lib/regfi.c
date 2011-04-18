@@ -1616,6 +1616,12 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
     goto fail;
   }
 
+  if(pthread_mutex_init(&rb->mem_lock, NULL) != 0)
+  {
+    regfi_log_add(REGFI_LOG_ERROR, "Failed to create mem_lock mutex.");
+    goto fail;
+  }
+
   rb->hbins = range_list_new();
   if(rb->hbins == NULL)
   {
@@ -1656,6 +1662,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
   pthread_mutex_destroy(&rb->cb_lock);
   pthread_rwlock_destroy(&rb->hbins_lock);
   pthread_mutex_destroy(&rb->sk_lock);
+  pthread_mutex_destroy(&rb->mem_lock);
 
   range_list_free(rb->hbins);
   talloc_free(rb);
@@ -1720,19 +1727,30 @@ const REGFI_NK* regfi_get_rootkey(REGFI_FILE* file)
 
 /******************************************************************************
  *****************************************************************************/
-void regfi_free_record(const void* record)
+void regfi_free_record(REGFI_FILE* file, const void* record)
 {
+  if(!regfi_lock(file, &file->mem_lock, "regfi_free_record"))
+    return;
+
   talloc_unlink(NULL, (void*)record);
+
+  regfi_unlock(file, &file->mem_lock, "regfi_free_record");
 }
 
 
 /******************************************************************************
  *****************************************************************************/
-bool regfi_reference_record(const void* record)
+bool regfi_reference_record(REGFI_FILE* file, const void* record)
 {
+  bool ret_val = false;
+  if(!regfi_lock(file, &file->mem_lock, "regfi_reference_record"))
+    return ret_val;
+  
   if(talloc_reference(NULL, record) != NULL)
-    return true;
-  return false;
+    ret_val = true;
+
+  regfi_unlock(file, &file->mem_lock, "regfi_reference_record");
+  return ret_val;
 }
 
 
@@ -1822,7 +1840,7 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
  *****************************************************************************/
 void regfi_iterator_free(REGFI_ITERATOR* i)
 {
-  talloc_free(i);
+  talloc_unlink(NULL, i);
 }
 
 
@@ -1853,7 +1871,7 @@ bool regfi_iterator_down(REGFI_ITERATOR* i)
     talloc_free(pos);
     talloc_unlink(NULL, subkey);
     return false;
-  }
+  }  
   talloc_reparent(NULL, i, subkey);
 
   i->cur_key = subkey;
@@ -1874,7 +1892,12 @@ bool regfi_iterator_up(REGFI_ITERATOR* i)
   if(pos == NULL)
     return false;
 
+  if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_up"))
+    return false;
+  
   talloc_unlink(i, i->cur_key);
+  regfi_unlock(i->f, &i->f->mem_lock, "regfi_iterator_up");
+
   i->cur_key = pos->nk;
   i->cur_subkey = pos->cur_subkey;
   i->cur_value = 0;
@@ -1942,7 +1965,14 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
  *****************************************************************************/
 const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
-  return talloc_reference(NULL, i->cur_key);
+  const REGFI_NK* ret_val = NULL;
+  if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_cur_key"))
+    return ret_val;
+
+  ret_val = talloc_reference(NULL, i->cur_key);
+
+  regfi_unlock(i->f, &i->f->mem_lock, "regfi_iterator_cur_key");  
+  return ret_val;
 }
 
 
@@ -2173,7 +2203,7 @@ bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key,
       *index = i;
     }
 
-    regfi_free_record(cur);
+    regfi_free_record(file, cur);
   }
 
   return found;
@@ -2210,7 +2240,7 @@ bool regfi_find_value(REGFI_FILE* file, const REGFI_NK* key,
       *index = i;
     }
 
-    regfi_free_record(cur);
+    regfi_free_record(file, cur);
   }
 
   return found;
@@ -2256,13 +2286,10 @@ const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key,
 const REGFI_NK* regfi_get_parentkey(REGFI_FILE* file, const REGFI_NK* key)
 {
   if(key != NULL && key->parent_off != REGFI_OFFSET_NONE)
-  {
-    /*    fprintf(stderr, "key->parent_off=%.8X\n", key->parent_off);*/
     return regfi_load_key(file, 
                           key->parent_off+REGFI_REGF_SIZE,
                           file->string_encoding, true);
-  }
-  
+
   return NULL;
 }
 

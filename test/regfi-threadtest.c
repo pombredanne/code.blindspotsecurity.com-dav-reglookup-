@@ -1,7 +1,7 @@
 /*
  * A program to stress test regfi under multithreaded use.
  *
- * Copyright (C) 2005-2010 Timothy D. Morgan
+ * Copyright (C) 2005-2011 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -45,31 +45,33 @@ REGFI_FILE* f;
 
 
 
-
 void traverseValueList(REGFI_ITERATOR* iter)
 {
-  const REGFI_VK_REC* value;
+  const REGFI_VK* value;
+  bool ret;
 
-  value = regfi_iterator_first_value(iter);
-  while(value != NULL)
+  for(ret=regfi_iterator_first_value(iter); 
+      ret; 
+      ret=regfi_iterator_next_value(iter))
   {
+    value = regfi_iterator_cur_value(iter);
     printMsgs(iter->f);
     regfi_free_record(value);
-    value = regfi_iterator_next_value(iter);
   }
 }
 
 
 void traverseKeyTree(REGFI_ITERATOR* iter)
 {
-  const REGFI_NK_REC* root = NULL;
-  const REGFI_NK_REC* cur = NULL;
-  const REGFI_NK_REC* sub = NULL;
-  const REGFI_SK_REC* sk;
+  const REGFI_NK* root = NULL;
+  const REGFI_NK* cur = NULL;
+  const REGFI_NK* sub = NULL;
+  const REGFI_SK* sk;
   bool print_this = true;
 
   root = cur = regfi_iterator_cur_key(iter);
-  sub = regfi_iterator_first_subkey(iter);
+  regfi_iterator_first_subkey(iter);
+  sub = regfi_iterator_cur_subkey(iter);
   printMsgs(iter->f);
 
   if(root == NULL)
@@ -85,6 +87,7 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
       if(cur != root)
       {
 	/* We're done with this sub-tree, going up and hitting other branches. */
+        regfi_free_record(cur);
 	if(!regfi_iterator_up(iter))
 	{
 	  printMsgs(iter->f);
@@ -94,12 +97,14 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
 	cur = regfi_iterator_cur_key(iter);
 	/*	fprintf(stderr, "%s\n", cur->keyname);*/
 	printMsgs(iter->f);
-	sk = regfi_iterator_cur_sk(iter);
-	printMsgs(iter->f);
 	if(cur == NULL)
 	  bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: unexpected NULL for key.\n");
-      
-	sub = regfi_iterator_next_subkey(iter);
+	sk = regfi_fetch_sk(iter->f, cur);
+	printMsgs(iter->f);
+        regfi_free_record(sk);
+
+	regfi_iterator_next_subkey(iter);
+	sub = regfi_iterator_cur_subkey(iter);
       }
       print_this = false;
     }
@@ -107,6 +112,7 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
     { /* We have unexplored sub-keys.  
        * Let's move down and print this first sub-tree out. 
        */
+      regfi_free_record(cur);
       if(!regfi_iterator_down(iter))
       {
 	printMsgs(iter->f);
@@ -117,12 +123,14 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
       printMsgs(iter->f);
       regfi_free_record(sub);
 
-      sub = regfi_iterator_first_subkey(iter);
+      regfi_iterator_first_subkey(iter);
+      sub = regfi_iterator_cur_subkey(iter);
       printMsgs(iter->f);
       print_this = true;
     }
     printMsgs(iter->f);
   } while(!((cur == root) && (sub == NULL)));
+  regfi_free_record(root);
 
   if(print_verbose)
     fprintf(stderr, "INFO: Finished printing key tree.\n");
@@ -137,7 +145,7 @@ void* threadLoop(void* file)
 
   regfi_log_set_mask(REGFI_LOG_INFO|REGFI_LOG_WARN|REGFI_LOG_ERROR);
 
-  iter = regfi_iterator_new((REGFI_FILE*)f, REGFI_ENCODING_ASCII);
+  iter = regfi_iterator_new((REGFI_FILE*)f);
   if(iter == NULL)
   {
     printMsgs(f);
@@ -197,7 +205,7 @@ int main(int argc, char** argv)
     bailOut(REGLOOKUP_EXIT_NOINPUT, "");
   }
 
-  f = regfi_alloc(fd);
+  f = regfi_alloc(fd, REGFI_ENCODING_ASCII);
   if(f == NULL)
   {
     close(fd);
@@ -213,6 +221,7 @@ int main(int argc, char** argv)
   for(i=0; i<num_threads; i++)
     pthread_join(threads[i], NULL);
 
+  free(threads);
   regfi_free(f);
   close(fd);
 

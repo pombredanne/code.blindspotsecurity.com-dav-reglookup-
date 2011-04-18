@@ -290,7 +290,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK* nk)
 	   || !void_stack_push(path_stack, path_element))
 	{
 	  /* XXX: Need to add a warning here */
-	  regfi_free_record(cur_ancestor);
+	  regfi_free_record(f, cur_ancestor);
 	  void_stack_free(path_stack);
 	  return NULL;
 	}
@@ -302,7 +302,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK* nk)
 	path_element->len = strlen((char*)path_element->buf);
 	ret_val_size += path_element->len + 1;
 
-	regfi_free_record(cur_ancestor);
+	regfi_free_record(f, cur_ancestor);
       }
     }
   }
@@ -630,7 +630,7 @@ int extractKeys(REGFI_FILE* f,
   return 0;
 
  fail:
-  regfi_free_record(key);
+  regfi_free_record(f, key);
   return error_code;
 }
 

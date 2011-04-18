@@ -94,10 +94,11 @@
 #
 import sys
 import time
-from pyregfi.structures import *
-
 import ctypes
 import ctypes.util
+import threading
+from pyregfi.structures import *
+
 
 ## An enumeration of registry Value data types
 #
@@ -217,7 +218,6 @@ def SetLogMask(log_types):
     return regfi.regfi_log_set_mask(mask)
 
 
-
 ## Abstract class for most objects returned by the library
 class _StructureWrapper(object):
     _hive = None
@@ -238,7 +238,7 @@ class _StructureWrapper(object):
 
     # Memory management for most regfi structures is taken care of here
     def __del__(self):
-        regfi.regfi_free_record(self._base)
+        regfi.regfi_free_record(self._hive.file, self._base)
 
 
     # Any attribute requests not explicitly defined in subclasses gets passed
@@ -298,7 +298,7 @@ class _GenericList(object):
             raise Exception("Could not create _GenericList; key is NULL."
                             + "Current log:\n" + GetLogMessages())
         
-        if not regfi.regfi_reference_record(key._base):
+        if not regfi.regfi_reference_record(key._hive.file, key._base):
             raise Exception("Could not create _GenericList; memory error."
                             + "Current log:\n" + GetLogMessages())
         self._key_base = key._base
@@ -307,8 +307,8 @@ class _GenericList(object):
 
     
     def __del__(self):
-        regfi.regfi_free_record(self._key_base)
-    
+        regfi.regfi_free_record(self._hive.file, self._key_base)
+
 
     ## Length of list
     def __len__(self):
@@ -485,7 +485,7 @@ class Key(_StructureWrapper):
             else:
                 ret_val = _buffer2bytearray(cn_struct.raw,
                                             cn_struct.size)
-            regfi.regfi_free_record(cn_p)
+            regfi.regfi_free_record(self._hive.file, cn_p)
 
         return ret_val
 
@@ -580,7 +580,7 @@ class Value(_StructureWrapper):
             ret_val = _buffer2bytearray(data_struct.interpreted.none,
                                         data_struct.interpreted_size)
 
-        regfi.regfi_free_record(data_p)
+        regfi.regfi_free_record(self._hive.file, data_p)
         return ret_val
     
 
@@ -598,7 +598,7 @@ class Value(_StructureWrapper):
         data_struct = data_p.contents
         ret_val = _buffer2bytearray(data_struct.raw,
                                     data_struct.size)
-        regfi.regfi_free_record(data_p)
+        regfi.regfi_free_record(self._hive.file, data_p)
         return ret_val
 
 
@@ -746,47 +746,64 @@ class HiveIterator():
     _hive = None
     _iter = None
     _iteration_root = None
+    _lock = None
 
     def __init__(self, hive):
-        self._iter = regfi.regfi_iterator_new(hive.file, REGFI_ENCODING_UTF8)
+        self._iter = regfi.regfi_iterator_new(hive.file)
         if not self._iter:
             raise Exception("Could not create iterator.  Current log:\n"
                             + GetLogMessages())
         self._hive = hive
-        
+        self._lock = threading.RLock()
+    
     def __getattr__(self, name):
-        return getattr(self.file.contents, name)
+        self._lock.acquire()
+        ret_val = getattr(self._iter.contents, name)
+        self._lock.release()
+        return ret_val
 
-    def __del__(self):    
+    def __del__(self):
+        self._lock.acquire()
         regfi.regfi_iterator_free(self._iter)
+        self._lock.release()
 
     def __iter__(self):
+        self._lock.acquire()
         self._iteration_root = None
+        self._lock.release()
         return self
 
     def __next__(self):
+        self._lock.acquire()
         if self._iteration_root == None:
-            self._iteration_root = self.current_key()
+            self._iteration_root = self.current_key().offset
         elif not regfi.regfi_iterator_down(self._iter):
             up_ret = regfi.regfi_iterator_up(self._iter)
             while (up_ret and
                    not regfi.regfi_iterator_next_subkey(self._iter)):
-                if self._iteration_root == self.current_key():
+                if self._iteration_root == self.current_key().offset:
                     self._iteration_root = None
+                    self._lock.release()
                     raise StopIteration('')
                 up_ret = regfi.regfi_iterator_up(self._iter)
 
             if not up_ret:
                 self._iteration_root = None
+                self._lock.release()
                 raise StopIteration('')
             
             # XXX: Use non-generic exception
             if not regfi.regfi_iterator_down(self._iter):
+                self._lock.release()
                 raise Exception('Error traversing iterator downward.'+
                                 ' Current log:\n'+ GetLogMessages())
 
         regfi.regfi_iterator_first_subkey(self._iter)
-        return self.current_key()
+        ret_val = self.current_key()
+        self._lock.release()
+
+        return ret_val
+
 
     # For Python 2.x
     next = __next__
@@ -805,13 +822,19 @@ class HiveIterator():
     #
     # @return True if successful, False otherwise
     def down(self, subkey_name=None):
+        ret_val = None
         if subkey_name == None:
-            return regfi.regfi_iterator_down(self._iter)
+            self._lock.acquire()
+            ret_val = regfi.regfi_iterator_down(self._iter)
         else:
             if name != None:
                 name = name.encode('utf-8')
-            return (regfi.regfi_iterator_find_subkey(self._iter, name) 
-                    and regfi.regfi_iterator_down(self._iter))
+            self._lock.acquire()
+            ret_val = (regfi.regfi_iterator_find_subkey(self._iter, name) 
+                       and regfi.regfi_iterator_down(self._iter))
+        
+        self._lock.release()
+        return ret_val
 
 
     ## Causes the iterator to ascend to the current Key's parent
@@ -823,7 +846,10 @@ class HiveIterator():
     #       down() again, current_subkey() and current_value() will return 
     #       default selections.
     def up(self):
-        return regfi.regfi_iterator_up(self._iter)
+        self._lock.acquire()
+        ret_val = regfi.regfi_iterator_up(self._iter)
+        self._lock.release()
+        return ret_val
 
 
     ## Selects first subkey of current key
@@ -831,9 +857,12 @@ class HiveIterator():
     # @return A Key instance for the first subkey.  
     #         None on error or if the current key has no subkeys.
     def first_subkey(self):
+        ret_val = None
+        self._lock.acquire()
         if regfi.regfi_iterator_first_subkey(self._iter):
-            return self.current_subkey()
-        return None
+            ret_val = self.current_subkey()
+        self._lock.release()
+        return ret_val
 
 
     ## Selects first value of current Key
@@ -841,9 +870,12 @@ class HiveIterator():
     # @return A Value instance for the first value.  
     #         None on error or if the current key has no values.
     def first_value(self):
+        ret_val = None
+        self._lock.acquire()
         if regfi.regfi_iterator_first_value(self._iter):
-            return self.current_value()
-        return None
+            ret_val = self.current_value()
+        self._lock.release()
+        return ret_val
 
 
     ## Selects the next subkey in the current Key's list
@@ -851,9 +883,12 @@ class HiveIterator():
     # @return A Key instance for the next subkey.
     #         None if there are no remaining subkeys or an error occurred.
     def next_subkey(self):
+        ret_val = None
+        self._lock.acquire()
         if regfi.regfi_iterator_next_subkey(self._iter):
-            return self.current_subkey()
-        return None
+            ret_val = self.current_subkey()
+        self._lock.release()
+        return ret_val
 
 
     ## Selects the next value in the current Key's list
@@ -861,9 +896,12 @@ class HiveIterator():
     # @return A Value instance for the next value.
     #         None if there are no remaining values or an error occurred.
     def next_value(self):
+        ret_val = None
+        self._lock.acquire()
         if regfi.regfi_iterator_next_value(self._iter):
-            return self.current_value()
-        return None
+            ret_val = self.current_value()
+        self._lock.release()
+        return ret_val
 
 
     ## Selects the first subkey which has the specified name
@@ -873,9 +911,12 @@ class HiveIterator():
     def find_subkey(self, name):
         if name != None:
             name = name.encode('utf-8')
+        ret_val = None
+        self._lock.acquire()
         if regfi.regfi_iterator_find_subkey(self._iter, name):
-            return self.current_subkey()
-        return None
+            ret_val = self.current_subkey()
+        self._lock.release()
+        return ret_val
 
 
     ## Selects the first value which has the specified name
@@ -885,27 +926,39 @@ class HiveIterator():
     def find_value(self, name):
         if name != None:
             name = name.encode('utf-8')
+        ret_val = None
+        self._lock.acquire()
         if regfi.regfi_iterator_find_value(self._iter, name):
-            return self.current_value()
-        return None
+            ret_val = self.current_value()
+        self._lock.release()
+        return ret_val
 
     ## Retrieves the currently selected subkey
     #
     # @return A Key instance of the current subkey
     def current_subkey(self):
-        return Key(self._hive, regfi.regfi_iterator_cur_subkey(self._iter))
+        self._lock.acquire()
+        ret_val = Key(self._hive, regfi.regfi_iterator_cur_subkey(self._iter))
+        self._lock.release()
+        return ret_val
 
     ## Retrieves the currently selected value
     #
     # @return A Value instance of the current value
     def current_value(self):
-        return Value(self._hive, regfi.regfi_iterator_cur_value(self._iter))
+        self._lock.acquire()
+        ret_val = Value(self._hive, regfi.regfi_iterator_cur_value(self._iter))
+        self._lock.release()
+        return ret_val
 
     ## Retrieves the current key
     #
     # @return A Key instance of the current position of the iterator
     def current_key(self):
-        return Key(self._hive, regfi.regfi_iterator_cur_key(self._iter))
+        self._lock.acquire()
+        ret_val = Key(self._hive, regfi.regfi_iterator_cur_key(self._iter))
+        self._lock.release()
+        return ret_val
 
 
     ## Traverse downward multiple levels
@@ -918,8 +971,11 @@ class HiveIterator():
     def descend(self, path):
         cpath = _strlist2charss(path)
 
-        # XXX: Use non-generic exception
-        if not regfi.regfi_iterator_walk_path(self._iter, cpath):
+        self._lock.acquire()
+        result = regfi.regfi_iterator_walk_path(self._iter, cpath)
+        self._lock.release()
+        if not result:
+            # XXX: Use non-generic exception
             raise Exception('Could not locate path.\n'+GetLogMessages())
 
 

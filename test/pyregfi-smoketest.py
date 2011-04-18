@@ -4,6 +4,7 @@ import sys
 import gc
 import io
 import time
+import threading
 import pyregfi
 
 
@@ -188,6 +189,34 @@ def iterCallbackIO(hive, fh):
     for k in new_hive:
         pass
 
+
+def threadIterMain(iter):
+    x = 0
+    try:
+        for k in iter:
+            #x += len(k.name) + len(k.subkeys)
+            pass
+    except Exception as e:
+        print("%s dying young: %s" % (threading.current_thread().name, repr(e)))
+        # Exceptions are thrown on iteration because python state gets out of 
+        # whack.  That's fine, because we're really just interested in finding
+        # segfaults.  People should not use iterators without locks, but it 
+        # should at least not segfault on them.
+        pass
+    print("%s finished" % threading.current_thread().name)
+
+def iterMultithread(hive, fh):
+    num_threads = 10
+    iter = pyregfi.HiveIterator(hive)
+    threads = []
+    for t in range(0,num_threads):
+        threads.append(threading.Thread(target=threadIterMain, args=(iter,)))
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    
+
 tests = {
     "iterTallyNames":iterTallyNames,
     "iterParentWalk":iterParentWalk,
@@ -196,6 +225,7 @@ tests = {
     "iterFetchRelated":iterFetchRelated,
     "iterIterWalk":iterIterWalk,
     "iterCallbackIO":iterCallbackIO,
+    "iterMultithread":iterMultithread,
     }
 
 def usage():
