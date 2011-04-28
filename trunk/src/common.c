@@ -2,7 +2,7 @@
  * This file stores code common to the command line tools.
  * XXX: This should be converted to a proper library.
  *
- * Copyright (C) 2005-2008 Timothy D. Morgan
+ * Copyright (C) 2005-2008,2011 Timothy D. Morgan
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,8 +27,6 @@ iconv_t conv_desc;
 const char* key_special_chars = ",\"\\/";
 const char* subfield_special_chars = ",\"\\|";
 const char* common_special_chars = ",\"\\";
-
-#define REGLOOKUP_VERSION "0.1?.0"
 
 #define REGLOOKUP_EXIT_OK       0
 #define REGLOOKUP_EXIT_OSERR   71

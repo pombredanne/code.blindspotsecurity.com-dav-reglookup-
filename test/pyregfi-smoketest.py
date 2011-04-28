@@ -9,7 +9,7 @@ import pyregfi
 
 
 
-pyregfi.SetLogMask((pyregfi.LOG_TYPES.INFO, pyregfi.LOG_TYPES.WARN, pyregfi.LOG_TYPES.ERROR))
+pyregfi.setLogMask((pyregfi.LOG_TYPES.INFO, pyregfi.LOG_TYPES.WARN, pyregfi.LOG_TYPES.ERROR))
 
 # Uses the HiveIterator to walk all keys
 # Gathers various (meaningless) statistics to exercise simple attribute access
@@ -261,7 +261,7 @@ for hname,fh in files:
         print("##BEGIN %s:" % tstr)
         t(hive, fh)
         print("##END %s; runtime=%f; messages:" % (tstr, time.time() - teststart))
-        print(pyregfi.GetLogMessages())
+        print(pyregfi.getLogMessages())
         print
         sys.stdout.flush()
     fh.close()

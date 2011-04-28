@@ -188,7 +188,7 @@ def _charss2strlist(chars_pointer):
 # after each major operation by callers to determine if any errors or warnings
 # should be reported to the user.  Failure to retrieve these could result in 
 # excessive memory consumption.
-def GetLogMessages():
+def getLogMessages():
     msgs = regfi.regfi_log_get_str()
     if not msgs:
         return ''
@@ -205,17 +205,28 @@ def GetLogMessages():
 # 
 # Example:
 # @code
-# SetLogMask((LOG_TYPES.ERROR, LOG_TYPES.WARN, LOG_TYPES.INFO))
+# setLogMask((LOG_TYPES.ERROR, LOG_TYPES.WARN, LOG_TYPES.INFO))
 # @endcode
 #
 # The message mask is a global (all hives, iterators), thread-specific value.
 # For more information, see @ref regfi_log_set_mask.
 #
-def SetLogMask(log_types):
+def setLogMask(log_types):
     mask = 0
     for m in log_types:
         mask |= m
     return regfi.regfi_log_set_mask(mask)
+
+
+## Opens a file as a registry hive
+#
+# @param path The file path of a hive, as one would provide to the 
+#             open() built-in
+#
+# @return A new Hive instance
+def openHive(path):
+    fh = open(path, 'rb')
+    return Hive(fh)
 
 
 ## Abstract class for most objects returned by the library
@@ -227,11 +238,11 @@ class _StructureWrapper(object):
         if not hive:
             raise Exception("Could not create _StructureWrapper,"
                             + " hive is NULL.  Current log:\n"
-                            + GetLogMessages())
+                            + getLogMessages())
         if not base:
             raise Exception("Could not create _StructureWrapper,"
                             + " base is NULL.  Current log:\n"
-                            + GetLogMessages())
+                            + getLogMessages())
         self._hive = hive
         self._base = base
 
@@ -296,11 +307,11 @@ class _GenericList(object):
     def __init__(self, key):
         if not key:
             raise Exception("Could not create _GenericList; key is NULL."
-                            + "Current log:\n" + GetLogMessages())
+                            + "Current log:\n" + getLogMessages())
         
         if not regfi.regfi_reference_record(key._hive.file, key._base):
             raise Exception("Could not create _GenericList; memory error."
-                            + "Current log:\n" + GetLogMessages())
+                            + "Current log:\n" + getLogMessages())
         self._key_base = key._base
         self._length = self._fetch_num(self._key_base)
         self._hive = key._hive
@@ -649,17 +660,22 @@ class Hive():
     ## Minor version
     minor_version = 5
 
-    # XXX: Possibly add a second or factory function which opens a 
-    #      hive file for you
-
     ## Constructor
+    #
+    # Initialize a new Hive based on a Python file object.  To open a file by 
+    # path, see @ref openHive.
     #
     # @param fh A Python file object.  The constructor first looks for a valid
     #           fileno attribute on this object and uses it if possible.  
     #           Otherwise, the seek and read methods are used for file
     #           access.
     #
-    # @note Supplied file must be seekable
+    # @note Supplied file must be seekable.  Do not perform any operation on
+    #       the provided file object while a Hive is using it.  Do not 
+    #       construct multiple Hive instances from the same file object.
+    #       If a file must be accessed by separate code and pyregfi 
+    #       simultaneously, use a separate file descriptor.  Hives are 
+    #       thread-safe, so multiple threads may use a single Hive object.
     def __init__(self, fh):
         # The fileno method may not exist, or it may throw an exception
         # when called if the file isn't backed with a descriptor.
@@ -677,7 +693,7 @@ class Hive():
             if not self.file:
                 # XXX: switch to non-generic exception
                 raise Exception("Could not open registry file.  Current log:\n"
-                                + GetLogMessages())
+                                + getLogMessages())
         else:
             fh.seek(0)
             self.raw_file = structures.REGFI_RAW_FILE()
@@ -688,7 +704,7 @@ class Hive():
             if not self.file:
                 # XXX: switch to non-generic exception
                 raise Exception("Could not open registry file.  Current log:\n"
-                                + GetLogMessages())
+                                + getLogMessages())
 
 
     def __getattr__(self, name):
@@ -752,7 +768,7 @@ class HiveIterator():
         self._iter = regfi.regfi_iterator_new(hive.file)
         if not self._iter:
             raise Exception("Could not create iterator.  Current log:\n"
-                            + GetLogMessages())
+                            + getLogMessages())
         self._hive = hive
         self._lock = threading.RLock()
     
@@ -796,7 +812,7 @@ class HiveIterator():
             if not regfi.regfi_iterator_down(self._iter):
                 self._lock.release()
                 raise Exception('Error traversing iterator downward.'+
-                                ' Current log:\n'+ GetLogMessages())
+                                ' Current log:\n'+ getLogMessages())
 
         regfi.regfi_iterator_first_subkey(self._iter)
         ret_val = self.current_key()
@@ -976,7 +992,7 @@ class HiveIterator():
         self._lock.release()
         if not result:
             # XXX: Use non-generic exception
-            raise Exception('Could not locate path.\n'+GetLogMessages())
+            raise Exception('Could not locate path.\n'+getLogMessages())
 
 
 # Freeing symbols defined for the sake of documentation
