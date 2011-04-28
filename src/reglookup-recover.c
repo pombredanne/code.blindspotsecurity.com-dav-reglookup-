@@ -335,7 +335,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK* nk)
 static void usage(void)
 {
   fprintf(stderr, "Usage: reglookup-recover [options] <REGISTRY_FILE>\n");
-  fprintf(stderr, "Version: %s\n", REGLOOKUP_VERSION);
+  fprintf(stderr, "Version: %s\n", REGFI_VERSION);
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");

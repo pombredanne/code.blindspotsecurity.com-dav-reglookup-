@@ -1,7 +1,9 @@
 import sys
 import os
+from regfi_version import REGFI_VERSION
 
 cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
+cflags += ' -DREGFI_VERSION=\'"%s"\'' % REGFI_VERSION
 cflags += ' -ggdb'
 
 lib_src = ['lib/regfi.c',

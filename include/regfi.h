@@ -79,6 +79,11 @@
 #include <range_list.h>
 #include <lru_cache.h>
 
+/* Library version can be overridden at build time */
+#ifndef REGFI_VERSION
+#define REGFI_VERSION "trunk"
+#endif
+
 /* GCC-specific macro for library exports */
 #ifdef _EXPORT
 #undef _EXPORT
