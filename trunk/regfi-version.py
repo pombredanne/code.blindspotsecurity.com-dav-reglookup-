@@ -1,3 +1,3 @@
 
-SVN_REV = "$Rev: $"
+SVN_REV = "$Rev$"
 REGFI_VERSION = ""
