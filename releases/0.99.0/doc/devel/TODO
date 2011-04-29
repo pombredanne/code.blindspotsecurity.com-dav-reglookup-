@@ -1,0 +1,66 @@
+$Id$
+
+If you are interested in contributing to this project, here's a few
+things you could look into:
+
+ - Currently there is no way on the command line to search for exotic 
+   paths/types.  For instance, if reglookup encounters an unknown VK
+   type, it just prints it out in Hex.  However, if you wanted to search
+   specifically for that type, there is no way to do it.  Similarly, it
+   isn't possible to specify certain binary or weird characters in
+   paths.  Reglookup should take the user path and unquote each path
+   component using the \xQQ syntax prior to searching.
+
+ - It might be nice to have a way to filter results by security 
+   descriptor information.  Maybe by MTIME as well.
+
+ - Testing, testing, and more testing.  reglookup needs to be more
+   heavily tested on all recent Windows platforms.  A regression test
+   suite would be nice too.  Some thoughts on this include a script
+   which randomly fuzzes an existing registry file, and tries to detect
+   crashes of reglookup when parsing it.  Another test script might
+   randomly truncate an existing registry file, which will help improve
+   reglookup's parsing on fragmentary files.
+
+ - Unicode support still needs improvement.  While parsing strings seems
+   to be decent, UTF-8 output would be nice.
+
+ - Develop and solidify regfi API.  Regfi should be better documented and 
+   eventually needs a set of higher-language wrappers, starting with Python
+   and possibly moving on to Perl as well.
+
+ - Documentation.  The security descriptor output format needs to be
+   documented.  Also, function contracts should be added to the
+   lower-level functions of regfi.c.
+
+ - Consider switching from libiconv to Joachim Metz's libuna for
+   increased portability and easier builds.
+
+ - Grep through the source for 'XXX', and you'll find more.
+
+
+
+1.0 RELEASE
+===========
+
+Add fields/methods for accessing security descriptors in pyregfi
+
+Key caching
+
+Add function to obtain path list from iterator
+
+convert MTIME structure to uint64_t if possible
+
+investigate why file descriptors can't be directly used in Windows
+
+Fill in and update remaining regfi/pyregfi API documentation
+
+Possible debian package build rules
+
+Possibly replace reglookup-timeline with something cross-platform
+
+Testing
+  Full diffs
+  regfi and pyregfi threading
+  valgrind in multiple scenarios for reglookup, reglookup-recover
+
