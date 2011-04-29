@@ -61,7 +61,7 @@ cp %s/src/*.exe .release/%s
 cp %s/pyregfi-distutils.py .release/%s/setup.py
 cp %s/python/pyregfi/*.py .release/%s/python/pyregfi
 
-cp .export/win32/libiconv/bin/*.dll .export/win32/libpthreads/bin/*.dll .export/win32/libtalloc/bin/*.dll trunk/lib/*.dll .release/%s
+cp .export/win32/libiconv/bin/*.dll .export/win32/libpthreads/bin/*.dll .export/win32/libtalloc/bin/*.dll %s/lib/*.dll .release/%s
 cd .release && zip -r %s.zip %s
 mv .release/%s.zip . && rm -rf .release
 '''+cleanup_cmds
@@ -84,7 +84,7 @@ def generate_cmds(source, target, env, for_signature):
             env['AR']='i586-mingw32msvc-ar'
             env['RANLIB']='i586-mingw32msvc-ranlib'
             
-            env['CFLAGS']=cflags
+            env['CFLAGS']="""%s -DREGFI_VERSION='"%s"'""" % (cflags, version)
             env['CPPPATH']=[input_prefix+'include', 
                             libiconv_path+'include',
                             libpthreads_path+'include',
@@ -135,7 +135,7 @@ def generate_cmds(source, target, env, for_signature):
                                             [input_prefix+'src/reglookup-recover.c']+extra_obj)
 
             ret_val += win32_cmds % (t_base,input_prefix,t_base,input_prefix,
-                                     t_base,input_prefix,t_base,
+                                     t_base,input_prefix,t_base,input_prefix,
                                      t_base,t_base,t_base,t_base)
 
     return ret_val
