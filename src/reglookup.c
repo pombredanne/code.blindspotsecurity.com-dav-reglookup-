@@ -550,7 +550,7 @@ static void usage(void)
   fprintf(stderr, "Usage: reglookup [-v] [-s]"
 	  " [-p <PATH_FILTER>] [-t <TYPE_FILTER>]"
 	  " <REGISTRY_FILE>\n");
-  fprintf(stderr, "Version: %s\n", REGFI_VERSION);
+  fprintf(stderr, "Version: %s\n", regfi_version());
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t-v\t sets verbose mode.\n");
   fprintf(stderr, "\t-h\t enables header row. (default)\n");

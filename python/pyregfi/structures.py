@@ -227,6 +227,9 @@ REGFI_RAW_FILE._fields_ = [('seek', seek_cb_type),
 
 
 # Define function prototypes
+regfi.regfi_version.argtypes = []
+regfi.regfi_version.restype = c_char_p
+
 regfi.regfi_alloc.argtypes = [c_int, REGFI_ENCODING]
 regfi.regfi_alloc.restype = POINTER(REGFI_FILE)
 
