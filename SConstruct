@@ -8,10 +8,9 @@ libpthreads_path='.export/win32/libpthreads/'
 libpthread_name='pthreadGC2'
 libtalloc_path='.export/win32/libtalloc/'
 
-source_targets=('src-trunk', 'src-0.99.0',)
-win32_targets=('win32-trunk', 'win32-0.99.0',)
-doc_targets=('doc-trunk', 'doc-0.99.0',)
-all_targets = source_targets+win32_targets+doc_targets
+source_targets=('src-trunk', 'src-0.99.0')
+win32_targets=('win32-trunk', 'win32-0.99.0')
+all_targets = source_targets+win32_targets
 
 
 def parse_target(target):
@@ -29,20 +28,19 @@ def version2input(version):
 
 export_cmds='''
 rm -rf .export
-svn export --depth files svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup .export
-svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/doc .export/doc
-svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/win32 .export/win32
-svn export svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup/%s .export/%s
+svn export --depth files svn+ssh://%(user)s@sentinelchicken.org/home/projects/subversion/reglookup .export
+svn export svn+ssh://%(user)s@sentinelchicken.org/home/projects/subversion/reglookup/win32 .export/win32
+svn export svn+ssh://%(user)s@sentinelchicken.org/home/projects/subversion/reglookup/%(path)s .export/%(path)s
 '''
 
 version_cmds='''
-echo 'REGFI_VERSION="%s"' > .export/%s/regfi_version.py
+echo 'REGFI_VERSION="%(version)s"' > .export/%(path)s/regfi_version.py
 '''
 
 svnversion_cmds='''
-svn info svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup\
+svn info svn+ssh://%(user)s@sentinelchicken.org/home/projects/subversion/reglookup\
   | grep "Last Changed Rev:" | cut -d' ' -f 4 \
-  | sed 's/^/REGFI_VERSION="svn-/' | sed 's/$/"/' > .export/%s/regfi_version.py
+  | sed 's/^/REGFI_VERSION="svn-/' | sed 's/$/"/' > .export/%(path)s/regfi_version.py
 '''
 
 cleanup_cmds='''
@@ -68,13 +66,6 @@ cd .release && zip -r %s.zip %s
 mv .release/%s.zip . && rm -rf .release
 '''+cleanup_cmds
 
-doc_cmds='''
-cd .export && doxygen Doxyfile.regfi
-cd .export && doxygen Doxyfile.pyregfi
-mv .export/doc .export/%s
-cd .export && tar cf %s.tar %s && gzip -9 %s.tar
-mv .export/%s.tar.gz .
-'''+cleanup_cmds
 
 def generate_cmds(source, target, env, for_signature):
     ret_val = ''
@@ -147,9 +138,6 @@ def generate_cmds(source, target, env, for_signature):
                                      t_base,input_prefix,t_base,
                                      t_base,t_base,t_base,t_base)
 
-        elif ttype == 'doc':
-            ret_val += doc_cmds % (t_base,t_base,t_base,t_base,t_base)
-        
     return ret_val
 
 
@@ -174,12 +162,14 @@ for target in COMMAND_LINE_TARGETS:
     AlwaysBuild(target)
     ttype,version = parse_target(target)
 
-    i = version2input(version)
-    env.Execute(export_cmds % (i, i))
+    params = {'user':os.environ['USER'], 
+              'path':version2input(version), 
+              'version':version}
+    env.Execute(export_cmds % params)
     if version == 'trunk':
-        env.Execute(svnversion_cmds % i)
+        print env.Execute(svnversion_cmds % params)
     else:
-        env.Execute(version_cmds % (version, i))
-    env.Release(target, Dir('.export/'+i))
+        env.Execute(version_cmds % params)
+    env.Release(target, Dir('.export/'+params['path']))
 
 Default(None)

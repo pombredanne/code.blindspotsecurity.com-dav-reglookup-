@@ -66,6 +66,14 @@ if python_path != '':
    env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'], 
                "python3 pyregfi-distutils.py install | tee pyregfi3-install.log")
 
+# API documentation
+regfi_doc = env.Command('doc/devel/regfi/index.html', 
+                        Glob('lib/*.c')+Glob('include/*.h')+['doc/devel/Doxyfile.regfi'],
+                        'doxygen doc/devel/Doxyfile.regfi')
+pyregfi_doc = env.Command('doc/devel/pyregfi/index.html', 
+                          Glob('python/pyregfi/*.py')+['doc/devel/Doxyfile.pyregfi', regfi_doc],
+                          'doxygen doc/devel/Doxyfile.pyregfi')
+
 
 # User Friendly Targets
 env.Alias('libregfi', libregfi)
@@ -73,6 +81,7 @@ env.Alias('reglookup', reglookup)
 env.Alias('reglookup-recover', reglookup_recover)
 env.Alias('bin', [reglookup_recover, reglookup])
 env.Alias('doc', [man_reglookup,man_reglookup_recover,man_reglookup_timeline])
+env.Alias('doc-devel', [regfi_doc, pyregfi_doc])
 env.Alias('install', install_items)
 
 Default('bin', libregfi)

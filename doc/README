@@ -1,5 +1,0 @@
-This directory contains technical information on the registry format,
-RegLookup design goals and programmer's API usage information. For
-information on how to use the RegLookup tools, refer to the doc
-directory and man pages included in the main release distribution or
-Subversion trunk directory.
