@@ -181,6 +181,13 @@ def _charss2strlist(chars_pointer):
     return ret_val
 
 
+## Returns the (py)regfi library version
+#
+# @return A string indicating the version
+def getVersion():
+    return regfi.regfi_version()
+
+
 ## Retrieves messages produced by regfi during parsing and interpretation
 #
 # The regfi C library may generate log messages stored in a special thread-safe

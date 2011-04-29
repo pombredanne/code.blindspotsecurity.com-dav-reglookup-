@@ -33,6 +33,11 @@
 
 #include "regfi.h"
 
+/* Library version can be overridden at build time */
+#ifndef REGFI_VERSION
+#define REGFI_VERSION "trunk"
+#endif
+
 
 /* Registry types mapping */
 const unsigned int regfi_num_reg_types = 12;
@@ -47,6 +52,13 @@ const char* regfi_encoding_names[] =
 /* Ensures regfi_init runs only once */
 static pthread_once_t regfi_init_once = PTHREAD_ONCE_INIT;
 
+
+/******************************************************************************
+ ******************************************************************************/
+const char* regfi_version()
+{
+  return REGFI_VERSION;
+}
 
 
 /******************************************************************************

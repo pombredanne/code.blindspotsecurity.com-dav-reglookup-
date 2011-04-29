@@ -79,11 +79,6 @@
 #include <range_list.h>
 #include <lru_cache.h>
 
-/* Library version can be overridden at build time */
-#ifndef REGFI_VERSION
-#define REGFI_VERSION "trunk"
-#endif
-
 /* GCC-specific macro for library exports */
 #ifdef _EXPORT
 #undef _EXPORT
@@ -882,6 +877,17 @@ typedef struct _regfi_buffer
  * don't fit particularly well in any of the other layers.
  */
 /******************************************************************************/
+
+
+/** Returns the current regfi library version
+ *
+ * @return A string indicating the version.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT
+const char* regfi_version();
+
 
 /** Parses file headers of an already open registry hive file and 
  *  allocates related structures for further parsing.
