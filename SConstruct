@@ -55,15 +55,19 @@ mv .export/%s.tar.gz .
 '''+cleanup_cmds
 
 win32_cmds='''
-mkdir -p .release/%s/python/pyregfi
-cp %s/src/*.exe .release/%s
+mkdir -p .release/%(base)s/python/pyregfi
+cp %(path)s/src/*.exe .release/%(base)s
+cp %(path)s/LICENSE .release/%(base)s
 
-cp %s/pyregfi-distutils.py .release/%s/setup.py
-cp %s/python/pyregfi/*.py .release/%s/python/pyregfi
+cp %(path)s/pyregfi-distutils.py .release/%(base)s/setup.py
+cp %(path)s/python/pyregfi/*.py .release/%(base)s/python/pyregfi
 
-cp .export/win32/libiconv/bin/*.dll .export/win32/libpthreads/bin/*.dll .export/win32/libtalloc/bin/*.dll %s/lib/*.dll .release/%s
-cd .release && zip -r %s.zip %s
-mv .release/%s.zip . && rm -rf .release
+cp -r -L .export/win32/doc .release/%(base)s
+cp .export/win32/libiconv/bin/*.dll .export/win32/libpthreads/bin/*.dll\
+     .export/win32/libtalloc/bin/*.dll %(path)s/lib/*.dll .release/%(base)s
+
+cd .release && zip -r %(base)s.zip %(base)s
+mv .release/%(base)s.zip . && rm -rf .release
 '''+cleanup_cmds
 
 
@@ -134,9 +138,8 @@ def generate_cmds(source, target, env, for_signature):
             reglookup_recover = env.Program(input_prefix+'src/reglookup-recover.exe',
                                             [input_prefix+'src/reglookup-recover.c']+extra_obj)
 
-            ret_val += win32_cmds % (t_base,input_prefix,t_base,input_prefix,
-                                     t_base,input_prefix,t_base,input_prefix,
-                                     t_base,t_base,t_base,t_base)
+            params = {'path':input_prefix, 'base':t_base}
+            ret_val += win32_cmds % params
 
     return ret_val
 
