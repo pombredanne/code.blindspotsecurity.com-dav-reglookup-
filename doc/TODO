@@ -57,6 +57,8 @@ Fill in and update remaining regfi/pyregfi API documentation
 
 Possible debian package build rules
 
+Possibly replace reglookup-timeline with something cross-platform
+
 Testing
   Full diffs
   regfi and pyregfi threading
