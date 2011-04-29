@@ -1,5 +1,6 @@
 import sys
 import os
+sys.dont_write_bytecode = True
 from regfi_version import REGFI_VERSION
 
 cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
