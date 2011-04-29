@@ -14,7 +14,6 @@ doc_targets=('doc-trunk',)
 all_targets = source_targets+win32_targets+doc_targets
 
 
-
 def parse_target(target):
     chunks = target.split('-')
     if len(chunks) != 2:
@@ -40,13 +39,21 @@ version_cmds='''
 echo 'REGFI_VERSION="%s"' > .export/%s/regfi_version.py
 '''
 
+svnversion_cmds='''
+svn info svn+ssh://sentinelchicken.org/home/projects/subversion/reglookup\
+  | grep "Last Changed Rev:" | cut -d' ' -f 4 \
+  | sed 's/^/REGFI_VERSION="svn-/' | sed 's/$/"/' > .export/%s/regfi_version.py
+'''
+
 cleanup_cmds='''
 rm -rf .export
 '''
 
 source_cmds='''
-cd %s && scons doc
-mv %s %s && tar cf %s.tar %s && gzip -9 %s.tar;
+mv %s .export/%s
+cd .export/%s && scons doc
+cd .export && tar cf %s.tar %s && gzip -9 %s.tar
+mv .export/%s.tar.gz .
 '''+cleanup_cmds
 
 win32_cmds='''
@@ -78,7 +85,8 @@ def generate_cmds(source, target, env, for_signature):
         t_base = 'reglookup-%s-%s' % (ttype, version)
 
         if ttype == 'src':
-            ret_val += source_cmds % (input_prefix, input_prefix, t_base, t_base, t_base, t_base)
+            ret_val += source_cmds % (input_prefix, t_base, t_base, t_base,
+                                      t_base, t_base, t_base)
         elif ttype == 'win32':
             env['platform']='cygwin'
             env['CC']='i586-mingw32msvc-cc'
@@ -168,7 +176,9 @@ for target in COMMAND_LINE_TARGETS:
 
     i = version2input(version)
     env.Execute(export_cmds % (i, i))
-    if version != 'trunk':
+    if version == 'trunk':
+        env.Execute(svnversion_cmds % i)
+    else:
         env.Execute(version_cmds % (version, i))
     env.Release(target, Dir('.export/'+i))
 
