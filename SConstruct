@@ -8,9 +8,9 @@ libpthreads_path='.export/win32/libpthreads/'
 libpthread_name='pthreadGC2'
 libtalloc_path='.export/win32/libtalloc/'
 
-source_targets=('src-trunk',)
-win32_targets=('win32-trunk',)
-doc_targets=('doc-trunk',)
+source_targets=('src-trunk', 'src-0.99.0',)
+win32_targets=('win32-trunk', 'win32-0.99.0',)
+doc_targets=('doc-trunk', 'doc-0.99.0',)
 all_targets = source_targets+win32_targets+doc_targets
 
 
