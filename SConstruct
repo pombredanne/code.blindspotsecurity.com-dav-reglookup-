@@ -44,6 +44,9 @@ man_reglookup_timeline = env.ManPage('doc/reglookup-timeline.1.docbook')
 
 # Installation
 prefix='/usr/local/'
+if 'PREFIX' in os.environ:
+   prefix = os.environ['PREFIX']+'/'
+
 install_items = [prefix+'bin',
                  prefix+'lib', 
                  prefix+'include/regfi',

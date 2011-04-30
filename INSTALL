@@ -4,11 +4,13 @@ RegLookup Installation
 Prerequisites
 -------------
 
-This package doesn't require much for installation.  Just what typically
-comes with any free operating system.  Be sure you have:
+RegLookup and its associated libraries have the following build dependencies:
 
- - GNU Make
+ - SCons (package "scons" in most popular distributions or from http://www.scons.org/)
  - GCC
+ - talloc 2.x (under Debian, "libtalloc2" and "libtalloc-dev")
+ - Python 2 (2.6+) or Python 3  (Python is required for SCons anyway)
+ - Doxygen (optional, only needed to build developer documentation)
 
 Note that iconv support is required, as specified in IEEE Std 1003.1 
 (POSIX.1-2001).  Some platforms still do not contain support for this 
@@ -19,36 +21,15 @@ natively, in which case you may need to install libiconv from:
 Survival Commands
 -----------------
 
-make
+scons
 # and as root
-make install
-
-If GNU Make isn't your default, you may need to run `gmake' instead.
+scons install
 
 
 Advanced Installation
 ---------------------
-To install in a custom directory, simply change one or more of the
-following make variables to suit your needs:
+By default, most RegLookup files are installed in the appropriate
+directories under /usr/local.  In order to override this behavior, set
+the PREFIX environment variable to the desired path.  For example:
 
- PREFIX      Top level install directory.  Used as base for rest unless
-             they too are overridden. (This defaults to /usr/local)
-
- BIN_PREFIX  Location for executable programs to be installed.
-
- DOC_PREFIX  Location for documentation.
-
- MAN_PREFIX  A path in the MANPATH.
-
-
-Use the following syntax (with GNU Make) to override a variable:
-
-# as root
-make VAR=value install
-
-
-For more information, see the Makefiles.
-
-Primitive build features have been added to support cross-compiling to
-Windows binaries using MinGW.  For more information on this, see: 
-  doc/mingw-build.txt
+$ PREFIX=/home/myuser/reglookup scons install
