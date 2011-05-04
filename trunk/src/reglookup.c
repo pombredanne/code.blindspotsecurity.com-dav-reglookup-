@@ -51,8 +51,14 @@ REGFI_FILE* f;
 #include "common.c"
 
 
+static bool keysEqual(const REGFI_NK* x, const REGFI_NK* y)
+{
+  return (x != NULL && y != NULL && x->offset == y->offset);
+}
+
 void printValue(REGFI_ITERATOR* iter, const REGFI_VK* vk, char* prefix)
 {
+  const REGFI_NK* cur_key;
   const REGFI_DATA* data;
   char* quoted_value = NULL;
   char* quoted_name = NULL;
@@ -99,9 +105,11 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK* vk, char* prefix)
 
   if(print_value_mtime)
   {
-    *tmp_time = regfi_nt2unix_time(&iter->cur_key->mtime);
+    cur_key = regfi_iterator_cur_key(iter);
+    *tmp_time = regfi_nt2unix_time(&cur_key->mtime);
     tmp_time_s = gmtime(tmp_time);
     strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
+    regfi_free_record(iter->f, cur_key);
   }
   else
     mtime[0] = '\0';
@@ -200,11 +208,11 @@ void freePath(char** path)
 }
 
 
-/* Returns a quoted path from an iterator's stack */
+/* Returns a quoted path of the current iterator's position */
 char* iter2Path(REGFI_ITERATOR* i)
 {
-  const REGFI_ITER_POSITION* cur;
-  const REGFI_NK* tmp_key;
+  const REGFI_NK** path;
+  uint32_t k;
   uint32_t buf_left = 127;
   uint32_t buf_len = buf_left+1;
   uint32_t name_len = 0;
@@ -212,62 +220,56 @@ char* iter2Path(REGFI_ITERATOR* i)
   char* buf;
   char* new_buf;
   char* name;
-  void_stack_iterator* iter;
   
   buf = (char*)malloc((buf_len)*sizeof(char));
   if (buf == NULL)
     return NULL;
   buf[0] = '\0';
 
-  iter = void_stack_iterator_new(i->key_positions);
-  if (iter == NULL)
+  path = regfi_iterator_cur_path(i);
+  if(path == NULL)
   {
     free(buf);
     return NULL;
   }
 
-  /* skip root element */
-  if(void_stack_size(i->key_positions) < 1)
+  for(k=0; path[k] != NULL; k++)
   {
-    buf[0] = '/';
-    buf[1] = '\0';
-    return buf;
-  }
-  cur = void_stack_iterator_next(iter);
-
-  do
-  {
-    cur = void_stack_iterator_next(iter);
-    if (cur == NULL)
-      tmp_key = i->cur_key;
-    else
-      tmp_key = cur->nk;
-
-    name = get_quoted_keyname(tmp_key);
-
-    buf[buf_len-buf_left-1] = '/';
-    buf_left -= 1;
-    name_len = strlen(name);
-    if(name_len+1 > buf_left)
+    /* skip root element's name */
+    if(k == 0)
     {
-      grow_amt = (uint32_t)(buf_len/2);
-      buf_len += name_len+1+grow_amt-buf_left;
-      if((new_buf = realloc(buf, buf_len)) == NULL)
-      {
-	free(name);
-	free(buf);
-	free(iter);
-	return NULL;
-      }
-      buf = new_buf;
-      buf_left = grow_amt + name_len + 1;
+      buf[0] = '/';
+      buf[1] = '\0';
     }
-    strncpy(buf+(buf_len-buf_left-1), name, name_len);
-    buf_left -= name_len;
-    buf[buf_len-buf_left-1] = '\0';
-    free(name);
-  } while(cur != NULL);
+    else
+    {
+      name = get_quoted_keyname(path[k]);
 
+      buf[buf_len-buf_left-1] = '/';
+      buf_left -= 1;
+      name_len = strlen(name);
+      if(name_len+1 > buf_left)
+      {
+        grow_amt = (uint32_t)(buf_len/2);
+        buf_len += name_len+1+grow_amt-buf_left;
+        if((new_buf = realloc(buf, buf_len)) == NULL)
+        {
+          regfi_free_record(i->f, path);
+          free(name);
+          free(buf);
+          return NULL;
+        }
+        buf = new_buf;
+        buf_left = grow_amt + name_len + 1;
+      }
+      strncpy(buf+(buf_len-buf_left-1), name, name_len);
+      buf_left -= name_len;
+      buf[buf_len-buf_left-1] = '\0';
+      free(name);
+    }
+  }
+
+  regfi_free_record(i->f, path);
   return buf;
 }
 
@@ -377,7 +379,9 @@ void printKeyTree(REGFI_ITERATOR* iter)
   int key_type = regfi_type_str2val("KEY");
   bool print_this = true;
 
-  root = cur = regfi_iterator_cur_key(iter);
+  root = regfi_iterator_cur_key(iter);
+  regfi_reference_record(iter->f, root);
+  cur = root;
   regfi_iterator_first_subkey(iter);
   sub = regfi_iterator_cur_subkey(iter);
   printMsgs(iter->f);
@@ -403,9 +407,10 @@ void printKeyTree(REGFI_ITERATOR* iter)
     
     if(sub == NULL)
     {
-      if(cur != root)
+      if(!keysEqual(cur, root))
       {
         regfi_free_record(iter->f, cur);
+        cur = NULL;
 	/* We're done with this sub-tree, going up and hitting other branches. */
 	if(!regfi_iterator_up(iter))
 	{
@@ -430,6 +435,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
        * Let's move down and print this first sub-tree out. 
        */
       regfi_free_record(iter->f, cur);
+      cur = NULL;
       if(!regfi_iterator_down(iter))
       {
 	printMsgs(iter->f);
@@ -443,7 +449,9 @@ void printKeyTree(REGFI_ITERATOR* iter)
       print_this = true;
     }
     printMsgs(iter->f);
-  } while(!((cur == root) && (sub == NULL)));
+  } while(!(keysEqual(cur, root) && (sub == NULL)));
+  if(cur != NULL)
+    regfi_free_record(iter->f, cur);
   regfi_free_record(iter->f, root);
 
   if(print_verbose)
