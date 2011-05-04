@@ -1822,15 +1822,13 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
   ret_val = talloc(NULL, REGFI_ITERATOR);
   if(ret_val == NULL)
     return NULL;
-
-  root = (REGFI_NK*)regfi_get_rootkey(file);
-  if(root == NULL)
+  
+  ret_val->cur = talloc(ret_val, REGFI_ITER_POSITION);
+  if(ret_val->cur == NULL)
   {
     talloc_free(ret_val);
     return NULL;
   }
-  ret_val->cur_key = root;
-  talloc_reparent(NULL, ret_val, root);
 
   ret_val->key_positions = void_stack_new(REGFI_MAX_DEPTH);
   if(ret_val->key_positions == NULL)
@@ -1840,10 +1838,29 @@ REGFI_ITERATOR* regfi_iterator_new(REGFI_FILE* file)
   }
   talloc_reparent(NULL, ret_val, ret_val->key_positions);
 
+  root = (REGFI_NK*)regfi_get_rootkey(file);
+  if(root == NULL)
+  {
+    talloc_free(ret_val);
+    return NULL;
+  }
+
+  ret_val->cur->offset = root->offset;
+  if(root->subkeys_off == REGFI_OFFSET_NONE)
+    ret_val->cur->num_subkeys = 0;
+  else
+    ret_val->cur->num_subkeys = regfi_fetch_num_subkeys(root);
+  
+  if(root->values_off == REGFI_OFFSET_NONE)
+    ret_val->cur->num_values = 0;
+  else
+    ret_val->cur->num_values = regfi_fetch_num_values(root);
+
+  ret_val->cur->cur_subkey = 0;
+  ret_val->cur->cur_value = 0;
   ret_val->f = file;
-  ret_val->cur_subkey = 0;
-  ret_val->cur_value = 0;
-    
+
+  regfi_free_record(ret_val->f, root);
   return ret_val;
 }
 
@@ -1856,40 +1873,49 @@ void regfi_iterator_free(REGFI_ITERATOR* i)
 }
 
 
-
 /******************************************************************************
  *****************************************************************************/
 /* XXX: some way of indicating reason for failure should be added. */
 bool regfi_iterator_down(REGFI_ITERATOR* i)
 {
   REGFI_NK* subkey;
-  REGFI_ITER_POSITION* pos;
-
-  pos = talloc(i->key_positions, REGFI_ITER_POSITION);
+  REGFI_ITER_POSITION* pos = talloc(i, REGFI_ITER_POSITION);
   if(pos == NULL)
     return false;
 
   subkey = (REGFI_NK*)regfi_iterator_cur_subkey(i);
   if(subkey == NULL)
   {
+    regfi_log_add(REGFI_LOG_WARN, "Could not obtain cur_subkey during"
+                  " iterator_down with subkey index (%d) and key offset=%.8X\n",
+                  i->cur->cur_subkey, i->cur->offset);
     talloc_free(pos);
     return false;
   }
 
-  pos->nk = i->cur_key;
-  pos->cur_subkey = i->cur_subkey;
-  if(!void_stack_push(i->key_positions, pos))
+  if(!void_stack_push(i->key_positions, i->cur))
   {
     talloc_free(pos);
-    talloc_unlink(NULL, subkey);
+    regfi_free_record(i->f, subkey);
     return false;
-  }  
-  talloc_reparent(NULL, i, subkey);
+  }
 
-  i->cur_key = subkey;
-  i->cur_subkey = 0;
-  i->cur_value = 0;
+  pos->offset = subkey->offset;
+  if(subkey->subkeys_off == REGFI_OFFSET_NONE)
+    pos->num_subkeys = 0;
+  else
+    pos->num_subkeys = regfi_fetch_num_subkeys(subkey);
 
+  if(subkey->values_off == REGFI_OFFSET_NONE)
+    pos->num_values = 0;
+  else
+    pos->num_values = regfi_fetch_num_values(subkey);
+
+  pos->cur_subkey = 0;
+  pos->cur_value = 0;
+  i->cur = pos;
+
+  regfi_free_record(i->f, subkey);
   return true;
 }
 
@@ -1907,14 +1933,11 @@ bool regfi_iterator_up(REGFI_ITERATOR* i)
   if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_up"))
     return false;
   
-  talloc_unlink(i, i->cur_key);
+  talloc_unlink(i, i->cur);
+
   regfi_unlock(i->f, &i->f->mem_lock, "regfi_iterator_up");
 
-  i->cur_key = pos->nk;
-  i->cur_subkey = pos->cur_subkey;
-  i->cur_value = 0;
-  talloc_free(pos);
-
+  i->cur = pos;
   return true;
 }
 
@@ -1934,15 +1957,23 @@ bool regfi_iterator_to_root(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* name)
 {
+  const REGFI_NK* cur_key;
   uint32_t new_index;
+  bool ret_val = false;
 
-  if(regfi_find_subkey(i->f, i->cur_key, name, &new_index))
+  cur_key = regfi_iterator_cur_key(i);
+  if(cur_key == NULL)
+    /* XXX: report error */
+    return ret_val;
+
+  if(regfi_find_subkey(i->f, cur_key, name, &new_index))
   {
-    i->cur_subkey = new_index;
-    return true;
+    i->cur->cur_subkey = new_index;
+    ret_val = true;
   }
 
-  return false;
+  regfi_free_record(i->f, cur_key);
+  return ret_val;
 }
 
 
@@ -1981,7 +2012,7 @@ const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
   if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_cur_key"))
     return ret_val;
 
-  ret_val = talloc_reference(NULL, i->cur_key);
+  ret_val = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
 
   regfi_unlock(i->f, &i->f->mem_lock, "regfi_iterator_cur_key");  
   return ret_val;
@@ -2003,10 +2034,8 @@ const REGFI_SK* regfi_fetch_sk(REGFI_FILE* file, const REGFI_NK* key)
  *****************************************************************************/
 bool regfi_iterator_first_subkey(REGFI_ITERATOR* i)
 {
-  i->cur_subkey = 0;
-  
-  return ((i->cur_key != NULL) && (i->cur_key->subkeys_off!=REGFI_OFFSET_NONE) 
-	  && (i->cur_subkey < regfi_fetch_num_subkeys(i->cur_key)));
+  i->cur->cur_subkey = 0;
+  return (i->cur->cur_subkey < i->cur->num_subkeys);
 }
 
 
@@ -2014,7 +2043,18 @@ bool regfi_iterator_first_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
 {
-  return regfi_get_subkey(i->f, i->cur_key, i->cur_subkey);
+  const REGFI_NK* cur_key;
+  const REGFI_NK* ret_val;
+  
+  cur_key = regfi_iterator_cur_key(i);
+  if(cur_key == NULL)
+    /* XXX: report error */
+    return NULL;
+
+  ret_val = regfi_get_subkey(i->f, cur_key, i->cur->cur_subkey);
+
+  regfi_free_record(i->f, cur_key);
+  return ret_val;
 }
 
 
@@ -2022,10 +2062,8 @@ const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_next_subkey(REGFI_ITERATOR* i)
 {
-  i->cur_subkey++;
-
-  return ((i->cur_key != NULL) && (i->cur_key->subkeys_off!=REGFI_OFFSET_NONE) 
-	  && (i->cur_subkey < regfi_fetch_num_subkeys(i->cur_key))); 
+  i->cur->cur_subkey++;
+  return (i->cur->cur_subkey < i->cur->num_subkeys);
 }
 
 
@@ -2033,15 +2071,23 @@ bool regfi_iterator_next_subkey(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name)
 {
+  const REGFI_NK* cur_key;
   uint32_t new_index;
+  bool ret_val = false;
 
-  if(regfi_find_value(i->f, i->cur_key, name, &new_index))
+  cur_key = regfi_iterator_cur_key(i);
+  if(cur_key == NULL)
+    /* XXX: report error */
+    return ret_val;
+
+  if(regfi_find_value(i->f, cur_key, name, &new_index))
   {
-    i->cur_value = new_index;
-    return true;
+    i->cur->cur_value = new_index;
+    ret_val = true;
   }
 
-  return false;
+  regfi_free_record(i->f, cur_key);
+  return ret_val;
 }
 
 
@@ -2049,9 +2095,8 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name)
  *****************************************************************************/
 bool regfi_iterator_first_value(REGFI_ITERATOR* i)
 {
-  i->cur_value = 0;
-  return (i->cur_key->values != NULL && i->cur_key->values->elements != NULL 
-	  && (i->cur_value < regfi_fetch_num_values(i->cur_key)));
+  i->cur->cur_value = 0;
+  return (i->cur->cur_value < i->cur->num_values);
 }
 
 
@@ -2059,7 +2104,18 @@ bool regfi_iterator_first_value(REGFI_ITERATOR* i)
  *****************************************************************************/
 const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 {
-  return regfi_get_value(i->f, i->cur_key, i->cur_value);
+  const REGFI_NK* cur_key;
+  const REGFI_VK* ret_val = NULL;
+
+  cur_key = regfi_iterator_cur_key(i);
+  if(cur_key == NULL)
+    /* XXX: report error */
+    return ret_val;
+
+  ret_val = regfi_get_value(i->f, cur_key, i->cur->cur_value);
+  
+  regfi_free_record(i->f, cur_key);
+  return ret_val;
 }
 
 
@@ -2067,9 +2123,53 @@ const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
  *****************************************************************************/
 bool regfi_iterator_next_value(REGFI_ITERATOR* i)
 {
-  i->cur_value++;
-  return (i->cur_key->values != NULL && i->cur_key->values->elements != NULL 
-	  && (i->cur_value < regfi_fetch_num_values(i->cur_key)));
+  i->cur->cur_value++;
+  return (i->cur->cur_value < i->cur->num_values);
+}
+
+
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i)
+{
+  REGFI_NK** ret_val;
+  void_stack_iterator* iter;
+  const REGFI_ITER_POSITION* cur;
+  uint16_t k;
+
+  ret_val = talloc_array(NULL, REGFI_NK*, void_stack_size(i->key_positions)+2);
+  if(ret_val == NULL)
+    return NULL;
+
+  iter = void_stack_iterator_new(i->key_positions);
+  if (iter == NULL)
+  {
+    talloc_free(ret_val);
+    return NULL;
+  }
+  
+  if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_cur_path"))
+  {
+    talloc_free(ret_val);
+    return NULL;
+  }
+
+  for(cur=void_stack_iterator_next(iter), k=0; 
+      cur != NULL; cur=void_stack_iterator_next(iter), k++)
+  {
+    ret_val[k] = regfi_load_key(i->f, cur->offset, i->f->string_encoding, true);
+    talloc_reparent(NULL, ret_val, ret_val[k]);
+  }
+  ret_val[k] = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
+  talloc_reparent(NULL, ret_val, ret_val[k]);
+
+  regfi_unlock(i->f, &i->f->mem_lock, "regfi_cur_path");
+  void_stack_iterator_free(iter);
+
+  ret_val[++k] = NULL;
+  return (const REGFI_NK**)ret_val;
 }
 
 

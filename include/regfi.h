@@ -652,7 +652,7 @@ typedef struct _regfi_nk
   /** Key's last modification time */
   REGFI_NTTIME mtime;
 
-  /** Length of keyname_raw */
+  /** Length of name_raw */
   uint16_t name_length;
 
   /** Length of referenced classname */
@@ -826,6 +826,26 @@ typedef struct _regfi_file
 } REGFI_FILE;
 
 
+typedef struct _regfi_iter_position
+{
+  /* key offset */
+  uint32_t offset;
+
+  /* Index of the current subkey */
+  uint32_t cur_subkey;
+
+  /* Index of the current value */
+  uint32_t cur_value;
+
+  /* The number of subkeys of this key */
+  uint32_t num_subkeys;
+
+  /* The number of values of this key */
+  uint32_t num_values;
+
+} REGFI_ITER_POSITION;
+
+
 /** Registry hive iterator
  * @ingroup regfiIteratorLayer
  */
@@ -837,25 +857,9 @@ typedef struct _regfi_iterator
   /** All current parent keys and associated iterator positions */
   void_stack* key_positions;
 
-  /** The current key */
-  REGFI_NK* cur_key;
-
-  /** Index of the current subkey */
-  uint32_t cur_subkey;
-
-  /** Index of the current value */
-  uint32_t cur_value;
+  REGFI_ITER_POSITION* cur;
 } REGFI_ITERATOR;
 
-
-typedef struct _regfi_iter_position
-{
-  REGFI_NK* nk;
-  uint32_t cur_subkey;
-  /* We could store a cur_value here as well, but didn't see 
-   * the use in it right now.
-   */
-} REGFI_ITER_POSITION;
 
 
 /** General purpose buffer with stored length
@@ -1404,6 +1408,26 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i);
  */
 _EXPORT()
 bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name);
+
+
+/** Returns the full path where the iterator is currently located as a list 
+ *  of NK records
+ *
+ * @param i     the iterator
+ *
+ * @return An array of NK record pointers terminated by a NULL pointer.  
+ *         This array may be passed directly to regfi_free_record to free
+ *         the entire array.  
+ *
+ * @note In order to use an element of the array independently from the 
+ *       array (that is, to hold a pointer to an individual NK record while 
+ *       freeing the remaining array), callers must first use 
+ *       regfi_reference_record on the elements to be kept.
+ *
+ * @ingroup regfiIteratorLayer
+ */
+_EXPORT()
+const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i);
 
 
 /******************************************************************************/
