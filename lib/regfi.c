@@ -1342,6 +1342,24 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
   uint32_t off;
   int32_t max_size;
 
+  if(file->nk_cache != NULL)
+  {
+    /* First, check to see if we have this key in our cache */
+    if(!regfi_lock(file, &file->mem_lock, "regfi_load_nk"))
+      return NULL;
+    regfi_lock(file, &file->nk_lock, "regfi_load_nk");
+    
+    nk = (REGFI_NK*)lru_cache_find(file->nk_cache, &offset, 4);
+    if(nk != NULL)
+      nk = talloc_reference(NULL, nk);
+
+    regfi_unlock(file, &file->nk_lock, "regfi_load_nk");
+    regfi_unlock(file, &file->mem_lock, "regfi_load_nk");
+    if(nk != NULL)
+      return nk;
+  }
+
+  /* Not cached currently, proceed with loading it */
   max_size = regfi_calc_maxsize(file, offset);
   if (max_size < 0) 
     return NULL;
@@ -1370,7 +1388,6 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
       }
       else
 	nk->values = NULL;
-
     }
     else
     {
@@ -1420,6 +1437,19 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
     }
   }
 
+  if(file->nk_cache != NULL)
+  {
+    /* All is well, so let us cache this key for later */
+    if(!regfi_lock(file, &file->mem_lock, "regfi_load_nk"))
+      return NULL;
+    regfi_lock(file, &file->nk_lock, "regfi_load_nk");
+    
+    lru_cache_update(file->nk_cache, &offset, 4, nk);
+    
+    regfi_unlock(file, &file->nk_lock, "regfi_load_nk");
+    regfi_unlock(file, &file->mem_lock, "regfi_load_nk");
+  }
+
   return nk;
 }
 
@@ -1439,15 +1469,19 @@ const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
   if(file->sk_cache == NULL)
     return regfi_parse_sk(file, offset, max_size, strict);
 
-  if(!regfi_lock(file, &file->sk_lock, "regfi_load_sk"))
+  if(!regfi_lock(file, &file->mem_lock, "regfi_load_sk"))
     return NULL;
+  regfi_lock(file, &file->sk_lock, "regfi_load_sk");
 
   /* First look if we have already parsed it */
   ret_val = (REGFI_SK*)lru_cache_find(file->sk_cache, &offset, 4);
 
   /* Bail out if we have previously cached a parse failure at this offset. */
   if(ret_val == (void*)REGFI_OFFSET_NONE)
-    return NULL;
+  {
+    ret_val = NULL;
+    goto unlock;
+  }
 
   if(ret_val == NULL)
   {
@@ -1456,21 +1490,19 @@ const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
     { /* Cache the parse failure and bail out. */
       failure_ptr = talloc(NULL, uint32_t);
       if(failure_ptr == NULL)
-	return NULL;
+	goto unlock;
+
       *(uint32_t*)failure_ptr = REGFI_OFFSET_NONE;
       lru_cache_update(file->sk_cache, &offset, 4, failure_ptr);
 
       /* Let the cache be the only owner of this */
       talloc_unlink(NULL, failure_ptr);
-      return NULL;
     }
   }
 
-  if(!regfi_unlock(file, &file->sk_lock, "regfi_load_sk"))
-  {
-    talloc_unlink(NULL, ret_val);
-    return NULL;
-  }
+ unlock:
+  regfi_unlock(file, &file->sk_lock, "regfi_load_sk");
+  regfi_unlock(file, &file->mem_lock, "regfi_load_sk");
 
   return ret_val;
 }
@@ -1564,6 +1596,8 @@ static int regfi_free_cb(void* f)
   pthread_mutex_destroy(&file->cb_lock);
   pthread_rwlock_destroy(&file->hbins_lock);
   pthread_mutex_destroy(&file->sk_lock);
+  pthread_mutex_destroy(&file->nk_lock);
+  pthread_mutex_destroy(&file->mem_lock);
 
   return 0;
 }
@@ -1628,6 +1662,12 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
     goto fail;
   }
 
+  if(pthread_mutex_init(&rb->nk_lock, NULL) != 0)
+  {
+    regfi_log_add(REGFI_LOG_ERROR, "Failed to create nk_lock mutex.");
+    goto fail;
+  }
+
   if(pthread_mutex_init(&rb->mem_lock, NULL) != 0)
   {
     regfi_log_add(REGFI_LOG_ERROR, "Failed to create mem_lock mutex.");
@@ -1661,10 +1701,15 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
    */
   cache_secret = 0x15DEAD05^time(NULL)^(getpid()<<16);
 
-  if(REGFI_CACHE_SK)
-    rb->sk_cache = lru_cache_create_ctx(rb, 64, cache_secret, true);
-  else
-    rb->sk_cache = NULL;
+  rb->sk_cache = NULL;
+  if(REGFI_CACHE_SK_MAX > 0)
+    rb->sk_cache = lru_cache_create_ctx(rb, REGFI_CACHE_SK_MAX, 
+                                        cache_secret, true);
+
+  rb->nk_cache = NULL;
+  if(REGFI_CACHE_NK_MAX > 0)
+    rb->nk_cache = lru_cache_create_ctx(rb, REGFI_CACHE_NK_MAX, 
+                                        cache_secret, true);
 
   /* success */
   talloc_set_destructor(rb, regfi_free_cb);
@@ -1674,6 +1719,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
   pthread_mutex_destroy(&rb->cb_lock);
   pthread_rwlock_destroy(&rb->hbins_lock);
   pthread_mutex_destroy(&rb->sk_lock);
+  pthread_mutex_destroy(&rb->nk_lock);
   pthread_mutex_destroy(&rb->mem_lock);
 
   range_list_free(rb->hbins);
@@ -2009,12 +2055,8 @@ bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
 const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
   const REGFI_NK* ret_val = NULL;
-  if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_cur_key"))
-    return ret_val;
 
   ret_val = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
-
-  regfi_unlock(i->f, &i->f->mem_lock, "regfi_iterator_cur_key");  
   return ret_val;
 }
 
@@ -2137,9 +2179,10 @@ const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i)
   REGFI_NK** ret_val;
   void_stack_iterator* iter;
   const REGFI_ITER_POSITION* cur;
-  uint16_t k;
+  uint16_t k, num_keys;
 
-  ret_val = talloc_array(NULL, REGFI_NK*, void_stack_size(i->key_positions)+2);
+  num_keys = void_stack_size(i->key_positions)+1;
+  ret_val = talloc_array(NULL, REGFI_NK*, num_keys+1);
   if(ret_val == NULL)
     return NULL;
 
@@ -2149,26 +2192,28 @@ const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i)
     talloc_free(ret_val);
     return NULL;
   }
-  
+
+  k=0;
+  for(cur=void_stack_iterator_next(iter);
+      cur != NULL; cur=void_stack_iterator_next(iter))
+  { 
+    ret_val[k++] = regfi_load_key(i->f, cur->offset, i->f->string_encoding, true); 
+  }
+  ret_val[k] = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
+  void_stack_iterator_free(iter);
+
   if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_cur_path"))
   {
     talloc_free(ret_val);
     return NULL;
   }
 
-  for(cur=void_stack_iterator_next(iter), k=0; 
-      cur != NULL; cur=void_stack_iterator_next(iter), k++)
-  {
-    ret_val[k] = regfi_load_key(i->f, cur->offset, i->f->string_encoding, true);
+  for(k=0; k<num_keys; k++)
     talloc_reparent(NULL, ret_val, ret_val[k]);
-  }
-  ret_val[k] = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
-  talloc_reparent(NULL, ret_val, ret_val[k]);
 
   regfi_unlock(i->f, &i->f->mem_lock, "regfi_cur_path");
-  void_stack_iterator_free(iter);
 
-  ret_val[++k] = NULL;
+  ret_val[k] = NULL;
   return (const REGFI_NK**)ret_val;
 }
 

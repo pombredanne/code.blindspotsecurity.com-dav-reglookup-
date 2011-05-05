@@ -45,10 +45,6 @@ things you could look into:
 
 Add fields/methods for accessing security descriptors in pyregfi
 
-Key caching
-
-Add function to obtain path list from iterator
-
 convert MTIME structure to uint64_t if possible
 
 investigate why file descriptors can't be directly used in Windows

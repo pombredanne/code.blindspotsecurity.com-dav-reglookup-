@@ -140,8 +140,9 @@ typedef enum {
 /* Various resource limits and related constants                              */
 /******************************************************************************/
 
-/* Flags determining whether or not to cache various record types internally */
-#define REGFI_CACHE_SK             0
+/* Flags determining how many records to cache internally */
+#define REGFI_CACHE_SK_MAX         64
+#define REGFI_CACHE_NK_MAX         1024
 
 /* This maximum depth is described here:
  * http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
@@ -814,11 +815,17 @@ typedef struct _regfi_file
   /* Multiple read access allowed, write access is exclusive */
   pthread_rwlock_t hbins_lock;
 
-  /* SK record cached since they're repeatedly reused */
+  /* Small number of SK records cached */
   lru_cache* sk_cache;
 
   /* Need exclusive access for LRUs, since lookups make changes */
   pthread_mutex_t sk_lock;
+
+  /* Limited number of keys cached */
+  lru_cache* nk_cache;
+
+  /* Need exclusive access for LRUs, since lookups make changes */
+  pthread_mutex_t nk_lock;
 
   /* Needed to protect various talloc calls */
   pthread_mutex_t mem_lock;
