@@ -43,7 +43,10 @@ REGFI_FILE* f;
  */
 #include "common.c"
 
-
+static bool keysEqual(const REGFI_NK* x, const REGFI_NK* y)
+{
+  return (x != NULL && y != NULL && x->offset == y->offset);
+}
 
 void traverseValueList(REGFI_ITERATOR* iter)
 {
@@ -56,7 +59,7 @@ void traverseValueList(REGFI_ITERATOR* iter)
   {
     value = regfi_iterator_cur_value(iter);
     printMsgs(iter->f);
-    regfi_free_record(value);
+    regfi_free_record(iter->f, value);
   }
 }
 
@@ -69,7 +72,9 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
   const REGFI_SK* sk;
   bool print_this = true;
 
-  root = cur = regfi_iterator_cur_key(iter);
+  root = regfi_iterator_cur_key(iter);
+  regfi_reference_record(iter->f, root);
+  cur = root;
   regfi_iterator_first_subkey(iter);
   sub = regfi_iterator_cur_subkey(iter);
   printMsgs(iter->f);
@@ -84,10 +89,11 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
     
     if(sub == NULL)
     {
-      if(cur != root)
+      if(!keysEqual(cur,root))
       {
 	/* We're done with this sub-tree, going up and hitting other branches. */
-        regfi_free_record(cur);
+        regfi_free_record(iter->f, cur);
+        cur = NULL;
 	if(!regfi_iterator_up(iter))
 	{
 	  printMsgs(iter->f);
@@ -101,7 +107,7 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
 	  bailOut(REGLOOKUP_EXIT_DATAERR, "ERROR: unexpected NULL for key.\n");
 	sk = regfi_fetch_sk(iter->f, cur);
 	printMsgs(iter->f);
-        regfi_free_record(sk);
+        regfi_free_record(iter->f, sk);
 
 	regfi_iterator_next_subkey(iter);
 	sub = regfi_iterator_cur_subkey(iter);
@@ -112,7 +118,8 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
     { /* We have unexplored sub-keys.  
        * Let's move down and print this first sub-tree out. 
        */
-      regfi_free_record(cur);
+      regfi_free_record(iter->f, cur);
+      cur = NULL;
       if(!regfi_iterator_down(iter))
       {
 	printMsgs(iter->f);
@@ -121,7 +128,7 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
 
       cur = regfi_iterator_cur_key(iter);
       printMsgs(iter->f);
-      regfi_free_record(sub);
+      regfi_free_record(iter->f, sub);
 
       regfi_iterator_first_subkey(iter);
       sub = regfi_iterator_cur_subkey(iter);
@@ -129,8 +136,10 @@ void traverseKeyTree(REGFI_ITERATOR* iter)
       print_this = true;
     }
     printMsgs(iter->f);
-  } while(!((cur == root) && (sub == NULL)));
-  regfi_free_record(root);
+  } while(!(keysEqual(cur,root) && (sub == NULL)));
+  if(cur != NULL)
+    regfi_free_record(iter->f, cur);
+  regfi_free_record(iter->f, root);
 
   if(print_verbose)
     fprintf(stderr, "INFO: Finished printing key tree.\n");

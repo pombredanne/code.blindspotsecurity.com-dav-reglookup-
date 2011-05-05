@@ -150,7 +150,7 @@ lru_cache* lru_cache_create_ctx(void* talloc_ctx, uint32_t max_keys,
 void lru_cache_destroy(lru_cache* ht)
 {
   ht->secret = 0;
-  talloc_free(ht);
+  talloc_unlink(NULL, ht);
 }
 
 
@@ -256,7 +256,6 @@ bool lru_cache_update(lru_cache* ht, const void* index,
     memcpy(e->index, index, index_len);
     e->index_len = index_len;
 
-    /* Insert at beginning of chain, in a vaguely LRU style */
     e->next = ht->table[hash];
     ht->table[hash] = e;
   }
