@@ -106,7 +106,7 @@ void printValue(REGFI_ITERATOR* iter, const REGFI_VK* vk, char* prefix)
   if(print_value_mtime)
   {
     cur_key = regfi_iterator_cur_key(iter);
-    *tmp_time = regfi_nt2unix_time(&cur_key->mtime);
+    *tmp_time = regfi_nt2unix_time(cur_key->mtime);
     tmp_time_s = gmtime(tmp_time);
     strftime(mtime, sizeof(mtime), "%Y-%m-%d %H:%M:%S", tmp_time_s);
     regfi_free_record(iter->f, cur_key);
@@ -303,7 +303,7 @@ void printKey(REGFI_ITERATOR* iter, char* full_path)
   const REGFI_NK* key = regfi_iterator_cur_key(iter);
   const REGFI_CLASSNAME* classname;
 
-  formatTime(&key->mtime, mtime);
+  formatTime(key->mtime, mtime);
 
   if(print_security && (sk=regfi_fetch_sk(iter->f, key)))
   {

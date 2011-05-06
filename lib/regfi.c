@@ -2752,8 +2752,8 @@ REGFI_FILE* regfi_parse_regf(REGFI_RAW_FILE* file_cb, bool strict)
 
   ret_val->sequence1 = IVAL(file_header, 0x4);
   ret_val->sequence2 = IVAL(file_header, 0x8);
-  ret_val->mtime.low = IVAL(file_header, 0xC);
-  ret_val->mtime.high = IVAL(file_header, 0x10);
+  ret_val->mtime = ((uint64_t)IVAL(file_header, 0x10)) << 32;
+  ret_val->mtime |= IVAL(file_header, 0xC);
   ret_val->major_version = IVAL(file_header, 0x14);
   ret_val->minor_version = IVAL(file_header, 0x18);
   ret_val->type = IVAL(file_header, 0x1C);
@@ -2935,15 +2935,15 @@ REGFI_NK* regfi_parse_nk(REGFI_FILE* file, uint32_t offset,
 		  (ret_val->flags & ~REGFI_NK_KNOWN_FLAGS), offset);
   }
 
-  ret_val->mtime.low = IVAL(nk_header, 0x4);
-  ret_val->mtime.high = IVAL(nk_header, 0x8);
+  ret_val->mtime = ((uint64_t)IVAL(nk_header, 0x8)) << 32;
+  ret_val->mtime |= IVAL(nk_header, 0x4);
   /* If the key is unallocated and the MTIME is earlier than Jan 1, 1990
    * or later than Jan 1, 2290, we consider this a bad key.  This helps
    * weed out some false positives during deleted data recovery.
    */
   if(unalloc
-     && (ret_val->mtime.high < REGFI_MTIME_MIN_HIGH 
-	 || ret_val->mtime.high > REGFI_MTIME_MAX_HIGH))
+     && (ret_val->mtime < REGFI_MTIME_MIN
+	 || ret_val->mtime > REGFI_MTIME_MAX))
   { goto fail_locked; }
 
   ret_val->unknown1 = IVAL(nk_header, 0xC);
@@ -3793,33 +3793,21 @@ range_list* regfi_parse_unalloc_cells(REGFI_FILE* file)
 /* From lib/time.c */
 
 /****************************************************************************
- Put a 8 byte filetime from a time_t
+ Returns an 8 byte filetime from a time_t
  This takes real GMT as input and converts to kludge-GMT
 ****************************************************************************/
-void regfi_unix2nt_time(REGFI_NTTIME *nt, time_t t)
+REGFI_NTTIME regfi_unix2nt_time(time_t t)
 {
   double d;
-  
-  if (t==0) 
-  {
-    nt->low = 0;
-    nt->high = 0;
-    return;
-  }
+
+  if (t==0)
+    return 0L;
   
   if (t == TIME_T_MAX) 
-  {
-    nt->low = 0xffffffff;
-    nt->high = 0x7fffffff;
-    return;
-  }		
+    return 0x7fffffffffffffffL;
   
   if (t == -1) 
-  {
-    nt->low = 0xffffffff;
-    nt->high = 0xffffffff;
-    return;
-  }		
+    return 0xffffffffffffffffL;
   
   /* this converts GMT to kludge-GMT */
   /* XXX: This was removed due to difficult dependency requirements.  
@@ -3828,12 +3816,14 @@ void regfi_unix2nt_time(REGFI_NTTIME *nt, time_t t)
    */
   /* t -= TimeDiff(t) - get_serverzone(); */
   
-  d = (double)(t);
-  d += TIME_FIXUP_CONSTANT;
+  d = (double)(t) + REGFI_TIME_FIXUP;
   d *= 1.0e7;
-  
-  nt->high = (uint32_t)(d * (1.0/(4.0*(double)(1<<30))));
-  nt->low  = (uint32_t)(d - ((double)nt->high)*4.0*(double)(1<<30));
+  /*
+  nt->high = (uint32_t)(d * (1.0/c));
+  nt->low  = (uint32_t)(d - ((double)nt->high) * c);
+  */
+
+  return (REGFI_NTTIME) d;
 }
 
 
@@ -3848,31 +3838,17 @@ void regfi_unix2nt_time(REGFI_NTTIME *nt, time_t t)
  serverzone. This is NOT the same as GMT in some cases. This routine
  converts this to real GMT.
 ****************************************************************************/
-double regfi_nt2unix_time(const REGFI_NTTIME* nt)
+double regfi_nt2unix_time(REGFI_NTTIME nt)
 {
   double ret_val;
-
-  /* The next two lines are a fix needed for the 
-     broken SCO compiler. JRA. */
-  time_t l_time_min = TIME_T_MIN;
-  time_t l_time_max = TIME_T_MAX;
   
-  if (nt->high == 0 || (nt->high == 0xffffffff && nt->low == 0xffffffff))
-    return(0);
+  if (nt == 0 || nt == 0xffffffffffffffffL)
+    return 0;
   
-  ret_val = ((double)nt->high)*4.0*(double)(1<<30);
-  ret_val += nt->low;
-  ret_val *= 1.0e-7;
+  ret_val = (double)(nt) * 1.0e-7;
   
   /* now adjust by 369 years to make the secs since 1970 */
-  ret_val -= TIME_FIXUP_CONSTANT;
-  
-  /* XXX: should these sanity checks be removed? */
-  if (ret_val <= l_time_min)
-    return (l_time_min);
-  
-  if (ret_val >= l_time_max)
-    return (l_time_max);
+  ret_val -= REGFI_TIME_FIXUP;
   
   /* this takes us from kludge-GMT to real GMT */
   /* XXX: This was removed due to difficult dependency requirements.  
