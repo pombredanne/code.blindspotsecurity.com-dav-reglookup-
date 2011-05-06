@@ -190,12 +190,12 @@ pthread_key_t regfi_log_key;
  *      perhaps conservatively implement a check.
  */
  /* Minimum time is Jan 1, 1990 00:00:00 */
-#define REGFI_MTIME_MIN_HIGH       0x01B41E6D
+#define REGFI_MTIME_MIN            0x01B41E6D00000000L
 
  /* Maximum time is Jan 1, 2290 00:00:00
   * (We hope no one is using Windows by then...) 
   */
-#define REGFI_MTIME_MAX_HIGH       0x03047543
+#define REGFI_MTIME_MAX            0x0304754300000000L
 
 
 /* Flags for the vk records */
@@ -269,7 +269,7 @@ pthread_key_t regfi_log_key;
 #define TIME_T_MIN ((time_t)0 < (time_t) -1 ? (time_t) 0 \
 		    : ~ (time_t) 0 << (sizeof (time_t) * CHAR_BIT - 1))
 #define TIME_T_MAX (~ (time_t) 0 - TIME_T_MIN)
-#define TIME_FIXUP_CONSTANT (369.0*365.25*24*60*60-(3.0*24*60*60+6.0*60*60))
+#define REGFI_TIME_FIXUP (369.0*365.25*24*60*60-(3.0*24*60*60+6.0*60*60))
 
 
 
@@ -277,12 +277,7 @@ pthread_key_t regfi_log_key;
 /* Structures                                                                 */
 /******************************************************************************/
 
-typedef struct _regfi_nttime
-{
-  uint32_t low;
-  uint32_t high;
-} REGFI_NTTIME;
-
+typedef uint64_t REGFI_NTTIME;
 
 typedef struct _regfi_log
 {
@@ -1730,9 +1725,9 @@ REGFI_DATA*           regfi_buffer_to_data(REGFI_BUFFER raw_data);
 
 /* XXX: move to base API and document */
 _EXPORT()
-void                  regfi_unix2nt_time(REGFI_NTTIME* nt, time_t t);
+REGFI_NTTIME          regfi_unix2nt_time(time_t t);
 _EXPORT()
-double                regfi_nt2unix_time(const REGFI_NTTIME* nt);
+double                regfi_nt2unix_time(REGFI_NTTIME nt);
 
 
 _EXPORT()

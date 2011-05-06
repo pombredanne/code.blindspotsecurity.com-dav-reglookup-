@@ -72,7 +72,7 @@ void printKey(REGFI_FILE* f, REGFI_NK* nk, const char* prefix)
   char* quoted_name = NULL;
   char* quoted_raw = "";
 
-  formatTime(&nk->mtime, mtime);
+  formatTime(nk->mtime, mtime);
   
   /* XXX: Add command line option to choose output encoding */
   regfi_interpret_keyname(f, nk, REGFI_ENCODING_ASCII, true);

@@ -360,7 +360,7 @@ int openHive(const char* filename)
 }
 
 
-void formatTime(const REGFI_NTTIME* nttime, char* output)
+void formatTime(REGFI_NTTIME nttime, char* output)
 {
   time_t tmp_time[1];
   struct tm* tmp_time_s = NULL;
