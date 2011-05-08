@@ -259,9 +259,9 @@ bool lru_cache_update(lru_cache* ht, const void* index,
     e->next = ht->table[hash];
     ht->table[hash] = e;
   }
-  e->data = data;
   if(ht->talloc_data)
-    talloc_reference(e, e->data);
+    data = talloc_reference(e, data);
+  e->data = data;
 
   /* Finally, let's insert the element to the newest position in the LRU list.*/
   if(ht->newest != NULL)

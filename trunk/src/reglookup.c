@@ -226,7 +226,7 @@ char* iter2Path(REGFI_ITERATOR* i)
     return NULL;
   buf[0] = '\0';
 
-  path = regfi_iterator_cur_path(i);
+  path = regfi_iterator_ancestry(i);
   if(path == NULL)
   {
     free(buf);
@@ -380,8 +380,7 @@ void printKeyTree(REGFI_ITERATOR* iter)
   bool print_this = true;
 
   root = regfi_iterator_cur_key(iter);
-  regfi_reference_record(iter->f, root);
-  cur = root;
+  cur = root = regfi_reference_record(iter->f, root);
   regfi_iterator_first_subkey(iter);
   sub = regfi_iterator_cur_subkey(iter);
   printMsgs(iter->f);
@@ -503,7 +502,7 @@ int retrievePath(REGFI_ITERATOR* iter, char** path)
     return 2;
   }
 
-  if(!regfi_iterator_walk_path(iter, tmp_path))
+  if(!regfi_iterator_descend(iter, tmp_path))
   {
     printMsgs(iter->f);
     free(tmp_path);

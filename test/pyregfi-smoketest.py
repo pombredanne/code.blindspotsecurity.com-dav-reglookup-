@@ -41,7 +41,7 @@ def iterTallyNames(hive, fh):
     print("  Total raw name lengths: keys=%d, values=%d" % (key_rawlens, value_rawlens))
 
 
-# helper function
+# walks up parents to obtain path, rather than using downward links like iterator
 def getCurrentPath(key):
     if key == None:
         return ''
@@ -70,7 +70,7 @@ def iterParentWalk(hive, fh):
             else:
                 i += 1
         except Exception as e:
-            print("WARNING: Could not decend to path '%s'.\nError:\n %s\n%s" % (path,e.args,e))
+            print("WARNING: Could not descend to path '%s'.\nError:\n %s\n%s" % (path,e.args,e))
     print("   Successfully tested paths on %d keys." % i)
 
 
@@ -161,23 +161,29 @@ def iterIterWalk(hive, fh):
     v_stat = 0.0
     iter = pyregfi.HiveIterator(hive)
     for k in iter:
-        path = getCurrentPath(k)
+        path = iter.current_path()
         try:
-            hive_iter = hive.subtree(path)
+            hive_iter = hive.subtree(path[1:])
             sk = hive_iter.first_subkey()
             while sk != None:
                 ssk = hive_iter.find_subkey(sk.name)
-                sk_stat += len(ssk.name)
+                if ssk != None:
+                    sk_stat += len(ssk.name)
+                else:
+                    print("WARNING: ssk was None")
                 sk = hive_iter.next_subkey()
 
             v = hive_iter.first_value()
             while v != None:
                 vv = hive_iter.find_value(v.name)
-                v_stat += len(vv.name)
+                if vv != None:
+                    v_stat += len(vv.name)
+                else:
+                    print("WARNING: vv was None")
                 v = hive_iter.next_value()
 
         except Exception as e:
-            print("WARNING: Could not decend to path '%s'.\nError:\n %s\n%s" % (path,e.args,e))
+            print("WARNING: Could not descend to path '%s'.\nError:\n %s\n%s" % (path[1:],e.args,e))
     print("   Subkey stat: %f" % sk_stat)
     print("   Value stat: %f" % v_stat)
 
