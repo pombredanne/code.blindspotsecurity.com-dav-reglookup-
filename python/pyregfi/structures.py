@@ -19,12 +19,9 @@ REGFI_ENCODING = c_uint32
 REGFI_ENCODING_UTF8 = REGFI_ENCODING(1)
 
 REGFI_DATA_TYPE = c_uint32
-
+REGFI_NTTIME = c_uint64
 
 # Prototype everything first so we don't have to worry about reference order
-class REGFI_NTTIME(Structure):
-    pass
-
 class REGFI_VK(Structure):
     pass
 
@@ -96,9 +93,6 @@ else:
 seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use_errno=True)
 read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t, use_errno=True)
 
-
-REGFI_NTTIME._fields_ = [('low', c_uint32),
-                         ('high', c_uint32)]
 
 REGFI_VK._fields_ = [('offset', c_uint32),
                      ('cell_size', c_uint32),
@@ -252,7 +246,7 @@ regfi.regfi_free_record.argtypes = [POINTER(REGFI_FILE), c_void_p]
 regfi.regfi_free_record.restype = None
 
 regfi.regfi_reference_record.argtypes = [POINTER(REGFI_FILE), c_void_p]
-regfi.regfi_reference_record.restype = c_bool
+regfi.regfi_reference_record.restype = c_void_p
 
 regfi.regfi_fetch_num_subkeys.argtypes = [POINTER(REGFI_NK)]
 regfi.regfi_fetch_num_subkeys.restype = c_uint32
@@ -306,8 +300,8 @@ regfi.regfi_iterator_up.restype = c_bool
 regfi.regfi_iterator_to_root.argtypes = [POINTER(REGFI_ITERATOR)]
 regfi.regfi_iterator_to_root.restype = c_bool
 
-regfi.regfi_iterator_walk_path.argtypes = [POINTER(REGFI_ITERATOR), POINTER(c_char_p)]
-regfi.regfi_iterator_walk_path.restype = c_bool
+regfi.regfi_iterator_descend.argtypes = [POINTER(REGFI_ITERATOR), POINTER(c_char_p)]
+regfi.regfi_iterator_descend.restype = c_bool
 
 regfi.regfi_iterator_cur_key.argtypes = [POINTER(REGFI_ITERATOR)]
 regfi.regfi_iterator_cur_key.restype = POINTER(REGFI_NK)
@@ -336,6 +330,8 @@ regfi.regfi_iterator_next_value.restype = c_bool
 regfi.regfi_iterator_find_value.argtypes = [POINTER(REGFI_ITERATOR), c_char_p]
 regfi.regfi_iterator_find_value.restype = c_bool
 
+regfi.regfi_iterator_ancestry.argtypes = [POINTER(REGFI_ITERATOR)]
+regfi.regfi_iterator_ancestry.restype = POINTER(POINTER(REGFI_NK))
 
 regfi.regfi_init.argtypes = []
 regfi.regfi_init.restype = None

@@ -1012,7 +1012,7 @@ void regfi_free_record(REGFI_FILE* file, const void* record);
  *
  * Adds an extra internal reference to specified record, making it necessary to
  * call regfi_free_record on it an additional time before it is freed.  This is
- * useful in cases where multiple threads/structures need access to a record, 
+ * useful in cases where multiple threads/structures need access to a shared record,
  * without requiring them to be in sync with when it is freed.
  *
  * @param file The file from which the record originated.  
@@ -1021,12 +1021,18 @@ void regfi_free_record(REGFI_FILE* file, const void* record);
  * @param record Any of the following record types: REGFI_NK, REGFI_VK, 
  *        REGFI_SK, REGFI_DATA, and REGFI_CLASSNAME records.
  *
- * @return true on success, false otherwise
+ * @return Updated record pointer on success, NULL otherwise
+ *
+ * @note Be sure to use the returned record for further access to the structure
+ *       instead of the previous version of the pointer.  E.g.:
+ *       @code 
+ *       myKey = (const REGFI_NK*)regfi_reference_record(myFile, myKey);
+ *       @endcode
  *
  * @ingroup regfiBase
  */
 _EXPORT()
-bool regfi_reference_record(REGFI_FILE* file, const void* record);
+const void* regfi_reference_record(REGFI_FILE* file, const void* record);
 
 
 /** Retrieves number of subkeys referenced by this key.
@@ -1288,7 +1294,7 @@ bool regfi_iterator_to_root(REGFI_ITERATOR* i);
  * @ingroup regfiIteratorLayer
  */
 _EXPORT()
-bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path);
+bool regfi_iterator_descend(REGFI_ITERATOR* i, const char** path);
 
 
 /** Returns the currently referenced key.
@@ -1412,14 +1418,13 @@ _EXPORT()
 bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name);
 
 
-/** Returns the full path where the iterator is currently located as a list 
- *  of NK records
+/** Returns the current key and all parent keys as a list of NK records
  *
  * @param i     the iterator
  *
  * @return An array of NK record pointers terminated by a NULL pointer.  
  *         This array may be passed directly to regfi_free_record to free
- *         the entire array.  
+ *         the entire array.
  *
  * @note In order to use an element of the array independently from the 
  *       array (that is, to hold a pointer to an individual NK record while 
@@ -1429,7 +1434,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name);
  * @ingroup regfiIteratorLayer
  */
 _EXPORT()
-const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i);
+const REGFI_NK** regfi_iterator_ancestry(REGFI_ITERATOR* i);
 
 
 /******************************************************************************/

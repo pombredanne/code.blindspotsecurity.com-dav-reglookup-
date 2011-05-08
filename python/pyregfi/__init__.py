@@ -173,12 +173,13 @@ def _charss2strlist(chars_pointer):
     ret_val = []
     i = 0
     s = chars_pointer[i]
-    while s != None:
+    while s:
         ret_val.append(s.decode('utf-8', 'replace'))
         i += 1
         s = chars_pointer[i]
 
     return ret_val
+
 
 
 ## Returns the (py)regfi library version
@@ -315,11 +316,12 @@ class _GenericList(object):
         if not key:
             raise Exception("Could not create _GenericList; key is NULL."
                             + "Current log:\n" + getLogMessages())
-        
-        if not regfi.regfi_reference_record(key._hive.file, key._base):
+
+        base = regfi.regfi_reference_record(key._hive.file, key._base)
+        if not base:
             raise Exception("Could not create _GenericList; memory error."
                             + "Current log:\n" + getLogMessages())
-        self._key_base = key._base
+        self._key_base = cast(base, type(key._base))
         self._length = self._fetch_num(self._key_base)
         self._hive = key._hive
 
@@ -460,7 +462,7 @@ class Key(_StructureWrapper):
         if name == "name":
             ret_val = super(Key, self).__getattr__(name)
 
-            if ret_val == None:
+            if not ret_val:
                 ret_val = self.name_raw
             else:
                 ret_val = ret_val.decode('utf-8', 'replace')
@@ -623,7 +625,7 @@ class Value(_StructureWrapper):
     def __getattr__(self, name):
         ret_val = super(Value, self).__getattr__(name)
         if name == "name":
-            if ret_val == None:
+            if not ret_val:
                 ret_val = self.name_raw
             else:
                 ret_val = ret_val.decode('utf-8', 'replace')
@@ -983,7 +985,6 @@ class HiveIterator():
         self._lock.release()
         return ret_val
 
-
     ## Traverse downward multiple levels
     #
     # This is more efficient than calling down() multiple times
@@ -995,11 +996,41 @@ class HiveIterator():
         cpath = _strlist2charss(path)
 
         self._lock.acquire()
-        result = regfi.regfi_iterator_walk_path(self._iter, cpath)
+        result = regfi.regfi_iterator_descend(self._iter, cpath)
         self._lock.release()
         if not result:
             # XXX: Use non-generic exception
             raise Exception('Could not locate path.\n'+getLogMessages())
+
+    ## Obtains a list of the current key's ancestry
+    #
+    # @return A list of all parent keys starting with the root Key and ending
+    #         with the current Key
+    def ancestry(self):
+        self._lock.acquire()
+        result = regfi.regfi_iterator_ancestry(self._iter)
+        self._lock.release()
+
+        ret_val = []
+        i = 0
+        k = result[i]
+        while k:
+            k = cast(regfi.regfi_reference_record(self._hive.file, k), POINTER(REGFI_NK))
+            ret_val.append(Key(self._hive, k))
+            i += 1
+            k = result[i]
+
+        regfi.regfi_free_record(self._hive.file, result)
+        return ret_val
+
+    ## Obtains the current path of the iterator
+    #
+    # @return A list of key names starting with the root up to and
+    #         including the current key
+    #
+    def current_path(self):
+        ancestry = self.ancestry()
+        return [str(a.name) for a in ancestry]
 
 
 # Freeing symbols defined for the sake of documentation

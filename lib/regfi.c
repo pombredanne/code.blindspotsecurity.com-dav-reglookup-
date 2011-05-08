@@ -1798,14 +1798,14 @@ void regfi_free_record(REGFI_FILE* file, const void* record)
 
 /******************************************************************************
  *****************************************************************************/
-bool regfi_reference_record(REGFI_FILE* file, const void* record)
+const void* regfi_reference_record(REGFI_FILE* file, const void* record)
 {
-  bool ret_val = false;
+  const void* ret_val = NULL;
+
   if(!regfi_lock(file, &file->mem_lock, "regfi_reference_record"))
     return ret_val;
-  
-  if(talloc_reference(NULL, record) != NULL)
-    ret_val = true;
+
+  ret_val = talloc_reference(NULL, record);
 
   regfi_unlock(file, &file->mem_lock, "regfi_reference_record");
   return ret_val;
@@ -1932,9 +1932,6 @@ bool regfi_iterator_down(REGFI_ITERATOR* i)
   subkey = (REGFI_NK*)regfi_iterator_cur_subkey(i);
   if(subkey == NULL)
   {
-    regfi_log_add(REGFI_LOG_WARN, "Could not obtain cur_subkey during"
-                  " iterator_down with subkey index (%d) and key offset=%.8X\n",
-                  i->cur->cur_subkey, i->cur->offset);
     talloc_free(pos);
     return false;
   }
@@ -2025,7 +2022,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* name)
 
 /******************************************************************************
  *****************************************************************************/
-bool regfi_iterator_walk_path(REGFI_ITERATOR* i, const char** path)
+bool regfi_iterator_descend(REGFI_ITERATOR* i, const char** path)
 {
   uint32_t x;
   if(path == NULL)
@@ -2174,7 +2171,7 @@ bool regfi_iterator_next_value(REGFI_ITERATOR* i)
 
 /******************************************************************************
  *****************************************************************************/
-const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i)
+const REGFI_NK** regfi_iterator_ancestry(REGFI_ITERATOR* i)
 {
   REGFI_NK** ret_val;
   void_stack_iterator* iter;
@@ -2202,7 +2199,7 @@ const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i)
   ret_val[k] = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
   void_stack_iterator_free(iter);
 
-  if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_cur_path"))
+  if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_ancestry"))
   {
     talloc_free(ret_val);
     return NULL;
@@ -2211,7 +2208,7 @@ const REGFI_NK** regfi_iterator_cur_path(REGFI_ITERATOR* i)
   for(k=0; k<num_keys; k++)
     talloc_reparent(NULL, ret_val, ret_val[k]);
 
-  regfi_unlock(i->f, &i->f->mem_lock, "regfi_cur_path");
+  regfi_unlock(i->f, &i->f->mem_lock, "regfi_iterator_ancestry");
 
   ret_val[k] = NULL;
   return (const REGFI_NK**)ret_val;
