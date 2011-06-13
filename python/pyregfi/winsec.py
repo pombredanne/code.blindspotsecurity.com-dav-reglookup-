@@ -10,7 +10,7 @@ import uuid
 import ctypes
 import ctypes.util
 from ctypes import *
-import structures
+from .structures import regfi
 
 is_win32 = hasattr(ctypes, 'windll')
 WINSEC_MAX_SUBAUTHS = 15
@@ -76,9 +76,8 @@ WINSEC_DESC._fields_ = [('revision', c_uint8),
                         ('sacl', POINTER(WINSEC_ACL)),
                         ('dacl', POINTER(WINSEC_ACL)),
                         ]
-
-structures.regfi.winsec_sid2str.argtypes = [POINTER(WINSEC_DOM_SID)]
-structures.regfi.winsec_sid2str.restype = POINTER(c_char)
+regfi.winsec_sid2str.argtypes = [POINTER(WINSEC_DOM_SID)]
+regfi.winsec_sid2str.restype = POINTER(c_char)
 
 
 def _guid2uuid(guid):
@@ -127,7 +126,7 @@ class ACE(object):
         self.object = _guid2uuid(ace.obj_guid)
         self.inherited_object = _guid2uuid(ace.inh_guid)
 
-        c_str = structures.regfi.winsec_sid2str(ace.trustee)
+        c_str = regfi.winsec_sid2str(ace.trustee)
         self.trustee = ctypes.cast(c_str, c_char_p).value.decode('utf-8', 'replace')
         libc.free(c_str)
 
@@ -152,11 +151,11 @@ class SecurityDescriptor(object):
     dacl = []
 
     def __init__(self, sec_desc):
-        c_str = structures.regfi.winsec_sid2str(sec_desc.owner_sid)
+        c_str = regfi.winsec_sid2str(sec_desc.owner_sid)
         self.owner = ctypes.cast(c_str, c_char_p).value.decode('utf-8', 'replace')
         libc.free(c_str)
         
-        c_str = structures.regfi.winsec_sid2str(sec_desc.grp_sid)
+        c_str = regfi.winsec_sid2str(sec_desc.grp_sid)
         self.group = ctypes.cast(c_str, c_char_p).value.decode('utf-8', 'replace')
         libc.free(c_str)
 

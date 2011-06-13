@@ -1510,7 +1510,7 @@ REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
     {
       regfi_log_add(REGFI_LOG_WARN, "Could not parse cell at offset"
 		    " 0x%.8X while searching for root key.", cur_offset);
-      return NULL;
+      goto error_locked;
     }
 
     if(!regfi_unlock(file, &file->cb_lock, "regfi_find_root_nk"))
@@ -1529,6 +1529,10 @@ REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
     cur_offset += cell_length;
   }
 
+  return NULL;
+
+ error_locked:
+  regfi_unlock(file, &file->cb_lock, "regfi_find_root_nk");
   return NULL;
 }
 
