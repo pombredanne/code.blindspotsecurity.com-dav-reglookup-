@@ -105,13 +105,18 @@ recurseValue_stat = 0.0
 def checkValues(key):
     global recurseKey_stat
     global recurseValue_stat
-    recurseKey_stat += (key.mtime.low^key.mtime.high - key.max_bytes_subkeyname) * key.flags
+    recurseKey_stat += (key.mtime - key.max_bytes_subkeyname) * key.flags
     for v in key.values:
         recurseValue_stat += (v.data_off - v.data_size) / (1.0 + v.flags) + v.data_in_offset
-        value = key.values[v.name]
-        if v != value:
-            print("WARNING: iterator value '%s' does not match dictionary value '%s'." 
-                  % (v.name, value.name))
+        try:
+            value = key.values[v.name]
+            if v != value:
+                print("WARNING: iterator value '%s' does not match dictionary value '%s'." 
+                      % (v.name, value.name))
+        except Exception as e:
+                print("WARNING: iterator value name '%s' is not retrievable via value list\n"
+                      % (v.name,))
+        
 
 def recurseTree(cur, operation):
     for k in cur.subkeys:
@@ -257,6 +262,7 @@ def iterSecurity(hive, fh):
                     stat += ace.inherited_object.int
     print("  Security stat: %d" % stat)
 
+
 tests = {
     "iterTallyNames":iterTallyNames,
     "iterParentWalk":iterParentWalk,
@@ -285,7 +291,7 @@ selected_tests = sys.argv[1].split(',')
 for st in selected_tests:
     if st not in tests:
         usage()
-        sys.stderr.write("ERROR: %s not a valid test type" % st)
+        sys.stderr.write("ERROR: %s not a valid test type\n\n" % st)
         sys.exit(1)
 
 files = []
@@ -295,7 +301,8 @@ for f in sys.argv[2:]:
 
 start_time = time.time()
 for hname,fh in files:
-    hive = pyregfi.Hive(fh)
+    #hive = pyregfi.Hive(fh)
+    hive = pyregfi.openHive(hname)
     for tname in selected_tests:
         t = tests[tname]
         teststart = time.time()

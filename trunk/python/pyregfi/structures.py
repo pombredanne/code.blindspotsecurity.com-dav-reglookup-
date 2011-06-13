@@ -96,7 +96,7 @@ seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use
 read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t, use_errno=True)
 
 
-from winsec import *
+from .winsec import *
 
 REGFI_VK._fields_ = [('offset', c_uint32),
                      ('cell_size', c_uint32),

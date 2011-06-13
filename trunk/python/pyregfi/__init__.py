@@ -257,7 +257,8 @@ class _StructureWrapper(object):
 
     # Memory management for most regfi structures is taken care of here
     def __del__(self):
-        regfi.regfi_free_record(self._hive.file, self._base)
+        if self._base:
+            regfi.regfi_free_record(self._hive.file, self._base)
 
 
     # Any attribute requests not explicitly defined in subclasses gets passed
@@ -682,7 +683,9 @@ ValueList._constructor = Value
 class Hive():
     file = None
     raw_file = None
-    _root = None
+    _fh = None
+    #_root = None
+
 
     ## The root Key of this Hive
     root = None
@@ -722,6 +725,7 @@ class Hive():
     def __init__(self, fh):
         # The fileno method may not exist, or it may throw an exception
         # when called if the file isn't backed with a descriptor.
+        self._fh = fh
         fn = None
         try:
             # XXX: Native calls to Windows filenos don't seem to work.  
@@ -765,10 +769,8 @@ class Hive():
 
     
     def __del__(self):
-        regfi.regfi_free(self.file)
-        if self.raw_file != None:
-            self.raw_file = None
-
+        if self.file:
+            regfi.regfi_free(self.file)
 
     def __iter__(self):
         return HiveIterator(self)
