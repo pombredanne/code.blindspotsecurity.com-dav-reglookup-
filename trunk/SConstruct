@@ -60,13 +60,17 @@ env.Install(prefix+'man/man1', [man_reglookup, man_reglookup_recover,
 
 if sys.version_info[0] == 2:
    install_items.append('pyregfi2-install.log')
-   env.Command('pyregfi2-install.log', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'], 
+   env.Command('pyregfi2-install.log', ['python/pyregfi/__init__.py', 
+                                        'python/pyregfi/structures.py', 
+                                        'python/pyregfi/winsec.py'],
                "python pyregfi-distutils.py install | tee pyregfi2-install.log")
 
 python_path = os.popen('which python3').read()
 if python_path != '':
    install_items.append('pyregfi3-install.log')
-   env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 'python/pyregfi/structures.py'], 
+   env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 
+                                        'python/pyregfi/structures.py', 
+                                        'python/pyregfi/winsec.py'], 
                "python3 pyregfi-distutils.py install | tee pyregfi3-install.log")
 
 # API documentation

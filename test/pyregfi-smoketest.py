@@ -221,7 +221,41 @@ def iterMultithread(hive, fh):
         t.start()
     for t in threads:
         t.join()
+
+
+def loopSecurity(hive, fh):
+    start = hive.root.fetch_security()
+    print(start.descriptor.group)
+    cur = start.next_security()
+
+    while cur != start:
+        print(start.descriptor.group)
+        cur = cur.next_security()
+
     
+def iterSecurity(hive, fh):
+    stat = 0
+    for k in hive:
+        security = k.fetch_security()
+        stat += security.ref_count
+        stat += len(security.descriptor.owner)
+        stat += len(security.descriptor.group)
+        if security.descriptor.sacl:
+            for ace in security.descriptor.sacl:
+                stat += ace.flags
+                if ace.object:
+                    stat += ace.object.int
+                if ace.inherited_object:
+                    stat += ace.inherited_object.int
+
+        if security.descriptor.dacl:
+            for ace in security.descriptor.dacl:
+                stat += ace.flags
+                if ace.object:
+                    stat += ace.object.int
+                if ace.inherited_object:
+                    stat += ace.inherited_object.int
+    print("  Security stat: %d" % stat)
 
 tests = {
     "iterTallyNames":iterTallyNames,
@@ -232,6 +266,8 @@ tests = {
     "iterIterWalk":iterIterWalk,
     "iterCallbackIO":iterCallbackIO,
     "iterMultithread":iterMultithread,
+    "loopSecurity":loopSecurity,
+    "iterSecurity":iterSecurity,
     }
 
 def usage():
