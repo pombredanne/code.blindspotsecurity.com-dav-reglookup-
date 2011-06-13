@@ -73,25 +73,12 @@
 #include <talloc.h>
 
 /* regfi headers */
-#include <byteorder.h>
-#include <winsec.h>
-#include <void_stack.h>
-#include <range_list.h>
-#include <lru_cache.h>
-
-/* GCC-specific macro for library exports */
-#ifdef _EXPORT
-#undef _EXPORT
-#endif
-#ifdef REGFI_WIN32
-#define _EXPORT() __declspec(dllexport)
-#else
-#define _EXPORT() __attribute__((visibility("default")))
-#endif
-
-#ifndef EOVERFLOW
-# define EOVERFLOW E2BIG
-#endif
+#include "compat.h"
+#include "byteorder.h"
+#include "winsec.h"
+#include "void_stack.h"
+#include "range_list.h"
+#include "lru_cache.h"
 
 /******************************************************************************/
 /* Constants for use while interacting with the library                       */
@@ -1093,6 +1080,42 @@ _EXPORT()
 const REGFI_SK* regfi_fetch_sk(REGFI_FILE* file, const REGFI_NK* key);
 
 
+/** Returns the next SK (security) record referenced by the supplied SK record
+ *
+ * @param file the file from which sk is derived
+ * @param sk   the SK record whose next sibling SK record is desired
+ * 
+ * @return A read-only SK structure, or NULL on failure.
+ *
+ * @note
+ * SK records are included in a circular, doubly-linked list.
+ * To iterate over all SK records, be sure to check for the repetition of
+ * the SK record you started with to determine when all have been traversed.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT()
+const REGFI_SK* regfi_next_sk(REGFI_FILE* file, const REGFI_SK* sk);
+
+
+/** Returns the previous SK (security) record referenced by the supplied SK record
+ *
+ * @param file the file from which sk is derived
+ * @param sk   the SK record whose previous sibling SK record is desired
+ * 
+ * @return A read-only SK structure, or NULL on failure.
+ *
+ * @note
+ * SK records are included in a circular, doubly-linked list.
+ * To iterate over all SK records, be sure to check for the repetition of
+ * the SK record you started with to determine when all have been traversed.
+ *
+ * @ingroup regfiBase
+ */
+_EXPORT()
+const REGFI_SK* regfi_prev_sk(REGFI_FILE* file, const REGFI_SK* sk);
+
+
 /** Retrieves data for a given value.
  *
  * @param file the file from which value is derived
@@ -1541,7 +1564,7 @@ bool regfi_interpret_data(REGFI_FILE* file,
  */
 _EXPORT()
 const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset,
-				  bool strict);
+                              bool strict);
 
 
 

@@ -37,11 +37,7 @@
 #include <math.h>
 #include <talloc.h>
 
-/* GCC-specific macro for library exports */
-#ifdef _EXPORT
-#undef _EXPORT
-#endif
-#define _EXPORT __attribute__((visibility("default")))
+#include "compat.h"
 
 typedef struct _range_list_element
 {
@@ -64,7 +60,7 @@ typedef struct _range_list
  *
  * @return A newly allocated range_list, or NULL if an error occurred.
  */
-_EXPORT
+_EXPORT()
 range_list* range_list_new();
 
 
@@ -75,7 +71,7 @@ range_list* range_list_new();
  *
  * @param rl the range_list to be free()d.
  */
-_EXPORT
+_EXPORT()
 void range_list_free(range_list* rl);
 
 
@@ -85,7 +81,7 @@ void range_list_free(range_list* rl);
  *
  * @return The number of elements currently in the list.
  */
-_EXPORT
+_EXPORT()
 uint32_t range_list_size(const range_list* rl);
 
 
@@ -105,7 +101,7 @@ uint32_t range_list_size(const range_list* rl);
  * or if the submitted range overlaps with an existing element.  Other
  * errors may also be possible.
  */
-_EXPORT
+_EXPORT()
 bool range_list_add(range_list* rl, uint32_t offset, uint32_t length, void* data);
 
 
@@ -118,7 +114,7 @@ bool range_list_add(range_list* rl, uint32_t offset, uint32_t length, void* data
  *
  * @return true if the element was successfully removed, false otherwise.
  */
-_EXPORT
+_EXPORT()
 bool range_list_remove(range_list* rl, uint32_t index);
 
 
@@ -130,7 +126,7 @@ bool range_list_remove(range_list* rl, uint32_t index);
  * @return The element for a given index, or NULL if the element is not 
  *         available.
  */
-_EXPORT
+_EXPORT()
 const range_list_element* range_list_get(const range_list* rl, uint32_t index);
 
 
@@ -141,7 +137,7 @@ const range_list_element* range_list_get(const range_list* rl, uint32_t index);
  *
  * @return A matching element index or a negative value if none could be found.
  */
-_EXPORT
+_EXPORT()
 int32_t range_list_find(const range_list* rl, uint32_t offset);
 
 
@@ -156,7 +152,7 @@ int32_t range_list_find(const range_list* rl, uint32_t offset);
  *  NOTE: May also return NULL if an element matched but the data
  *        element was never set.
  */
-_EXPORT
+_EXPORT()
 void* range_list_find_data(const range_list* rl, uint32_t offset);
 
 
@@ -178,7 +174,7 @@ void* range_list_find_data(const range_list* rl, uint32_t offset);
  *
  * @return true if the element was successfully split, false otherwise.
  */
-_EXPORT
+_EXPORT()
 bool range_list_split_element(range_list* rl, uint32_t index, uint32_t offset);
 
 
@@ -191,7 +187,7 @@ bool range_list_split_element(range_list* rl, uint32_t index, uint32_t offset);
  *
  * @return true if the specified range exists and is complete, false otherwise.
  */
-_EXPORT
+_EXPORT()
 bool range_list_has_range(range_list* rl, uint32_t start, uint32_t length);
 
 #endif

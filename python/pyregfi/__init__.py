@@ -294,10 +294,44 @@ class Value():
     pass
 
 
-## Registry security record and descriptor
-# XXX: Access to security descriptors not yet implemented
+
+## Represents a registry SK record which contains a security descriptor
+# 
 class Security(_StructureWrapper):
-    pass
+    ## Number of keys referencing this SK record 
+    ref_count = 1
+
+    ## The absolute file offset of the SK record's cell in the Hive file
+    offset = 0xCAFEBABE
+
+    ## The @ref SecurityDescriptor for this SK record
+    descriptor = object()
+
+    def __init__(self, hive, base):
+        super(Security, self).__init__(hive, base)
+        # XXX: add checks for NULL pointers
+        self.descriptor = winsec.SecurityDescriptor(base.contents.sec_desc.contents)
+
+    ## Loads the "previous" Security record in the hive
+    #
+    # @note
+    # SK records are included in a circular, doubly-linked list.
+    # To iterate over all SK records, be sure to check for the repetition of
+    # the SK record you started with to determine when all have been traversed.
+    def next_security(self):
+        return Security(self._hive,
+                        regfi.regfi_next_sk(self._hive.file, self._base))
+
+    ## Loads the "previous" Security record in the hive
+    #
+    # @note
+    # SK records are included in a circular, doubly-linked list.
+    # To iterate over all SK records, be sure to check for the repetition of
+    # the SK record you started with to determine when all have been traversed.
+    def prev_security(self):
+        return Security(self._hive,
+                        regfi.regfi_prev_sk(self._hive.file, self._base))
+
 
 ## Abstract class for ValueList and SubkeyList
 class _GenericList(object):
@@ -1037,3 +1071,4 @@ class HiveIterator():
 del Value.name,Value.name_raw,Value.offset,Value.data_size,Value.type,Value.flags
 del Key.name,Key.name_raw,Key.offset,Key.modified,Key.flags
 del Hive.root,Hive.modified,Hive.sequence1,Hive.sequence2,Hive.major_version,Hive.minor_version
+del Security.ref_count,Security.offset,Security.descriptor

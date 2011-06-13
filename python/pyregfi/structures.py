@@ -21,6 +21,8 @@ REGFI_ENCODING_UTF8 = REGFI_ENCODING(1)
 REGFI_DATA_TYPE = c_uint32
 REGFI_NTTIME = c_uint64
 
+REGFI_REGF_SIZE = 0x1000
+
 # Prototype everything first so we don't have to worry about reference order
 class REGFI_VK(Structure):
     pass
@@ -94,6 +96,8 @@ seek_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), c_uint64, c_int, use
 read_cb_type = CB_FACTORY(c_int64, POINTER(REGFI_RAW_FILE), POINTER(c_char), c_size_t, use_errno=True)
 
 
+from winsec import *
+
 REGFI_VK._fields_ = [('offset', c_uint32),
                      ('cell_size', c_uint32),
                      ('name', c_char_p),
@@ -112,7 +116,7 @@ REGFI_VK._fields_ = [('offset', c_uint32),
 
 REGFI_SK._fields_ = [('offset', c_uint32),
                      ('cell_size', c_uint32),
-                     ('sec_desc', c_void_p), #XXX
+                     ('sec_desc', POINTER(WINSEC_DESC)),
                      ('hbin_off', c_uint32),
                      ('prev_sk_off', c_uint32),
                      ('next_sk_off', c_uint32),
@@ -260,6 +264,12 @@ regfi.regfi_fetch_classname.restype = POINTER(REGFI_CLASSNAME)
 regfi.regfi_fetch_sk.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
 regfi.regfi_fetch_sk.restype = POINTER(REGFI_SK)
 
+regfi.regfi_next_sk.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_SK)]
+regfi.regfi_next_sk.restype = POINTER(REGFI_SK)
+
+regfi.regfi_prev_sk.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_SK)]
+regfi.regfi_prev_sk.restype = POINTER(REGFI_SK)
+
 regfi.regfi_fetch_data.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_VK)]
 regfi.regfi_fetch_data.restype = POINTER(REGFI_DATA)
 
@@ -282,7 +292,7 @@ regfi.regfi_get_value.restype = POINTER(REGFI_VK)
 regfi.regfi_get_parentkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]
 regfi.regfi_get_parentkey.restype = POINTER(REGFI_NK)
 
-regfi.regfi_nt2unix_time.argtypes = [POINTER(REGFI_NTTIME)]
+regfi.regfi_nt2unix_time.argtypes = [REGFI_NTTIME]
 regfi.regfi_nt2unix_time.restype = c_double
 
 regfi.regfi_iterator_new.argtypes = [POINTER(REGFI_FILE)]

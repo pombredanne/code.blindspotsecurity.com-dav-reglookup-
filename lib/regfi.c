@@ -402,28 +402,6 @@ char* regfi_ace_perms2str(uint32_t perms)
 }
 
 
-char* regfi_sid2str(WINSEC_DOM_SID* sid)
-{
-  uint32_t i, size = WINSEC_MAX_SUBAUTHS*11 + 24;
-  uint32_t left = size;
-  uint8_t comps = sid->num_auths;
-  char* ret_val = malloc(size);
-  
-  if(ret_val == NULL)
-    return NULL;
-
-  if(comps > WINSEC_MAX_SUBAUTHS)
-    comps = WINSEC_MAX_SUBAUTHS;
-
-  left -= sprintf(ret_val, "S-%u-%u", sid->sid_rev_num, sid->id_auth[5]);
-
-  for (i = 0; i < comps; i++) 
-    left -= snprintf(ret_val+(size-left), left, "-%u", sid->sub_auths[i]);
-
-  return ret_val;
-}
-
-
 char* regfi_get_acl(WINSEC_ACL* acl)
 {
   uint32_t i, extra, size = 0;
@@ -439,7 +417,7 @@ char* regfi_get_acl(WINSEC_ACL* acl)
 
   for (i = 0; i < acl->num_aces && !failed; i++)
   {
-    sid_str = regfi_sid2str(acl->aces[i]->trustee);
+    sid_str = winsec_sid2str(acl->aces[i]->trustee);
     type_str = regfi_ace_type2str(acl->aces[i]->type);
     perms_str = regfi_ace_perms2str(acl->aces[i]->access_mask);
     flags_str = regfi_ace_flags2str(acl->aces[i]->flags);
@@ -504,13 +482,13 @@ char* regfi_get_dacl(WINSEC_DESC *sec_desc)
 
 char* regfi_get_owner(WINSEC_DESC *sec_desc)
 {
-  return regfi_sid2str(sec_desc->owner_sid);
+  return winsec_sid2str(sec_desc->owner_sid);
 }
 
 
 char* regfi_get_group(WINSEC_DESC *sec_desc)
 {
-  return regfi_sid2str(sec_desc->grp_sid);
+  return winsec_sid2str(sec_desc->grp_sid);
 }
 
 
@@ -1499,6 +1477,8 @@ const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
       talloc_unlink(NULL, failure_ptr);
     }
   }
+  else
+    ret_val = talloc_reference(NULL, ret_val);
 
  unlock:
   regfi_unlock(file, &file->sk_lock, "regfi_load_sk");
@@ -2066,6 +2046,28 @@ const REGFI_SK* regfi_fetch_sk(REGFI_FILE* file, const REGFI_NK* key)
     return NULL;
 
   return regfi_load_sk(file, key->sk_off + REGFI_REGF_SIZE, true);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGFI_SK* regfi_next_sk(REGFI_FILE* file, const REGFI_SK* sk)
+{
+  if(sk == NULL || sk->next_sk_off == REGFI_OFFSET_NONE)
+    return NULL;
+
+  return regfi_load_sk(file, sk->next_sk_off + REGFI_REGF_SIZE, true);
+}
+
+
+/******************************************************************************
+ *****************************************************************************/
+const REGFI_SK* regfi_prev_sk(REGFI_FILE* file, const REGFI_SK* sk)
+{
+  if(sk == NULL || sk->prev_sk_off == REGFI_OFFSET_NONE)
+    return NULL;
+
+  return regfi_load_sk(file, sk->prev_sk_off + REGFI_REGF_SIZE, true);
 }
 
 

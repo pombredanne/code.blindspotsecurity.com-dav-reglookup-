@@ -225,7 +225,9 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
   ret_val->flags = buf[1];
   ret_val->size = SVAL(buf, 0x2);
   ret_val->access_mask = IVAL(buf, 0x4);
-
+  ret_val->obj_guid = NULL;
+  ret_val->inh_guid = NULL;
+  
   offset = 0x8;
 
   /* check whether object access is present */
@@ -245,8 +247,6 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
       }
       offset += sizeof(WINSEC_UUID);
     }
-    else
-      ret_val->obj_guid = NULL;
 
     if(ret_val->obj_flags & WINSEC_ACE_OBJECT_INHERITED_PRESENT)
     {
@@ -259,8 +259,6 @@ WINSEC_ACE* winsec_parse_ace(void* talloc_ctx,
       }
       offset += sizeof(WINSEC_UUID);
     }
-    else
-      ret_val->inh_guid = NULL;
   }
 
   ret_val->trustee = winsec_parse_dom_sid(ret_val, buf+offset, buf_len-offset);
@@ -405,6 +403,30 @@ int winsec_sid_compare(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2)
 bool winsec_sid_equal(const WINSEC_DOM_SID* sid1, const WINSEC_DOM_SID* sid2)
 {
   return winsec_sid_compare(sid1, sid2) == 0;
+}
+
+
+/******************************************************************************
+ ******************************************************************************/
+char* winsec_sid2str(const WINSEC_DOM_SID* sid)
+{
+  uint32_t i, size = WINSEC_MAX_SUBAUTHS*11 + 24;
+  uint32_t left = size;
+  uint8_t comps = sid->num_auths;
+  char* ret_val = malloc(size);
+  
+  if(ret_val == NULL)
+    return NULL;
+
+  if(comps > WINSEC_MAX_SUBAUTHS)
+    comps = WINSEC_MAX_SUBAUTHS;
+
+  left -= sprintf(ret_val, "S-%u-%u", sid->sid_rev_num, sid->id_auth[5]);
+
+  for (i = 0; i < comps; i++) 
+    left -= snprintf(ret_val+(size-left), left, "-%u", sid->sub_auths[i]);
+
+  return ret_val;
 }
 
 
