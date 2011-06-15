@@ -278,7 +278,7 @@ regfi.regfi_find_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
 regfi.regfi_find_subkey.restype = c_bool
 
 regfi.regfi_find_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
-                                    c_char_p, POINTER(c_uint32)]
+                                   c_char_p, POINTER(c_uint32)]
 regfi.regfi_find_value.restype = c_bool
 
 regfi.regfi_get_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
@@ -286,7 +286,7 @@ regfi.regfi_get_subkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
 regfi.regfi_get_subkey.restype = POINTER(REGFI_NK)
 
 regfi.regfi_get_value.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK),
-                                   c_uint32]
+                                  c_uint32]
 regfi.regfi_get_value.restype = POINTER(REGFI_VK)
 
 regfi.regfi_get_parentkey.argtypes = [POINTER(REGFI_FILE), POINTER(REGFI_NK)]

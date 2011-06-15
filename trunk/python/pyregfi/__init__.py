@@ -508,7 +508,7 @@ class Key(_StructureWrapper):
             ret_val = _buffer2bytearray(ret_val, length)
         
         elif name == "modified":
-            ret_val = regfi.regfi_nt2unix_time(byref(self._base.contents.mtime))
+            ret_val = regfi.regfi_nt2unix_time(self._base.contents.mtime)
 
         else:
             ret_val = super(Key, self).__getattr__(name)
@@ -763,7 +763,7 @@ class Hive():
             return Key(self, regfi.regfi_get_rootkey(self.file))
 
         elif name == "modified":
-            return regfi.regfi_nt2unix_time(byref(self._base.contents.mtime))
+            return regfi.regfi_nt2unix_time(self._base.contents.mtime)
 
         return getattr(self.file.contents, name)
 
