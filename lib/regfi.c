@@ -1189,6 +1189,9 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
   REGFI_ENCODING from_encoding = (vk->flags & REGFI_VK_FLAG_ASCIINAME)
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
 
+  if(vk->name_length == 0)
+    return;
+
   if(from_encoding == output_encoding)
   {
     vk->name_raw[vk->name_length] = '\0';
@@ -1279,7 +1282,10 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
   int32_t tmp_size;
   REGFI_ENCODING from_encoding = (nk->flags & REGFI_NK_FLAG_ASCIINAME) 
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
-  
+
+  if(nk->name_length == 0)
+    return;  
+
   if(from_encoding == output_encoding)
   {
     nk->name_raw[nk->name_length] = '\0';
@@ -2344,8 +2350,8 @@ bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key,
   uint32_t num_subkeys = regfi_fetch_num_subkeys(key);
   bool found = false;
 
-  /* XXX: cur->name can be NULL in the registry.  
-   *      Should we allow for a way to search for that? 
+  /* XXX: should we allow "(default)" subkey names? 
+   *      Do realistically they exist?
    */
   if(name == NULL)
     return false;
@@ -2356,8 +2362,8 @@ bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key,
     if(cur == NULL)
       return false;
 
-    if((cur->name != NULL)
-       && (strcasecmp(cur->name, name) == 0))
+    /* A NULL name signifies the "(default)" value for a key */
+    if(cur->name != NULL && (strcasecmp(cur->name, name) == 0))
     {
       found = true;
       *index = i;
@@ -2381,20 +2387,16 @@ bool regfi_find_value(REGFI_FILE* file, const REGFI_NK* key,
   uint32_t num_values = regfi_fetch_num_values(key);
   bool found = false;
 
-  /* XXX: cur->name can be NULL in the registry.  
-   *      Should we allow for a way to search for that? 
-   */
-  if(name == NULL)
-    return false;
-
   for(i=0; (i < num_values) && (found == false); i++)
   {
     cur = regfi_get_value(file, key, i);
     if(cur == NULL)
       return false;
 
-    if((cur->name != NULL)
-       && (strcasecmp(cur->name, name) == 0))
+    /* A NULL name signifies the "(default)" value for a key */
+    if(((name == NULL) && (cur->name == NULL))
+       || ((name != NULL) && (cur->name != NULL) 
+           && (strcasecmp(cur->name, name) == 0)))
     {
       found = true;
       *index = i;

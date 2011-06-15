@@ -24,9 +24,9 @@
 #include <iconv.h>
 iconv_t conv_desc;
 
-const char* key_special_chars = ",\"\\/";
-const char* subfield_special_chars = ",\"\\|";
-const char* common_special_chars = ",\"\\";
+const char* key_special_chars = ",\"/";
+const char* subfield_special_chars = ",\"|";
+const char* common_special_chars = ",\"";
 
 #define REGLOOKUP_EXIT_OK       0
 #define REGLOOKUP_EXIT_OSERR   71
@@ -69,7 +69,7 @@ void clearMsgs()
 
 /* Returns a newly malloc()ed string which contains original buffer,
  * except for non-printable or special characters are quoted in hex
- * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
+ * with the syntax '%QQ' where QQ is the hex ascii value of the quoted
  * character.  A null terminator is added, since only ascii, not binary,
  * is returned.
  */
@@ -118,10 +118,11 @@ static char* quote_buffer(const unsigned char* str,
       ret_val = tmp_buf;
     }
     
-    if(str[i] < 32 || str[i] > 126 || strchr(special, str[i]) != NULL)
+    if(str[i] < 32 || str[i] > 126 
+       || str[i] == '%' || strchr(special, str[i]) != NULL)
     {
       num_written += snprintf(ret_val + num_written, buf_len - num_written,
-			      "\\x%.2X", str[i]);
+			      "%%%.2X", str[i]);
     }
     else
       ret_val[num_written++] = str[i];
@@ -134,7 +135,7 @@ static char* quote_buffer(const unsigned char* str,
 
 /* Returns a newly malloc()ed string which contains original string, 
  * except for non-printable or special characters are quoted in hex
- * with the syntax '\xQQ' where QQ is the hex ascii value of the quoted
+ * with the syntax '%QQ' where QQ is the hex ascii value of the quoted
  * character.
  */
 static char* quote_string(const char* str, const char* special)
