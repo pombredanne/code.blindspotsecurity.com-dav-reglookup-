@@ -1,5 +1,5 @@
 /* 
- * Copyright (C) 2005,2009-2010 Timothy D. Morgan
+ * Copyright (C) 2005,2009-2011 Timothy D. Morgan
  * Copyright (C) 1992-2005 Samba development team 
  * 
  * This program is free software; you can redistribute it and/or modify
