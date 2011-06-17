@@ -1996,7 +1996,7 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* name)
 
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
-    /* XXX: report error */
+    regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in find_subkey.");
     return ret_val;
 
   if(regfi_find_subkey(i->f, cur_key, name, &new_index))
@@ -2099,7 +2099,7 @@ const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
   
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
-    /* XXX: report error */
+    regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in cur_subkey.");
     return NULL;
 
   ret_val = regfi_get_subkey(i->f, cur_key, i->cur->cur_subkey);
@@ -2128,7 +2128,7 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name)
 
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
-    /* XXX: report error */
+    regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in find_value.");
     return ret_val;
 
   if(regfi_find_value(i->f, cur_key, name, &new_index))
@@ -2160,7 +2160,7 @@ const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
-    /* XXX: report error */
+    regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in cur_value.");
     return ret_val;
 
   ret_val = regfi_get_value(i->f, cur_key, i->cur->cur_value);
@@ -2522,8 +2522,9 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
       return false;
     }
 
-    /* XXX: check for NULL */
     tmp_str = talloc_realloc(NULL, tmp_str, uint8_t, tmp_size);
+    if(tmp_str == NULL)
+      return false;
     data->interpreted.string = tmp_str;
     data->interpreted_size = tmp_size;
     talloc_reparent(NULL, data, tmp_str);
@@ -2769,11 +2770,20 @@ REGFI_FILE* regfi_parse_regf(REGFI_RAW_FILE* file_cb, bool strict)
 
   memcpy(ret_val->file_name, file_header+0x30,  REGFI_REGF_NAME_SIZE);
 
-  /* XXX: Should we add a warning if these uuid parsers fail?  Can they? */
   ret_val->rm_id = winsec_parse_uuid(ret_val, file_header+0x70, 16);
+  if(ret_val->rm_id == NULL)
+    regfi_log_add(REGFI_LOG_WARN, "Hive header's rm_id failed to parse.");
+
   ret_val->log_id = winsec_parse_uuid(ret_val, file_header+0x80, 16);
+  if(ret_val->log_id == NULL)
+    regfi_log_add(REGFI_LOG_WARN, "Hive header's log_id failed to parse.");
+
   ret_val->flags = IVAL(file_header, 0x90);
+
   ret_val->tm_id = winsec_parse_uuid(ret_val, file_header+0x94, 16);
+  if(ret_val->tm_id == NULL)
+    regfi_log_add(REGFI_LOG_WARN, "Hive header's tm_id failed to parse.");
+
   ret_val->guid_signature = IVAL(file_header, 0xa4);
 
   memcpy(ret_val->reserved1, file_header+0xa8, REGFI_REGF_RESERVED1_SIZE);
@@ -3485,7 +3495,6 @@ uint32_t* regfi_parse_big_data_indirect(REGFI_FILE* file, uint32_t offset,
   bool unalloc;
 
   /* XXX: do something with unalloc? */
-
   max_size = regfi_calc_maxsize(file, offset);
   if((max_size < 0) || (num_chunks*sizeof(uint32_t) + 4 > max_size))
     return NULL;

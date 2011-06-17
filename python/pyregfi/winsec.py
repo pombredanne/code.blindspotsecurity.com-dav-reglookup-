@@ -96,7 +96,8 @@ def _guid2uuid(guid):
                              ^ guid.contents.node[5]))
 
 ## Represents a Microsoft access control entry, which are elements of access
-#  control lists
+#  control lists.  For more information, see: 
+#    http://msdn.microsoft.com/en-us/library/aa374868%28v=vs.85%29.aspx
 #
 #  @note
 #  This interface is subject to change
@@ -135,6 +136,10 @@ class ACE(object):
         self.access_mask = int(ace.access_mask)
 
 
+## A Microsoft security descriptor
+# For more information, see:
+#   http://msdn.microsoft.com/en-us/library/aa379563%28v=vs.85%29.aspx
+#
 class SecurityDescriptor(object):
     ## The security descriptor's owner SID, as a string
     owner = "S-1-2-..."
@@ -142,12 +147,14 @@ class SecurityDescriptor(object):
     ## The security descriptor's group SID, as a string
     group = "S-1-2-..."
 
-    ## A list of @ref ACE objects which represents the System ACL
-    # May be None if a sacl isn't defined
+    ## The system access control list represented as a list of @ref ACE objects.
+    # 
+    # Is set to None if a sacl isn't defined
     sacl = []
 
-    ## A list of @ref ACE objects which represents the User ACL
-    # May be None if a dacl isn't defined
+    ## The discretionary access control list represented as a list of @ref ACE objects
+    #
+    # Is set to None if a dacl isn't defined
     dacl = []
 
     def __init__(self, sec_desc):
@@ -159,7 +166,6 @@ class SecurityDescriptor(object):
         self.group = ctypes.cast(c_str, c_char_p).value.decode('utf-8', 'replace')
         libc.free(c_str)
 
-        # XXX: add checks for NULL pointers
         self.sacl = None
         if sec_desc.sacl:
             self.sacl = []

@@ -10,13 +10,11 @@
 # registry library.  
 #
 # The library operates on registry hives, each of which is contained within a
-# single file.  To get started, one must first open the registry hive file with
-# the open() or file() Python built-in functions (or equivalent) and then pass
-# the resulting file object to pyregfi. For example:
+# single file.  The quickest way to get started, is to use the @ref openHive() 
+# function to obtain a Hive object.  For example:
 # @code
 # >>> import pyregfi
-# >>> fh = open('/mnt/win/c/WINDOWS/system32/config/system', 'rb')
-# >>> myHive = pyregfi.Hive(fh)
+# >>> myHive = pyregfi.openHive('/mnt/win/c/WINDOWS/system32/config/system')
 # @endcode
 #
 # Using this Hive object, one can begin investigating what top-level keys
@@ -299,13 +297,13 @@ class Value():
 ## Represents a registry SK record which contains a security descriptor
 # 
 class Security(_StructureWrapper):
-    ## Number of keys referencing this SK record 
+    ## Number of registry Keys referencing this SK record
     ref_count = 1
 
     ## The absolute file offset of the SK record's cell in the Hive file
     offset = 0xCAFEBABE
 
-    ## The @ref SecurityDescriptor for this SK record
+    ## The @ref winsec.SecurityDescriptor for this SK record
     descriptor = object()
 
     def __init__(self, hive, base):
@@ -313,7 +311,7 @@ class Security(_StructureWrapper):
         # XXX: add checks for NULL pointers
         self.descriptor = winsec.SecurityDescriptor(base.contents.sec_desc.contents)
 
-    ## Loads the "previous" Security record in the hive
+    ## Loads the "next" Security record in the hive
     #
     # @note
     # SK records are included in a circular, doubly-linked list.
@@ -336,6 +334,7 @@ class Security(_StructureWrapper):
 
 ## Abstract class for ValueList and SubkeyList
 class _GenericList(object):
+    # XXX: consider implementing keys(), values(), items() and other dictionary methods
     _hive = None
     _key_base = None
     _length = None
@@ -372,9 +371,21 @@ class _GenericList(object):
 
     ## Retrieves a list element by name
     #
+    # @param name The name of the subkey or value desired.  
+    #             This is case-sensitive.
+    #
+    # @note The registry format does inherently prevent multiple
+    #       subkeys or values from having the same name.  
+    #       This interface simply returns the first match.  
+    #       Lookups using this method could also fail due to incorrectly
+    #       encoded strings.
+    #       To identify any duplicates, use the iterator interface to 
+    #       check every list element.
+    #
     # @return the first element whose name matches, or None if the element
     #         could not be found
     def __getitem__(self, name):
+        # XXX: Consider interpreting integer names as offsets in the underlying list
         index = ctypes.c_uint32()
         if isinstance(name, str):
             name = name.encode('utf-8')
@@ -390,6 +401,10 @@ class _GenericList(object):
                                                        index))
         raise KeyError('')
 
+
+    ## Fetches the requested element by name, or the default value if the lookup
+    #  fails.
+    # 
     def get(self, name, default):
         try:
             return self[name]
@@ -425,9 +440,9 @@ class _GenericList(object):
 #   mySubkey = myKey.subkeys["keyName"]
 # @endcode
 #
-# @note SubkeyLists should never be accessed directly and only exist
-#       in association with a parent Key object.  Do not retain references to 
-#       SubkeyLists.  Instead, access them via their parent Key at all times.
+# You may also request the len() of a subkeys list. 
+# However keys(), values(), items() and similar methods are not currently 
+# implemented.
 class SubkeyList(_GenericList):
     _fetch_num = regfi.regfi_fetch_num_subkeys
     _find_element = regfi.regfi_find_subkey
@@ -446,9 +461,9 @@ class SubkeyList(_GenericList):
 #   myValue = myKey.values["valueName"]
 # @endcode
 #
-# @note ValueLists should never be accessed directly and only exist
-#       in association with a parent Key object.  Do not retain references to 
-#       ValueLists.  Instead, access them via their parent Key at all times.
+# You may also request the len() of a values list. 
+# However keys(), values(), items() and similar methods are not currently 
+# implemented.
 class ValueList(_GenericList):
     _fetch_num = regfi.regfi_fetch_num_values
     _find_element = regfi.regfi_find_value
@@ -459,10 +474,10 @@ class ValueList(_GenericList):
 # These represent registry keys (@ref REGFI_NK records) and provide
 # access to their subkeys, values, and other metadata.
 #
-# @note Value instances may provide access to more than the attributes
+# @note Key instances may provide access to more attributes than are
 #       documented here.  However, undocumented attributes may change over time
 #       and are not officially supported.  If you need access to an attribute 
-#       not shown here, see pyregfi.structures.
+#       not shown here, see @ref pyregfi.structures.
 class Key(_StructureWrapper):
     ## A @ref ValueList object representing the list of Values 
     #  stored on this Key
@@ -557,6 +572,10 @@ class Key(_StructureWrapper):
             return Key(self._hive, parent_base)
         return None
 
+
+    ## Checks to see if this Key is the root of its Hive
+    #
+    #  @return True if it is, False otherwise
     def is_root(self):
         return (self._hive.root == self)
 
@@ -566,10 +585,10 @@ class Key(_StructureWrapper):
 # These represent registry values (@ref REGFI_VK records) and provide
 # access to their associated data.
 #
-# @note Value instances may provide access to more than the attributes
+# @note Value instances may provide access to more attributes than are
 #       documented here.  However, undocumented attributes may change over time
 #       and are not officially supported.  If you need access to an attribute
-#       not shown here, see pyregfi.structures.
+#       not shown here, see @ref pyregfi.structures.
 class Value(_StructureWrapper):
     ## The raw Value name as an uninterpreted bytearray
     name_raw = (b"...")
