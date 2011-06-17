@@ -749,7 +749,8 @@ class Hive():
         try:
             # XXX: Native calls to Windows filenos don't seem to work.  
             #      Need to investigate why.
-            if not is_win32 and hasattr(fh, 'fileno'):
+            #if not is_win32 and hasattr(fh, 'fileno'):
+            if hasattr(fh, 'fileno'):
                 fn = fh.fileno()
         except:
             pass
