@@ -64,6 +64,7 @@ def iterParentWalk(hive, fh):
     for k in hive:
         path = getCurrentPath(k)
         try:
+            print(repr(path))
             hive_iter = hive.subtree(path)
             if hive_iter.current_key() != k:
                 print("WARNING: k != current_key for path '%s'." % path)
@@ -173,7 +174,8 @@ def iterIterWalk(hive, fh):
             while sk != None:
                 ssk = hive_iter.find_subkey(sk.name)
                 if ssk != None:
-                    sk_stat += len(ssk.name)
+                    if ssk.name != None:
+                        sk_stat += len(ssk.name)
                 else:
                     print("WARNING: ssk was None")
                 sk = hive_iter.next_subkey()
@@ -182,7 +184,8 @@ def iterIterWalk(hive, fh):
             while v != None:
                 vv = hive_iter.find_value(v.name)
                 if vv != None:
-                    v_stat += len(vv.name)
+                    if vv.name != None:
+                        v_stat += len(vv.name)
                 else:
                     print("WARNING: vv was None")
                 v = hive_iter.next_value()
@@ -229,13 +232,18 @@ def iterMultithread(hive, fh):
 
 
 def loopSecurity(hive, fh):
-    start = hive.root.fetch_security()
-    print(start.descriptor.group)
-    cur = start.next_security()
-
-    while cur != start:
-        print(start.descriptor.group)
-        cur = cur.next_security()
+    cur = hive.root.fetch_security()
+    while True:
+        stat += len(cur.descriptor.owner)
+        stat += len(cur.descriptor.group)
+        if cur.descriptor.sacl:
+            stat += len(cur.descriptor.sacl)
+        if cur.descriptor.dacl:
+            stat += len(cur.descriptor.dacl)
+        
+        nxt = cur.next_security()
+        if cur == nxt:
+            break
 
     
 def iterSecurity(hive, fh):
@@ -277,7 +285,7 @@ tests = {
     }
 
 def usage():
-    sys.stderr.write("USAGE: pyregfi-smoketest.py test1[,test2[,...]] hive1 [hive2 ...]\n")
+    sys.stderr.write("USAGE: pyregfi-smoketest.py { test1[,test2[,...]] | * } hive1 [hive2 ...]\n")
     sys.stderr.write("\tAvailable tests:\n")
     for t in tests.keys():
         sys.stderr.write("\t\t%s\n" % t)
@@ -287,12 +295,15 @@ if len(sys.argv) < 3:
     usage()
     sys.exit(1)
 
-selected_tests = sys.argv[1].split(',')
-for st in selected_tests:
-    if st not in tests:
-        usage()
-        sys.stderr.write("ERROR: %s not a valid test type\n\n" % st)
-        sys.exit(1)
+if sys.argv[1] == '*':
+    selected_tests = tests.keys()
+else:
+    selected_tests = sys.argv[1].split(',')
+    for st in selected_tests:
+        if st not in tests:
+            usage()
+            sys.stderr.write("ERROR: %s not a valid test type\n\n" % st)
+            sys.exit(1)
 
 files = []
 for f in sys.argv[2:]:

@@ -1185,7 +1185,7 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
    *      Also, it may be useful to use this information to limit false positives
    *      when recovering deleted VK records.
    */
-  int32_t tmp_size;
+  REGFI_BUFFER tmp_buf;
   REGFI_ENCODING from_encoding = (vk->flags & REGFI_VK_FLAG_ASCIINAME)
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
 
@@ -1199,22 +1199,21 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
   }
   else
   {
-    vk->name = talloc_array(vk, char, vk->name_length+1);
-    if(vk->name == NULL)
-      return;
-
-    tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
-				  regfi_encoding_int2str(output_encoding),
-				  vk->name_raw, vk->name,
-				  vk->name_length, vk->name_length+1);
-    if(tmp_size < 0)
+    tmp_buf = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
+                                 regfi_encoding_int2str(output_encoding),
+                                 vk->name_raw, vk->name_length);
+    if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
 			" value name to encoding %s.  Error message: %s",
 			regfi_encoding_int2str(output_encoding), 
-			strerror(-tmp_size));
-      talloc_free(vk->name);
+			strerror(errno));
       vk->name = NULL;
+    }
+    else
+    {
+      vk->name = (char*)tmp_buf.buf;
+      talloc_reparent(NULL, vk, vk->name);
     }
   }
 }
@@ -1279,7 +1278,7 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
    *      Also, it may be useful to use this information to limit false positives
    *      when recovering deleted NK records.
    */
-  int32_t tmp_size;
+  REGFI_BUFFER tmp_buf;
   REGFI_ENCODING from_encoding = (nk->flags & REGFI_NK_FLAG_ASCIINAME) 
     ? REGFI_ENCODING_ASCII : REGFI_ENCODING_UTF16LE;
 
@@ -1293,24 +1292,21 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
   }
   else
   {
-    nk->name = talloc_array(nk, char, nk->name_length+1);
-    if(nk->name == NULL)
-      return;
-
-    memset(nk->name,0,nk->name_length+1);
-
-    tmp_size = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
-				  regfi_encoding_int2str(output_encoding),
-				  nk->name_raw, nk->name,
-				  nk->name_length, nk->name_length+1);
-    if(tmp_size < 0)
+    tmp_buf = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
+                                 regfi_encoding_int2str(output_encoding),
+                                 nk->name_raw, nk->name_length);
+    if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
-			" key name to encoding %s.  Error message: %s",
-			regfi_encoding_int2str(output_encoding), 
-			strerror(-tmp_size));
-      talloc_free(nk->name);
+                    " key name to encoding %s.  Error message: %s",
+                    regfi_encoding_int2str(output_encoding), 
+                    strerror(errno));
       nk->name = NULL;
+    }
+    else
+    {
+      nk->name = (char*)tmp_buf.buf;
+      talloc_reparent(NULL, nk, nk->name);
     }
   }
 }
@@ -2242,9 +2238,9 @@ const REGFI_CLASSNAME* regfi_fetch_classname(REGFI_FILE* file,
 {
   REGFI_CLASSNAME* ret_val;
   uint8_t* raw;
-  char* interpreted;
+  REGFI_BUFFER tmp_buf;
   uint32_t offset;
-  int32_t conv_size, max_size;
+  int32_t max_size;
   uint16_t parse_length;
 
   if(key->classname_off == REGFI_OFFSET_NONE || key->classname_length == 0)
@@ -2275,26 +2271,20 @@ const REGFI_CLASSNAME* regfi_fetch_classname(REGFI_FILE* file,
   ret_val->size = parse_length;
   talloc_reparent(NULL, ret_val, raw);
 
-  interpreted = talloc_array(NULL, char, parse_length);
-
-  conv_size = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
-				 regfi_encoding_int2str(file->string_encoding),
-				 raw, interpreted,
-				 parse_length, parse_length);
-  if(conv_size < 0)
+  tmp_buf = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
+                               regfi_encoding_int2str(file->string_encoding),
+                               raw, parse_length);
+  if(tmp_buf.buf == NULL)
   {
     regfi_log_add(REGFI_LOG_WARN, "Error occurred while"
 		  " converting classname to charset %s.  Error message: %s",
-		  file->string_encoding, strerror(-conv_size));
-    talloc_free(interpreted);
+		  file->string_encoding, strerror(errno));
     ret_val->interpreted = NULL;
   }
   else
   {
-    /* XXX: check for NULL return here? */
-    interpreted = talloc_realloc(NULL, interpreted, char, conv_size);
-    ret_val->interpreted = interpreted;
-    talloc_reparent(NULL, ret_val, interpreted);
+    ret_val->interpreted = (char*)tmp_buf.buf;
+    talloc_reparent(NULL, ret_val, tmp_buf.buf);
   }
 
   return ret_val;
@@ -2364,6 +2354,10 @@ bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key,
   if(name == NULL)
     return false;
 
+  /* XXX: Should lazily build a hash table in memory to index where keys are when
+   *      there are a large number of subkeys.  Attach this to cached keys to
+   *      bound the extra amount of memory used. 
+   */
   for(i=0; (i < num_subkeys) && (found == false); i++)
   {
     cur = regfi_get_subkey(file, key, i);
@@ -2395,6 +2389,10 @@ bool regfi_find_value(REGFI_FILE* file, const REGFI_NK* key,
   uint32_t num_values = regfi_fetch_num_values(key);
   bool found = false;
 
+  /* XXX: Should lazily build a hash table in memory to index where values are when
+   *      there are a large number of them.  Attach this to cached keys to
+   *      bound the extra amount of memory used. 
+   */
   for(i=0; (i < num_values) && (found == false); i++)
   {
     cur = regfi_get_value(file, key, i);
@@ -2493,10 +2491,9 @@ REGFI_DATA* regfi_buffer_to_data(REGFI_BUFFER raw_data)
 bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
 			  uint32_t type, REGFI_DATA* data)
 {
+  REGFI_BUFFER tmp_buf;
   uint8_t** tmp_array;
-  uint8_t* tmp_str;
-  int32_t tmp_size;
-  uint32_t i, j, array_size;
+  uint32_t i, j;
 
   if(data == NULL)
     return false;
@@ -2507,35 +2504,23 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
   case REG_EXPAND_SZ:
   /* REG_LINK is a symbolic link, stored as a unicode string. */
   case REG_LINK:
-    tmp_str = talloc_array(NULL, uint8_t, data->size);
-    if(tmp_str == NULL)
-    {
-      data->interpreted.string = NULL;
-      data->interpreted_size = 0;
-      return false;
-    }
-      
-    tmp_size = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
-				  regfi_encoding_int2str(string_encoding),
-				  data->raw, (char*)tmp_str, 
-				  data->size, data->size);
-    if(tmp_size < 0)
+    tmp_buf = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
+                                 regfi_encoding_int2str(string_encoding),
+                                 data->raw, data->size);
+    if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
-		    " converting data of type %d to %d.  Error message: %s",
-		    type, string_encoding, strerror(-tmp_size));
-      talloc_free(tmp_str);
+		    " converting data of type %d to string encoding %d."
+                    "  Error message: %s",
+		    type, string_encoding, strerror(errno));
       data->interpreted.string = NULL;
       data->interpreted_size = 0;
       return false;
     }
 
-    tmp_str = talloc_realloc(NULL, tmp_str, uint8_t, tmp_size);
-    if(tmp_str == NULL)
-      return false;
-    data->interpreted.string = tmp_str;
-    data->interpreted_size = tmp_size;
-    talloc_reparent(NULL, data, tmp_str);
+    data->interpreted.string = tmp_buf.buf;
+    data->interpreted_size = tmp_buf.len;
+    talloc_reparent(NULL, data, tmp_buf.buf);
     break;
 
   case REG_DWORD:
@@ -2573,54 +2558,45 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
     break;
     
   case REG_MULTI_SZ:
-    tmp_str = talloc_array(NULL, uint8_t, data->size);
-    if(tmp_str == NULL)
-    {
-      data->interpreted.multiple_string = NULL;
-      data->interpreted_size = 0;
-      return false;
-    }
-
     /* Attempt to convert entire string from UTF-16LE to output encoding,
      * then parse and quote fields individually.
      */
-    tmp_size = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
-				  regfi_encoding_int2str(string_encoding),
-				  data->raw, (char*)tmp_str,
-				  data->size, data->size);
-    if(tmp_size < 0)
+    tmp_buf = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
+                                 regfi_encoding_int2str(string_encoding),
+                                 data->raw, data->size);
+    if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
-		    " converting data of type %d to %s.  Error message: %s",
-		    type, string_encoding, strerror(-tmp_size));
-      talloc_free(tmp_str);
+		    " converting data of type %d to string encoding %d."
+                    "  Error message: %s",
+		    type, string_encoding, strerror(errno));
       data->interpreted.multiple_string = NULL;
       data->interpreted_size = 0;
       return false;
     }
 
-    array_size = tmp_size+1;
-    tmp_array = talloc_array(NULL, uint8_t*, array_size);
+    tmp_array = talloc_array(NULL, uint8_t*, tmp_buf.len+1);
     if(tmp_array == NULL)
     {
-      talloc_free(tmp_str);
+      talloc_free(tmp_buf.buf);
       data->interpreted.string = NULL;
       data->interpreted_size = 0;
       return false;
     }
-    
-    tmp_array[0] = tmp_str;
-    for(i=0,j=1; i < tmp_size && j < array_size-1; i++)
+
+    tmp_array[0] = tmp_buf.buf;
+    for(i=0,j=1; i < tmp_buf.len && j < tmp_buf.len; i++)
     {
-      if(tmp_str[i] == '\0' && (i+1 < tmp_size) && tmp_str[i+1] != '\0')
-	tmp_array[j++] = tmp_str+i+1;
+      if(tmp_buf.buf[i] == '\0' && (i+1 < tmp_buf.len) 
+         && tmp_buf.buf[i+1] != '\0')
+	tmp_array[j++] = tmp_buf.buf+i+1;
     }
     tmp_array[j] = NULL;
     tmp_array = talloc_realloc(NULL, tmp_array, uint8_t*, j+1);
     data->interpreted.multiple_string = tmp_array;
     /* XXX: how meaningful is this?  should we store number of strings instead? */
-    data->interpreted_size = tmp_size;
-    talloc_reparent(NULL, tmp_array, tmp_str);
+    data->interpreted_size = tmp_buf.len;
+    talloc_reparent(NULL, tmp_array, tmp_buf.buf);
     talloc_reparent(NULL, data, tmp_array);
     break;
 
@@ -2662,40 +2638,82 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
 
 
 /******************************************************************************
- * Convert from UTF-16LE to specified character set. 
- * On error, returns a negative errno code.
+ * Convert string from input_charset to output_charset.
+ * On error, returns a NULL buf attribute and sets the errno.
  *****************************************************************************/
-int32_t regfi_conv_charset(const char* input_charset, const char* output_charset,
-			   uint8_t* input, char* output, 
-			   uint32_t input_len, uint32_t output_max)
+REGFI_BUFFER regfi_conv_charset(const char* input_charset, const char* output_charset,
+                                uint8_t* input, uint32_t input_len)
 {
   iconv_t conv_desc;
   char* inbuf = (char*)input;
-  char* outbuf = output;
-  size_t in_len = (size_t)input_len;
-  size_t out_len = (size_t)(output_max-1);
+  char* outbuf;
+  char* retbuf;
+  size_t allocated = (size_t)input_len;
+  size_t in_left = (size_t)input_len;
+  size_t out_left = (size_t)allocated-1;
+  REGFI_BUFFER ret_val;
   int ret;
 
+  ret_val.buf = NULL;
+  ret_val.len = 0;
+  retbuf = talloc_array(NULL, char, allocated);
+  outbuf = retbuf;
+  if(outbuf == NULL)
+  {
+    errno = ENOMEM;
+    return ret_val;
+  }
+
+  /* Set up conversion descriptor. */
   /* XXX: Consider creating a couple of conversion descriptors earlier,
    *      storing them on an iterator so they don't have to be recreated
    *      each time.
    */
-
-  /* Set up conversion descriptor. */
   conv_desc = iconv_open(output_charset, input_charset);
 
-  ret = iconv(conv_desc, &inbuf, &in_len, &outbuf, &out_len);
+  ret = 0;
+  do
+  {
+    if(ret == -1)
+    {
+      retbuf = talloc_realloc(NULL, retbuf, char, allocated+(in_left*2));
+      if(retbuf == NULL)
+      {
+        errno = ENOMEM;
+        return ret_val;
+      }
+      outbuf = retbuf+(allocated-1-out_left);
+      out_left += in_left*2;
+      allocated += in_left*2;
+    }
+    ret = iconv(conv_desc, &inbuf, &in_left, &outbuf, &out_left);
+    
+  } while(ret == -1 && errno == E2BIG);
+  
   if(ret == -1)
   {
     iconv_close(conv_desc);
-    return -errno;
+    return ret_val;
   }
-  *outbuf = '\0';
 
-  iconv_close(conv_desc);  
-  return output_max-out_len-1;
+  /* Save memory */
+  if(out_left > 0)
+  {
+    retbuf = talloc_realloc(NULL, retbuf, char, allocated-out_left);
+    if(retbuf == NULL)
+    {
+      errno = ENOMEM;
+      return ret_val;
+    }
+    allocated -= out_left;
+  }
+  retbuf[allocated-1] = '\0';
+  iconv_close(conv_desc);
+
+  ret_val.buf = (uint8_t*)retbuf;
+  ret_val.len = allocated-1;
+  return ret_val;
 }
-
 
 
 /*******************************************************************

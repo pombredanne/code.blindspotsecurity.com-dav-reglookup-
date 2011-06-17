@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Timothy D. Morgan
+ * Copyright (C) 2005-2011 Timothy D. Morgan
  * Copyright (C) 2010 Michael Cohen
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
@@ -1151,7 +1151,7 @@ const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file,
  *
  * @param file  the file from which key is derived
  * @param key   the key whose subkey is desired
- * @param name  name of the desired subkey
+ * @param name  name of the desired subkey (case-insensitive)
  * @param index a return value: the index of the desired subkey.
  *              undefined on error
  *
@@ -1170,7 +1170,7 @@ bool regfi_find_subkey(REGFI_FILE* file, const REGFI_NK* key,
  *
  * @param file  the file from which key is derived
  * @param key   the key whose value is desired
- * @param name  name of the desired value
+ * @param name  name of the desired value (case-insensitive)
  * @param index a return value: the index of the desired value.  
  *              undefined on error
  *
@@ -1752,10 +1752,8 @@ REGFI_NK*             regfi_copy_nk(const REGFI_NK* nk);
 REGFI_VK*             regfi_copy_vk(const REGFI_VK* vk);
 _EXPORT()
 int32_t               regfi_calc_maxsize(REGFI_FILE* file, uint32_t offset);
-int32_t               regfi_conv_charset(const char* input_charset, 
-					 const char* output_charset,
-					 uint8_t* input, char* output, 
-					 uint32_t input_len, uint32_t output_max);
+REGFI_BUFFER          regfi_conv_charset(const char* input_charset, const char* output_charset,
+                                         uint8_t* input, uint32_t input_len);
 _EXPORT()
 REGFI_DATA*           regfi_buffer_to_data(REGFI_BUFFER raw_data);
 
