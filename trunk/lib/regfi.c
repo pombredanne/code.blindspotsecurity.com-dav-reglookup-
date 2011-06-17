@@ -1996,8 +1996,10 @@ bool regfi_iterator_find_subkey(REGFI_ITERATOR* i, const char* name)
 
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
+  {
     regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in find_subkey.");
     return ret_val;
+  }
 
   if(regfi_find_subkey(i->f, cur_key, name, &new_index))
   {
@@ -2099,8 +2101,10 @@ const REGFI_NK* regfi_iterator_cur_subkey(REGFI_ITERATOR* i)
   
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
+  {
     regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in cur_subkey.");
     return NULL;
+  }
 
   ret_val = regfi_get_subkey(i->f, cur_key, i->cur->cur_subkey);
 
@@ -2128,8 +2132,10 @@ bool regfi_iterator_find_value(REGFI_ITERATOR* i, const char* name)
 
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
+  {
     regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in find_value.");
     return ret_val;
+  }
 
   if(regfi_find_value(i->f, cur_key, name, &new_index))
   {
@@ -2160,8 +2166,10 @@ const REGFI_VK* regfi_iterator_cur_value(REGFI_ITERATOR* i)
 
   cur_key = regfi_iterator_cur_key(i);
   if(cur_key == NULL)
+  {
     regfi_log_add(REGFI_LOG_ERROR, "Current key invalid in cur_value.");
     return ret_val;
+  }
 
   ret_val = regfi_get_value(i->f, cur_key, i->cur->cur_value);
   
