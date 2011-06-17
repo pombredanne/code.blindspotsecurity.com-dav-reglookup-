@@ -888,6 +888,14 @@ const char* regfi_version();
  *
  * @param fd A file descriptor of an already open file.  Must be seekable.
  *
+ * @param output_encoding Character encoding that strings should be returned in.
+ *                        Only supply the REGFI_ENCODING_* constants, as others 
+ *                        will be rejected.
+ *                        The following values are currently accepted:
+ *                        REGFI_ENCODING_DEFAULT (currently REGFI_ENCODING_ASCII)
+ *                        REGFI_ENCODING_ASCII
+ *                        REGFI_ENCODING_UTF8
+ *
  * @return A reference to a newly allocated REGFI_FILE structure, if successful;
  *         NULL on error.  Use regfi_free to free the returned REGFI_FILE.
  *
@@ -903,6 +911,14 @@ REGFI_FILE* regfi_alloc(int fd, REGFI_ENCODING output_encoding);
  * or have some other reason to emulate a real file.
  *
  * @param file_cb A structure defining the callback functions needed to access the file. 
+ *
+ * @param output_encoding Character encoding that strings should be returned in.
+ *                        Only supply the REGFI_ENCODING_* constants, as others 
+ *                        will be rejected.
+ *                        The following values are currently accepted:
+ *                        REGFI_ENCODING_DEFAULT (currently REGFI_ENCODING_ASCII)
+ *                        REGFI_ENCODING_ASCII
+ *                        REGFI_ENCODING_UTF8
  *
  * @return A reference to a newly allocated REGFI_FILE structure, if successful;
  *         NULL on error.  Use regfi_free to free the returned REGFI_FILE.
@@ -955,7 +971,7 @@ char* regfi_log_get_str();
  *
  * @note When a non-zero message mask is set, messages will
  *       accumulate in memory without limit if they are not fetched using
- *       @ref regfi_get_log_str and subsequently freed by the caller.  It is
+ *       @ref regfi_log_get_str and subsequently freed by the caller.  It is
  *       recommended that messsages be fetched after each regfi API call in
  *       order to provide the most context.
  *
@@ -1227,14 +1243,6 @@ const REGFI_NK* regfi_get_parentkey(REGFI_FILE* file, const REGFI_NK* key);
  *
  * @param file The opened registry file the iterator should be created for.
  *
- * @param output_encoding Character encoding that strings should be returned in.
- *                        Only supply the REGFI_ENCODING_* constants, as others 
- *                        will be rejected.
- *                        The following values are currently accepted:
- *                        REGFI_ENCODING_DEFAULT (currently REGFI_ENCODING_ASCII)
- *                        REGFI_ENCODING_ASCII
- *                        REGFI_ENCODING_UTF8
- *
  * @return A newly allocated REGFI_ITERATOR. 
  *         Must be free()d with regfi_iterator_free.
  *
@@ -1486,8 +1494,8 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
  */
 _EXPORT()
 REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset, 
-			       REGFI_ENCODING output_encoding, 
-			       bool strict);
+                           REGFI_ENCODING output_encoding, 
+                           bool strict);
 
 
 /** Loads a logical subkey list in its entirety which may span multiple records.
