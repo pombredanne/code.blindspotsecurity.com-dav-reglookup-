@@ -61,6 +61,7 @@ WINSEC_DESC* winsec_parse_desc(void* talloc_ctx,
   ret_val->sbz1 = buf[1];
   ret_val->control = SVAL(buf, 0x2);
 
+  /* XXX: should probably reject any non-self relative */
   if(!(ret_val->control & WINSEC_DESC_SELF_RELATIVE))
     fprintf(stderr, "DEBUG: NOT self-relative!\n");
 
