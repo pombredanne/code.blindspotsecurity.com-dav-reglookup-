@@ -14,6 +14,14 @@ things you could look into:
  - It might be nice to have a way to filter results by security 
    descriptor information.  Maybe by MTIME as well.
 
+ - reglookup-timeline needs to be replaced with something cross-platform.  
+   Perhaps a python script that provides MTIME range filtering capabilities.
+
+ - Need to integrate much of reglookup-recover's algorithms into regfi 
+   and then expose them from the bottom-up to provide building blocks 
+   through regfi and pyregfi.  This should be addressed along with code 
+   to support handling of partial/fragmented registry hives.
+
  - Testing, testing, and more testing.  reglookup needs to be more
    heavily tested on all recent Windows platforms.  A regression test
    suite would be nice too.  Some thoughts on this include a script
@@ -25,38 +33,30 @@ things you could look into:
  - Unicode support still needs improvement.  While parsing strings seems
    to be decent, UTF-8 output would be nice.
 
- - Develop and solidify regfi API.  Regfi should be better documented and 
-   eventually needs a set of higher-language wrappers, starting with Python
-   and possibly moving on to Perl as well.
+ - Continue to improve regfi/pyregfi APIs as needed.  winsec library needs more
+   flexibility and documentation.
+
+ - Consider adding regfi wrappers for other high-level languages (perl? ruby?).
 
  - Documentation.  The security descriptor output format needs to be
    documented.  Also, function contracts should be added to the
-   lower-level functions of regfi.c.
+   lower-level functions of regfi.c. Continue adding
 
  - Consider switching from libiconv to Joachim Metz's libuna for
    increased portability and easier builds.
 
  - Grep through the source for 'XXX', and you'll find more.
 
+ - Consider integrating packaging rules for debian/other platforms into trunk.
+
+ - Investigate why file descriptors can't be directly used in Windows
 
 
 1.0 RELEASE
 ===========
 
-Add fields/methods for accessing security descriptors in pyregfi
-
-convert MTIME structure to uint64_t if possible
-
-investigate why file descriptors can't be directly used in Windows
-
-Fill in and update remaining regfi/pyregfi API documentation
-
-Possible debian package build rules
-
-Possibly replace reglookup-timeline with something cross-platform
-
 Testing
   Full diffs
   regfi and pyregfi threading
   valgrind in multiple scenarios for reglookup, reglookup-recover
-
+  double check man pages

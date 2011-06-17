@@ -105,8 +105,6 @@
 #
 # @note Developers strive to make pyregfi thread-safe.
 # 
-# @note Key and Value names are case-sensitive in regfi and pyregfi
-#
 import sys
 import time
 import ctypes
@@ -389,15 +387,17 @@ class _GenericList(object):
     ## Retrieves a list element by name
     #
     # @param name The name of the subkey or value desired.  
-    #             This is case-sensitive.
+    #             This is case-insensitive.
     #
-    # @note The registry format does inherently prevent multiple
-    #       subkeys or values from having the same name.  
-    #       This interface simply returns the first match.  
+    # @note The registry format does not inherently prevent multiple
+    #       subkeys or values from having the same name, having a key
+    #       and a value with the same name, or having the same name in
+    #       different cases that could both match. 
+    #       This interface simply returns the first match in the list.
     #       Lookups using this method could also fail due to incorrectly
-    #       encoded strings.
-    #       To identify any duplicates, use the iterator interface to 
-    #       check every list element.
+    #       encoded strings stored as names.
+    #       To identify any duplicates or elements with malformed names,
+    #       use the iterator interface to check every list element.
     #
     # @return the first element whose name matches, or None if the element
     #         could not be found
