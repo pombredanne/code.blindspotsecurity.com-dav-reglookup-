@@ -1,7 +1,5 @@
 /*
- * Copyright (C) 2005-2010 Timothy D. Morgan
- * Copyright (C) 2010 Michael Cohen
- * Copyright (C) 2005 Gerald (Jerry) Carter
+ * Copyright (C) 2010-2011 Timothy D. Morgan
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

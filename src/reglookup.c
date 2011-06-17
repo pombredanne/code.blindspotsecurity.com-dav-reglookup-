@@ -1,7 +1,7 @@
 /*
  * A utility to read a Windows NT and later registry files.
  *
- * Copyright (C) 2005-2010 Timothy D. Morgan
+ * Copyright (C) 2005-2011 Timothy D. Morgan
  * Copyright (C) 2010 Tobias Mueller (portions of '-i' code)
  * Copyright (C) 2002 Richard Sharpe, rsharpe@richardsharpe.com
  *
