@@ -1174,8 +1174,7 @@ REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset,
 }
 
 /* XXX: should give this boolean return type to indicate errors */
-void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, 
-			       REGFI_ENCODING output_encoding, bool strict)
+void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, bool strict)
 {
   /* XXX: Registry value names are supposedly limited to 16383 characters 
    *      according to:
@@ -1192,7 +1191,7 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
   if(vk->name_length == 0)
     return;
 
-  if(from_encoding == output_encoding)
+  if(from_encoding == file->string_encoding)
   {
     vk->name_raw[vk->name_length] = '\0';
     vk->name = (char*)vk->name_raw;
@@ -1200,13 +1199,13 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
   else
   {
     tmp_buf = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
-                                 regfi_encoding_int2str(output_encoding),
+                                 regfi_encoding_int2str(file->string_encoding),
                                  vk->name_raw, vk->name_length);
     if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
 			" value name to encoding %s.  Error message: %s",
-			regfi_encoding_int2str(output_encoding), 
+			regfi_encoding_int2str(file->string_encoding),
 			strerror(errno));
       vk->name = NULL;
     }
@@ -1221,8 +1220,7 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk,
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset, 
-			   REGFI_ENCODING output_encoding, bool strict)
+REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset, bool strict)
 {
   REGFI_VK* ret_val = NULL;
   int32_t max_size;
@@ -1235,7 +1233,7 @@ REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset,
   if(ret_val == NULL)
     return NULL;
 
-  regfi_interpret_valuename(file, ret_val, output_encoding, strict);
+  regfi_interpret_valuename(file, ret_val, strict);
 
   return ret_val;
 }
@@ -1268,8 +1266,7 @@ REGFI_VALUE_LIST* regfi_load_valuelist(REGFI_FILE* file, uint32_t offset,
 
 
 /* XXX: should give this boolean return type to indicate errors */
-void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, 
-			     REGFI_ENCODING output_encoding, bool strict)
+void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, bool strict)
 {
   /* XXX: Registry key names are supposedly limited to 255 characters according to:
    *      http://msdn.microsoft.com/en-us/library/ms724872%28VS.85%29.aspx
@@ -1285,7 +1282,7 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
   if(nk->name_length == 0)
     return;  
 
-  if(from_encoding == output_encoding)
+  if(from_encoding == file->string_encoding)
   {
     nk->name_raw[nk->name_length] = '\0';
     nk->name = (char*)nk->name_raw;
@@ -1293,13 +1290,13 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
   else
   {
     tmp_buf = regfi_conv_charset(regfi_encoding_int2str(from_encoding),
-                                 regfi_encoding_int2str(output_encoding),
+                                 regfi_encoding_int2str(file->string_encoding),
                                  nk->name_raw, nk->name_length);
     if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
                     " key name to encoding %s.  Error message: %s",
-                    regfi_encoding_int2str(output_encoding), 
+                    regfi_encoding_int2str(file->string_encoding), 
                     strerror(errno));
       nk->name = NULL;
     }
@@ -1315,8 +1312,7 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk,
 /******************************************************************************
  *
  ******************************************************************************/
-REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
-			 REGFI_ENCODING output_encoding, bool strict)
+REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset, bool strict)
 {
   REGFI_NK* nk;
   uint32_t off;
@@ -1352,7 +1348,7 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
     return NULL;
   }
 
-  regfi_interpret_keyname(file, nk, output_encoding, strict);
+  regfi_interpret_keyname(file, nk, strict);
 
   /* get value list */
   if(nk->num_values && (nk->values_off!=REGFI_OFFSET_NONE)) 
@@ -1493,8 +1489,7 @@ const REGFI_SK* regfi_load_sk(REGFI_FILE* file, uint32_t offset, bool strict)
 
 /******************************************************************************
  ******************************************************************************/
-REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin, 
-			     REGFI_ENCODING output_encoding)
+REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin)
 {
   REGFI_NK* nk = NULL;
   uint32_t cell_length;
@@ -1520,7 +1515,7 @@ REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin,
 
     if(!unalloc)
     {
-      nk = regfi_load_key(file, cur_offset, output_encoding, true);
+      nk = regfi_load_key(file, cur_offset, true);
       if(nk != NULL)
       {
 	if(nk->flags & REGFI_NK_FLAG_ROOT)
@@ -1737,7 +1732,7 @@ const REGFI_NK* regfi_get_rootkey(REGFI_FILE* file)
     return NULL;
 
   root_offset = file->root_cell+REGFI_REGF_SIZE;
-  nk = regfi_load_key(file, root_offset, file->string_encoding, true);
+  nk = regfi_load_key(file, root_offset, true);
   if(nk != NULL)
   {
     if(nk->flags & REGFI_NK_FLAG_ROOT)
@@ -1759,7 +1754,7 @@ const REGFI_NK* regfi_get_rootkey(REGFI_FILE* file)
   for(i=0; i < num_hbins && nk == NULL; i++)
   {
     hbin = (REGFI_HBIN*)range_list_get(file->hbins, i)->data;
-    nk = regfi_find_root_nk(file, hbin, file->string_encoding);
+    nk = regfi_find_root_nk(file, hbin);
   }
 
   if(!regfi_rw_unlock(file, &file->hbins_lock, "regfi_get_rootkey"))
@@ -2041,7 +2036,7 @@ const REGFI_NK* regfi_iterator_cur_key(REGFI_ITERATOR* i)
 {
   const REGFI_NK* ret_val = NULL;
 
-  ret_val = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
+  ret_val = regfi_load_key(i->f, i->cur->offset, true);
   return ret_val;
 }
 
@@ -2210,9 +2205,9 @@ const REGFI_NK** regfi_iterator_ancestry(REGFI_ITERATOR* i)
   for(cur=void_stack_iterator_next(iter);
       cur != NULL; cur=void_stack_iterator_next(iter))
   { 
-    ret_val[k++] = regfi_load_key(i->f, cur->offset, i->f->string_encoding, true); 
+    ret_val[k++] = regfi_load_key(i->f, cur->offset, true); 
   }
-  ret_val[k] = regfi_load_key(i->f, i->cur->offset, i->f->string_encoding, true);
+  ret_val[k] = regfi_load_key(i->f, i->cur->offset, true);
   void_stack_iterator_free(iter);
 
   if(!regfi_lock(i->f, &i->f->mem_lock, "regfi_iterator_ancestry"))
@@ -2323,8 +2318,7 @@ const REGFI_DATA* regfi_fetch_data(REGFI_FILE* file,
 	return NULL;
       }
 
-      if(!regfi_interpret_data(file, file->string_encoding, 
-			       value->type, ret_val))
+      if(!regfi_interpret_data(file, value->type, ret_val))
       {
 	regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
 		      " interpreting data for VK record at offset 0x%.8X.",
@@ -2424,8 +2418,8 @@ const REGFI_NK* regfi_get_subkey(REGFI_FILE* file, const REGFI_NK* key,
   if(index < regfi_fetch_num_subkeys(key))
   {
     return regfi_load_key(file, 
-			  key->subkeys->elements[index].offset+REGFI_REGF_SIZE,
-			  file->string_encoding, true);
+                          key->subkeys->elements[index].offset+REGFI_REGF_SIZE, 
+                          true);
   }
 
   return NULL;
@@ -2441,7 +2435,7 @@ const REGFI_VK* regfi_get_value(REGFI_FILE* file, const REGFI_NK* key,
   {
     return regfi_load_value(file, 
 			    key->values->elements[index]+REGFI_REGF_SIZE,
-			    file->string_encoding, true);
+                            true);
   }
 
   return NULL;  
@@ -2455,8 +2449,7 @@ const REGFI_NK* regfi_get_parentkey(REGFI_FILE* file, const REGFI_NK* key)
 {
   if(key != NULL && key->parent_off != REGFI_OFFSET_NONE)
     return regfi_load_key(file, 
-                          key->parent_off+REGFI_REGF_SIZE,
-                          file->string_encoding, true);
+                          key->parent_off+REGFI_REGF_SIZE, true);
 
   return NULL;
 }
@@ -2488,8 +2481,7 @@ REGFI_DATA* regfi_buffer_to_data(REGFI_BUFFER raw_data)
 
 /******************************************************************************
  *****************************************************************************/
-bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
-			  uint32_t type, REGFI_DATA* data)
+bool regfi_interpret_data(REGFI_FILE* file, uint32_t type, REGFI_DATA* data)
 {
   REGFI_BUFFER tmp_buf;
   uint8_t** tmp_array;
@@ -2505,14 +2497,14 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
   /* REG_LINK is a symbolic link, stored as a unicode string. */
   case REG_LINK:
     tmp_buf = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
-                                 regfi_encoding_int2str(string_encoding),
+                                 regfi_encoding_int2str(file->string_encoding),
                                  data->raw, data->size);
     if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
 		    " converting data of type %d to string encoding %d."
                     "  Error message: %s",
-		    type, string_encoding, strerror(errno));
+		    type, file->string_encoding, strerror(errno));
       data->interpreted.string = NULL;
       data->interpreted_size = 0;
       return false;
@@ -2562,14 +2554,14 @@ bool regfi_interpret_data(REGFI_FILE* file, REGFI_ENCODING string_encoding,
      * then parse and quote fields individually.
      */
     tmp_buf = regfi_conv_charset(regfi_encoding_int2str(REGFI_ENCODING_UTF16LE),
-                                 regfi_encoding_int2str(string_encoding),
+                                 regfi_encoding_int2str(file->string_encoding),
                                  data->raw, data->size);
     if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_INFO, "Error occurred while"
 		    " converting data of type %d to string encoding %d."
                     "  Error message: %s",
-		    type, string_encoding, strerror(errno));
+		    type, file->string_encoding, strerror(errno));
       data->interpreted.multiple_string = NULL;
       data->interpreted_size = 0;
       return false;
