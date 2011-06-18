@@ -75,7 +75,7 @@ void printKey(REGFI_FILE* f, REGFI_NK* nk, const char* prefix)
   formatTime(nk->mtime, mtime);
   
   /* XXX: Add command line option to choose output encoding */
-  regfi_interpret_keyname(f, nk, REGFI_ENCODING_ASCII, true);
+  regfi_interpret_keyname(f, nk, true);
 
   quoted_name = get_quoted_keyname(nk);
   if (quoted_name == NULL)
@@ -111,7 +111,7 @@ void printValue(REGFI_FILE* f, REGFI_VK* vk, const char* prefix)
   const char* str_type = NULL;
 
   /* XXX: Add command line option to choose output encoding */
-  regfi_interpret_valuename(f, vk, REGFI_ENCODING_ASCII, true);
+  regfi_interpret_valuename(f, vk, true);
   
   quoted_name = get_quoted_valuename(vk);
   if (quoted_name == NULL)
@@ -128,7 +128,7 @@ void printValue(REGFI_FILE* f, REGFI_VK* vk, const char* prefix)
 
   /* XXX: Add command line option to choose output encoding */
   if(vk->data != NULL 
-     && !regfi_interpret_data(f, REGFI_ENCODING_ASCII, vk->type, vk->data))
+     && !regfi_interpret_data(f, vk->type, vk->data))
   {
     fprintf(stderr, "WARN: Error occurred while interpreting data for VK record"
 	    " at offset 0x%.8X.\n", vk->offset);
@@ -281,7 +281,7 @@ char* getParentPath(REGFI_FILE* f, REGFI_NK* nk)
 	if(path_element != NULL)
 	{
 	  /* XXX: Add command line option to choose output encoding */
-	  regfi_interpret_keyname(f, cur_ancestor, REGFI_ENCODING_ASCII, true);
+	  regfi_interpret_keyname(f, cur_ancestor, true);
 	  
 	  path_element->buf = (uint8_t*)get_quoted_keyname(cur_ancestor);
 	}
@@ -942,7 +942,7 @@ int main(int argc, char** argv)
     if(tmp_key->num_values > 0 && tmp_key->values != NULL)
     {
       /* XXX: Add command line option to choose output encoding */
-      regfi_interpret_keyname(f, tmp_key, REGFI_ENCODING_ASCII, true);
+      regfi_interpret_keyname(f, tmp_key, true);
 
       tmp_name = get_quoted_keyname(tmp_key);
       tmp_path = (char*)malloc(strlen(parent_paths[i])+strlen(tmp_name)+2);

@@ -168,6 +168,7 @@ void* threadLoop(void* file)
   }
 
   regfi_iterator_free(iter);
+  fprintf(stderr, "INFO: thread finished\n");
 
   return NULL;
 }
@@ -187,7 +188,7 @@ int main(int argc, char** argv)
   pthread_t* threads;
 
   num_threads = 10;
-  num_iterations = 10;
+  num_iterations = 2;
 
   /* Process command line arguments */
   if(argc < 2)

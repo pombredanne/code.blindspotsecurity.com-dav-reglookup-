@@ -1482,7 +1482,6 @@ const REGFI_NK** regfi_iterator_ancestry(REGFI_ITERATOR* i);
  */
 _EXPORT()
 REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset, 
-                         REGFI_ENCODING output_encoding, 
                          bool strict);
 
 
@@ -1494,7 +1493,6 @@ REGFI_NK* regfi_load_key(REGFI_FILE* file, uint32_t offset,
  */
 _EXPORT()
 REGFI_VK* regfi_load_value(REGFI_FILE* file, uint32_t offset, 
-                           REGFI_ENCODING output_encoding, 
                            bool strict);
 
 
@@ -1557,7 +1555,6 @@ REGFI_BUFFER regfi_load_big_data(REGFI_FILE* file, uint32_t offset,
  */
 _EXPORT()
 bool regfi_interpret_data(REGFI_FILE* file, 
-			  REGFI_ENCODING string_encoding,
 			  uint32_t type, REGFI_DATA* data);
 
 
@@ -1765,11 +1762,9 @@ double                regfi_nt2unix_time(REGFI_NTTIME nt);
 
 
 _EXPORT()
-void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, 
-			     REGFI_ENCODING output_encoding, bool strict);
+void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, bool strict);
 _EXPORT()
-void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, 
-			       REGFI_ENCODING output_encoding, bool strict);
+void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, bool strict);
 
 _EXPORT()
 void regfi_init();
