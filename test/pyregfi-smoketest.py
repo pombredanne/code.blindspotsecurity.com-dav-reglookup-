@@ -64,7 +64,6 @@ def iterParentWalk(hive, fh):
     for k in hive:
         path = getCurrentPath(k)
         try:
-            print(repr(path))
             hive_iter = hive.subtree(path)
             if hive_iter.current_key() != k:
                 print("WARNING: k != current_key for path '%s'." % path)
@@ -200,8 +199,10 @@ def iterCallbackIO(hive, fh):
     fh.seek(0)
     new_fh = io.BytesIO(fh.read())
     new_hive = pyregfi.Hive(new_fh)
+    stat = 0
     for k in new_hive:
-        pass
+        stat += 1
+    print("  %d keys found" % stat)
 
 
 def threadIterMain(iter):
@@ -233,6 +234,8 @@ def iterMultithread(hive, fh):
 
 def loopSecurity(hive, fh):
     cur = hive.root.fetch_security()
+    first = cur
+    stat = 0
     while True:
         stat += len(cur.descriptor.owner)
         stat += len(cur.descriptor.group)
@@ -242,10 +245,12 @@ def loopSecurity(hive, fh):
             stat += len(cur.descriptor.dacl)
         
         nxt = cur.next_security()
-        if cur == nxt:
+        if first == nxt:
             break
+        cur = nxt
+    print("  Security stat: %d" % stat)
 
-    
+
 def iterSecurity(hive, fh):
     stat = 0
     for k in hive:
