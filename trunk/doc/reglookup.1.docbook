@@ -185,7 +185,7 @@
       and writes them to stdout.  The format is designed to simplify parsing 
       algorithms of other tools by quoting CSV special characters using a 
       common hexadecimal format.  Specifically, special characters or non-ascii 
-      bytes are converted to "\xQQ" where QQ is the hexadecimal value for 
+      bytes are converted to "%XX" where XX is the hexadecimal value for 
       the byte.
     </para>
     <para>
@@ -323,11 +323,6 @@
       of the conversion, a small amount of error (on the order of seconds) may
       be possible.  The documentation available online from Microsoft on 
       this field is very poor.
-    </para>
-    <para>
-      Backslashes are currently considered special characters, to make 
-      parsing easier for automated tools.  However, this causes paths 
-      to be difficult to read by mere mortals.
     </para>
     <para>
       For more information on registry format details, see:
