@@ -199,6 +199,8 @@
     <para>
       For more information on registry format details and the recovery 
       algorithm, see:
+    </para>
+    <para>
         http://sentinelchicken.com/research/registry_format/
         http://sentinelchicken.com/research/registry_recovery/
     </para>
