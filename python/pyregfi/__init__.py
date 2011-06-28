@@ -118,6 +118,9 @@ from pyregfi.structures import *
 # @note This is a static class, there is no need to instantiate it. 
 #       Just access its attributes directly as DATA_TYPES.SZ, etc
 class DATA_TYPES(object):
+    # XXX: add dictionary lookup attributes to convert both directions between
+    #      the integers and typenames
+
     ## None / Unknown
     NONE                       =  0
     ## String
