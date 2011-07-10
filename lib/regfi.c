@@ -46,7 +46,7 @@ static const char* regfi_type_names[] =
    "MULTI_SZ", "RSRC_LIST", "RSRC_DESC", "RSRC_REQ_LIST", "QWORD"};
 
 const char* regfi_encoding_names[] =
-  {"US-ASCII//TRANSLIT", "UTF-8//TRANSLIT", "UTF-16LE//TRANSLIT"};
+  {"US-ASCII", "UTF-8", "UTF-16LE"};
 
 
 /* Ensures regfi_init runs only once */

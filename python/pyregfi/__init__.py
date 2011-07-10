@@ -513,6 +513,9 @@ class Key(_StructureWrapper):
     ## The name of the Key as a (unicode) string
     name = "..."
     
+    ## The string encoding used to store the Key's name ("ascii" or "utf-16-le")
+    name_encoding = "ascii"
+
     ## The absolute file offset of the Key record's cell in the Hive file
     offset = 0xCAFEBABE
 
@@ -534,14 +537,22 @@ class Key(_StructureWrapper):
 
             if not ret_val:
                 ret_val = self.name_raw
+                if ret_val != None:
+                    ret_val = ret_val.decode(self.name_encoding, 'replace')
             else:
                 ret_val = ret_val.decode('utf-8', 'replace')
                 
+        elif name == "name_encoding":
+            flags = super(Key, self).__getattr__("flags")
+            if (flags & structures.REGFI_NK_FLAG_ASCIINAME) > 0:
+                ret_val = "ascii"
+            ret_val = "utf-16-le"
+
         elif name == "name_raw":
             ret_val = super(Key, self).__getattr__(name)
             length = super(Key, self).__getattr__('name_length')
             ret_val = _buffer2bytearray(ret_val, length)
-        
+
         elif name == "modified":
             ret_val = regfi.regfi_nt2unix_time(self._base.contents.mtime)
 
@@ -616,6 +627,9 @@ class Value(_StructureWrapper):
     ## The name of the Value as a (unicode) string
     name = "..."
     
+    ## The string encoding used to store the Value's name ("ascii" or "utf-16-le")
+    name_encoding = "ascii"
+
     ## The absolute file offset of the Value record's cell in the Hive file
     offset = 0xCAFEBABE
 
@@ -701,8 +715,16 @@ class Value(_StructureWrapper):
         if name == "name":
             if not ret_val:
                 ret_val = self.name_raw
+                if ret_val != None:
+                    ret_val = ret_val.decode(self.name_encoding, 'replace')
             else:
                 ret_val = ret_val.decode('utf-8', 'replace')
+
+        elif name == "name_encoding":
+            flags = super(Key, self).__getattr__("flags")
+            if (flags & structures.REGFI_VK_FLAG_ASCIINAME) > 0:
+                ret_val = "ascii"
+            ret_val = "utf-16-le"
 
         elif name == "name_raw":
             length = super(Value, self).__getattr__('name_length')
@@ -1105,11 +1127,11 @@ class HiveIterator():
     #
     def current_path(self):
         ancestry = self.ancestry()
-        return [str(a.name) for a in ancestry]
+        return [a.name for a in ancestry]
 
 
 # Freeing symbols defined for the sake of documentation
-del Value.name,Value.name_raw,Value.offset,Value.data_size,Value.type,Value.flags
-del Key.name,Key.name_raw,Key.offset,Key.modified,Key.flags
+del Value.name,Value.name_encoding,Value.name_raw,Value.offset,Value.data_size,Value.type,Value.flags
+del Key.name,Key.name_encoding,Key.name_raw,Key.offset,Key.modified,Key.flags
 del Hive.root,Hive.modified,Hive.sequence1,Hive.sequence2,Hive.major_version,Hive.minor_version
 del Security.ref_count,Security.offset,Security.descriptor
