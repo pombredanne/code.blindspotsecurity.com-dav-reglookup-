@@ -13,11 +13,11 @@ lib_src = ['lib/regfi.c',
            'lib/lru_cache.c',
            'lib/void_stack.c']
 
-env = Environment(CFLAGS=cflags,
+env = Environment(ENV=os.environ,
+                  CFLAGS=cflags,
                   CPPPATH=['include', '/usr/local/include'],
                   LIBPATH=['lib', '/usr/local/lib'],
                   LIBS=['m', 'pthread', 'regfi', 'talloc'])
-
 
 # Libraries
 libregfi_static = env.Library(lib_src)
@@ -53,10 +53,11 @@ install_items = [prefix+'bin',
                  prefix+'man']
 
 env.Install(prefix+'bin', [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
-env.Install(prefix+'lib', [libregfi, libregfi_static])
+libinstall = env.Install(prefix+'lib', [libregfi, libregfi_static])
 env.Install(prefix+'include/regfi', Glob('include/*.h'))
 env.Install(prefix+'man/man1', [man_reglookup, man_reglookup_recover,
                                 man_reglookup_timeline])
+env.AddPostAction(libinstall, 'ldconfig')
 
 if sys.version_info[0] == 2:
    install_items.append('pyregfi2-install.log')
