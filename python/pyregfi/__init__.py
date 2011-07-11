@@ -711,8 +711,8 @@ class Value(_StructureWrapper):
 
 
     def __getattr__(self, name):
-        ret_val = super(Value, self).__getattr__(name)
         if name == "name":
+            ret_val = super(Value, self).__getattr__(name)
             if not ret_val:
                 ret_val = self.name_raw
                 if ret_val != None:
@@ -727,6 +727,7 @@ class Value(_StructureWrapper):
             ret_val = "utf-16-le"
 
         elif name == "name_raw":
+            ret_val = super(Value, self).__getattr__(name)
             length = super(Value, self).__getattr__('name_length')
             ret_val = _buffer2bytearray(ret_val, length)
 
