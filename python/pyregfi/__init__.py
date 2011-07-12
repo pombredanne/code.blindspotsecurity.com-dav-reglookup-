@@ -711,6 +711,7 @@ class Value(_StructureWrapper):
 
 
     def __getattr__(self, name):
+        ret_val = None
         if name == "name":
             ret_val = super(Value, self).__getattr__(name)
             if not ret_val:
@@ -724,12 +725,16 @@ class Value(_StructureWrapper):
             flags = super(Key, self).__getattr__("flags")
             if (flags & structures.REGFI_VK_FLAG_ASCIINAME) > 0:
                 ret_val = "ascii"
-            ret_val = "utf-16-le"
+            else:
+                ret_val = "utf-16-le"
 
         elif name == "name_raw":
             ret_val = super(Value, self).__getattr__(name)
             length = super(Value, self).__getattr__('name_length')
             ret_val = _buffer2bytearray(ret_val, length)
+
+        else:
+            ret_val = super(Value, self).__getattr__(name)
 
         return ret_val
 
