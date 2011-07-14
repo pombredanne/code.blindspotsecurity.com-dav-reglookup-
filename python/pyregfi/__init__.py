@@ -722,7 +722,7 @@ class Value(_StructureWrapper):
                 ret_val = ret_val.decode('utf-8', 'replace')
 
         elif name == "name_encoding":
-            flags = super(Key, self).__getattr__("flags")
+            flags = super(Value, self).__getattr__("flags")
             if (flags & structures.REGFI_VK_FLAG_ASCIINAME) > 0:
                 ret_val = "ascii"
             else:
