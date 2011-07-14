@@ -1204,9 +1204,10 @@ void regfi_interpret_valuename(REGFI_FILE* file, REGFI_VK* vk, bool strict)
     if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
-			" value name to encoding %s.  Error message: %s",
-			regfi_encoding_int2str(file->string_encoding),
-			strerror(errno));
+                    " value name to encoding %s.  VK offset: 0x%.8X."
+                    "  Error message: %s",
+                    regfi_encoding_int2str(file->string_encoding),
+                    vk->offset, strerror(errno));
       vk->name = NULL;
     }
     else
@@ -1295,9 +1296,10 @@ void regfi_interpret_keyname(REGFI_FILE* file, REGFI_NK* nk, bool strict)
     if(tmp_buf.buf == NULL)
     {
       regfi_log_add(REGFI_LOG_WARN, "Error occurred while converting"
-                    " key name to encoding %s.  Error message: %s",
+                    " key name to encoding %s.  NK offset: 0x%.8X."
+                    "  Error message: %s",
                     regfi_encoding_int2str(file->string_encoding), 
-                    strerror(errno));
+                    nk->offset, strerror(errno));
       nk->name = NULL;
     }
     else
