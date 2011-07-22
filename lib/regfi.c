@@ -795,7 +795,7 @@ REGFI_SUBKEY_LIST* regfi_load_subkeylist_aux(REGFI_FILE* file, uint32_t offset,
 REGFI_SUBKEY_LIST* regfi_parse_subkeylist(REGFI_FILE* file, uint32_t offset, 
 					  uint32_t max_size, bool strict)
 {
-  REGFI_SUBKEY_LIST* ret_val;
+  REGFI_SUBKEY_LIST* ret_val = NULL;
   uint32_t i, cell_length, length, elem_size, read_len;
   uint8_t* elements = NULL;
   uint8_t buf[REGFI_SUBKEY_LIST_MIN_LEN];
@@ -1086,7 +1086,7 @@ REGFI_SK* regfi_parse_sk(REGFI_FILE* file, uint32_t offset, uint32_t max_size,
 REGFI_VALUE_LIST* regfi_parse_valuelist(REGFI_FILE* file, uint32_t offset, 
 					uint32_t num_values, bool strict)
 {
-  REGFI_VALUE_LIST* ret_val;
+  REGFI_VALUE_LIST* ret_val = NULL;
   uint32_t i, cell_length, length, read_len;
   bool unalloc;
 
