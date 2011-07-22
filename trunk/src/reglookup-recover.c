@@ -587,7 +587,7 @@ int extractKeys(REGFI_FILE* f,
 		range_list* unalloc_keys)
 {
   const range_list_element* cur_elem;
-  REGFI_NK* key;
+  REGFI_NK* key = NULL;
   uint32_t i, j;
   int error_code = 0;
 

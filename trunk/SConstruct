@@ -13,7 +13,9 @@ lib_src = ['lib/regfi.c',
            'lib/lru_cache.c',
            'lib/void_stack.c']
 
+cc=os.environ.get('CC', 'gcc')
 env = Environment(ENV=os.environ,
+                  CC=cc,
                   CFLAGS=cflags,
                   CPPPATH=['include', '/usr/local/include'],
                   LIBPATH=['lib', '/usr/local/lib'],
