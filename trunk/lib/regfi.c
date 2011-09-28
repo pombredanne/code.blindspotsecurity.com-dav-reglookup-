@@ -1515,6 +1515,9 @@ REGFI_NK* regfi_find_root_nk(REGFI_FILE* file, const REGFI_HBIN* hbin)
     if(!regfi_unlock(file, &file->cb_lock, "regfi_find_root_nk"))
       return NULL;
 
+    if(cell_length == 0)
+      break;
+
     if(!unalloc)
     {
       nk = regfi_load_key(file, cur_offset, true);
