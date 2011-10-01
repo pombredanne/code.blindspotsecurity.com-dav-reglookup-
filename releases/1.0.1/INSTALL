@@ -1,0 +1,35 @@
+RegLookup Installation
+======================
+
+Prerequisites
+-------------
+
+RegLookup and its associated libraries have the following build dependencies:
+
+ - SCons (package "scons" in most popular distributions or from http://www.scons.org/)
+ - GCC
+ - talloc 2.x (under Debian, "libtalloc2" and "libtalloc-dev")
+ - Python 2 (2.6+) or Python 3  (Python is required for SCons anyway)
+ - Doxygen (optional, only needed to build developer documentation)
+
+Note that iconv support is required, as specified in IEEE Std 1003.1 
+(POSIX.1-2001).  Some platforms still do not contain support for this 
+natively, in which case you may need to install libiconv from:
+  http://www.gnu.org/software/libiconv/
+
+
+Survival Commands
+-----------------
+
+scons
+# and as root
+scons install
+
+
+Advanced Installation
+---------------------
+By default, most RegLookup files are installed in the appropriate
+directories under /usr/local.  In order to override this behavior, set
+the PREFIX environment variable to the desired path.  For example:
+
+$ PREFIX=/home/myuser/reglookup scons install
