@@ -8,6 +8,7 @@ libpthreads_path='.export/win32/libpthreads/'
 libpthread_name='pthreadGC2'
 libtalloc_path='.export/win32/libtalloc/'
 
+latest_release='1.0.1'
 source_targets=('src-trunk', 'src-0.99.0', 'src-1.0.0', 'src-1.0.1')
 win32_targets=('win32-trunk', 'win32-0.99.0', 'win32-1.0.0', 'win32-1.0.1')
 all_targets = source_targets+win32_targets
@@ -40,7 +41,7 @@ echo 'REGFI_VERSION="%(version)s"' > .export/%(path)s/regfi_version.py
 svnversion_cmds='''
 svn info svn+ssh://%(user)s@sentinelchicken.org/home/projects/subversion/reglookup\
   | grep "Last Changed Rev:" | cut -d' ' -f 4 \
-  | sed 's/^/REGFI_VERSION="svn-/' | sed 's/$/"/' > .export/%(path)s/regfi_version.py
+  | sed 's/^/REGFI_VERSION="%(latest_release)s./' | sed 's/$/"/' > .export/%(path)s/regfi_version.py
 '''
 
 cleanup_cmds='''
@@ -167,7 +168,8 @@ for target in COMMAND_LINE_TARGETS:
 
     params = {'user':os.environ['USER'], 
               'path':version2input(version), 
-              'version':version}
+              'version':version,
+              'latest_release':latest_release}
     env.Execute(export_cmds % params)
     if version == 'trunk':
         print env.Execute(svnversion_cmds % params)
