@@ -72,7 +72,7 @@ if sys.version_info[0] == 2:
    env.Command('pyregfi2-install.log', ['python/pyregfi/__init__.py', 
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'],
-               "python pyregfi-distutils.py install --root=%s | tee pyregfi2-install.log" % destdir)
+               "python pyregfi-distutils.py install --root=/%s | tee pyregfi2-install.log" % destdir)
 
 python_path = os.popen('which python3').read()
 if python_path != '':
@@ -80,7 +80,7 @@ if python_path != '':
    env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'], 
-               "python3 pyregfi-distutils.py install --root=%s | tee pyregfi3-install.log" % destdir)
+               "python3 pyregfi-distutils.py install --root=/%s | tee pyregfi3-install.log" % destdir)
 
 # API documentation
 regfi_doc = env.Command('doc/devel/regfi/index.html', 
