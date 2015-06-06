@@ -72,7 +72,6 @@ env.Install(destdir+mandir+'/man1', [man_reglookup, man_reglookup_recover,
 if os.getuid() == 0 and destdir == '':
    env.AddPostAction(libinstall, 'ldconfig')
 
-# Package Maintainers: Do you need more control over these next two sections?
 install_pyregfi = []
 if sys.version_info[0] == 2:
    install_pyregfi.append('pyregfi2-install.log')
