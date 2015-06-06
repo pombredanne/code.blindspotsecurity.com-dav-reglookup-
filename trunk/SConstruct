@@ -4,8 +4,11 @@ sys.dont_write_bytecode = True
 from regfi_version import REGFI_VERSION
 
 cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
-cflags += ' -DREGFI_VERSION=\'"%s"\'' % REGFI_VERSION
-cflags += ' -ggdb'
+cflags += ' -DREGFI_VERSION=\'"%s"\' ' % REGFI_VERSION
+cflags += os.environ.get('CFLAGS','-fPIE -pie -fstack-protector -D_FORTIFY_SOURCE=2')
+
+linkflags = "-shared -fPIC -Wl,-soname,libregfi.so.%s " % REGFI_VERSION
+linkflags += os.environ.get('LDFLAGS','-z relro -z now')
 
 lib_src = ['lib/regfi.c',
            'lib/winsec.c',
@@ -21,10 +24,11 @@ env = Environment(ENV=os.environ,
                   LIBPATH=['lib', '/usr/local/lib'],
                   LIBS=['m', 'pthread', 'regfi', 'talloc'])
 
+
 # Libraries
 libregfi_static = env.Library(lib_src)
 libregfi = env.SharedLibrary(lib_src, LIBS=['m','pthread', 'talloc'], 
-                             LINKFLAGS="-shared -fPIC -Wl,-soname,libregfi.so.%s" % REGFI_VERSION)
+                             LINKFLAGS=linkflags)
 
 
 # Executables
@@ -64,7 +68,8 @@ libinstall = env.Install(destdir+libdir, [libregfi, libregfi_static])
 env.Install(destdir+includedir+'/regfi', Glob('include/*.h'))
 env.Install(destdir+mandir+'/man1', [man_reglookup, man_reglookup_recover,
                                      man_reglookup_timeline])
-if os.getuid() == 0:
+
+if os.getuid() == 0 and destdir == '':
    env.AddPostAction(libinstall, 'ldconfig')
 
 if sys.version_info[0] == 2:
@@ -72,7 +77,7 @@ if sys.version_info[0] == 2:
    env.Command('pyregfi2-install.log', ['python/pyregfi/__init__.py', 
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'],
-               "python pyregfi-distutils.py install --root=/%s | tee pyregfi2-install.log" % destdir)
+               "python setup.py install --root=/%s | tee pyregfi2-install.log" % destdir)
 
 python_path = os.popen('which python3').read()
 if python_path != '':
@@ -80,7 +85,7 @@ if python_path != '':
    env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'], 
-               "python3 pyregfi-distutils.py install --root=/%s | tee pyregfi3-install.log" % destdir)
+               "python3 setup.py install --root=/%s | tee pyregfi3-install.log" % destdir)
 
 # API documentation
 regfi_doc = env.Command('doc/devel/regfi/index.html', 
