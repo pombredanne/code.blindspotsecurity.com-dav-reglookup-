@@ -57,11 +57,8 @@ libdir     = os.environ.get('LIBDIR', prefix + 'lib')
 includedir = os.environ.get('INCLUDEDIR', prefix + 'include')
 mandir     = os.environ.get('MANDIR', prefix + 'man')
 
-install_items = [destdir + bindir,
-                 destdir + libdir,
-                 destdir + includedir + '/regfi',
-                 destdir + mandir]
-
+install_bin = [destdir + bindir, destdir + mandir]
+install_lib = [destdir + libdir, destdir + includedir + '/regfi']
 
 env.Install(destdir+bindir, [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
 libinstall = env.Install(destdir+libdir, [libregfi, libregfi_static])
@@ -72,8 +69,9 @@ env.Install(destdir+mandir+'/man1', [man_reglookup, man_reglookup_recover,
 if os.getuid() == 0 and destdir == '':
    env.AddPostAction(libinstall, 'ldconfig')
 
+install_pyregfi = []
 if sys.version_info[0] == 2:
-   install_items.append('pyregfi2-install.log')
+   install_pyregfi.append('pyregfi2-install.log')
    env.Command('pyregfi2-install.log', ['python/pyregfi/__init__.py', 
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'],
@@ -81,7 +79,7 @@ if sys.version_info[0] == 2:
 
 python_path = os.popen('which python3').read()
 if python_path != '':
-   install_items.append('pyregfi3-install.log')
+   install_pyregfi.append('pyregfi3-install.log')
    env.Command('pyregfi3-install.log', ['python/pyregfi/__init__.py', 
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'], 
@@ -95,6 +93,7 @@ pyregfi_doc = env.Command('doc/devel/pyregfi/index.html',
                           Glob('python/pyregfi/*.py')+['doc/devel/Doxyfile.pyregfi', regfi_doc],
                           'doxygen doc/devel/Doxyfile.pyregfi')
 
+install_items = install_bin + install_lib + install_pyregfi
 
 # User Friendly Targets
 env.Alias('libregfi', libregfi)
@@ -103,6 +102,9 @@ env.Alias('reglookup-recover', reglookup_recover)
 env.Alias('bin', [reglookup_recover, reglookup])
 env.Alias('doc', [man_reglookup,man_reglookup_recover,man_reglookup_timeline])
 env.Alias('doc-devel', [regfi_doc, pyregfi_doc])
+env.Alias('install_bin', install_bin)
+env.Alias('install_lib', install_lib)
+env.Alias('install_pyregfi', install_pyregfi)
 env.Alias('install', install_items)
 
 Default('bin', libregfi)
