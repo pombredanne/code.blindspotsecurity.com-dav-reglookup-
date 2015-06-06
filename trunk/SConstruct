@@ -3,12 +3,15 @@ import os
 sys.dont_write_bytecode = True
 from regfi_version import REGFI_VERSION
 
+# Package Maintainers: should any of these options be omitted during package
+# build, instead relying on CFLAGS/LDFLAGS to specify them when appropriate?
 cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
 cflags += ' -DREGFI_VERSION=\'"%s"\' ' % REGFI_VERSION
 cflags += os.environ.get('CFLAGS','-fPIE -pie -fstack-protector -D_FORTIFY_SOURCE=2')
 
 linkflags = "-shared -fPIC -Wl,-soname,libregfi.so.%s " % REGFI_VERSION
 linkflags += os.environ.get('LDFLAGS','-z relro -z now')
+
 
 lib_src = ['lib/regfi.c',
            'lib/winsec.c',
@@ -69,6 +72,7 @@ env.Install(destdir+mandir+'/man1', [man_reglookup, man_reglookup_recover,
 if os.getuid() == 0 and destdir == '':
    env.AddPostAction(libinstall, 'ldconfig')
 
+# Package Maintainers: Do you need more control over these next two sections?
 install_pyregfi = []
 if sys.version_info[0] == 2:
    install_pyregfi.append('pyregfi2-install.log')
@@ -84,6 +88,7 @@ if python_path != '':
                                         'python/pyregfi/structures.py', 
                                         'python/pyregfi/winsec.py'], 
                "python3 setup.py install --root=/%s | tee pyregfi3-install.log" % destdir)
+
 
 # API documentation
 regfi_doc = env.Command('doc/devel/regfi/index.html', 
