@@ -1,17 +1,18 @@
+#-*- mode: Python;-*-
+
 import sys
 import os
 sys.dont_write_bytecode = True
 from regfi_version import REGFI_VERSION
+ABI_VERSION=REGFI_VERSION.rsplit('.',1)[0]
 
-# Package Maintainers: should any of these options be omitted during package
-# build, instead relying on CFLAGS/LDFLAGS to specify them when appropriate?
+# Package Maintainers: should any of these options in the first line be omitted during
+# package build, instead relying on CFLAGS/LDFLAGS to specify them when appropriate?
 cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
 cflags += ' -DREGFI_VERSION=\'"%s"\' ' % REGFI_VERSION
 cflags += os.environ.get('CFLAGS','-fPIE -pie -fstack-protector -D_FORTIFY_SOURCE=2')
 
-linkflags = "-shared -fPIC -Wl,-soname,libregfi.so.%s " % REGFI_VERSION
-linkflags += os.environ.get('LDFLAGS','-z relro -z now')
-
+linkflags = "-fPIC " + os.environ.get('LDFLAGS',"-Wl,-z,relro,-z,now")
 
 lib_src = ['lib/regfi.c',
            'lib/winsec.c',
@@ -23,6 +24,7 @@ cc=os.environ.get('CC', 'gcc')
 env = Environment(ENV=os.environ,
                   CC=cc,
                   CFLAGS=cflags,
+                  LINKFLAGS=linkflags,
                   CPPPATH=['include', '/usr/local/include'],
                   LIBPATH=['lib', '/usr/local/lib'],
                   LIBS=['m', 'pthread', 'regfi', 'talloc'])
@@ -31,7 +33,7 @@ env = Environment(ENV=os.environ,
 # Libraries
 libregfi_static = env.Library(lib_src)
 libregfi = env.SharedLibrary(lib_src, LIBS=['m','pthread', 'talloc'], 
-                             LINKFLAGS=linkflags)
+                             SHLIBVERSION=ABI_VERSION)
 
 
 # Executables
@@ -64,7 +66,7 @@ install_bin = [destdir + bindir, destdir + mandir]
 install_lib = [destdir + libdir, destdir + includedir + '/regfi']
 
 env.Install(destdir+bindir, [reglookup, reglookup_recover, 'bin/reglookup-timeline'])
-libinstall = env.Install(destdir+libdir, [libregfi, libregfi_static])
+libinstall = env.InstallVersionedLib(destdir+libdir, [libregfi, libregfi_static], SHLIBVERSION=ABI_VERSION)
 env.Install(destdir+includedir+'/regfi', Glob('include/*.h'))
 env.Install(destdir+mandir+'/man1', [man_reglookup, man_reglookup_recover,
                                      man_reglookup_timeline])
