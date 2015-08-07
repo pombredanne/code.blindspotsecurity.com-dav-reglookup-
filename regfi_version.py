@@ -1,2 +1,3 @@
 SVN_REV = "$Rev$"
-REGFI_VERSION = "99.99.99.%s" % SVN_REV.split(' ')[1]
+LATEST='1.0.1'
+REGFI_VERSION = "%s.%s" % (LATEST, SVN_REV.split(' ')[1])
