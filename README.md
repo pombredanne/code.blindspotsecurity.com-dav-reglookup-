@@ -12,6 +12,11 @@ See the [main project site](http://projects.sentinelchicken.org/reglookup/).  Yo
 Ask for help on the [development mailing list](http://projects.sentinelchicken.org/reglookup/mailing-list) or submit an issue here on GitHub.
 
 
+# Is this project maintained anymore?
+
+RegLookup is largely feature-complete for what we wanted to accomplish.  So the releases are infrequent (typically only when bugs crop up), but the project is still maintained.
+
+
 # How do I contribute?
 
 We love contributions.  However, for now this GitHub mirror is just that, a static mirror, so please don't submit pull requests.  Just send us a patch on the development mailing list.
