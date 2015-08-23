@@ -412,9 +412,14 @@ char* winsec_sid2str(const WINSEC_DOM_SID* sid)
 {
   uint32_t i, size = WINSEC_MAX_SUBAUTHS*11 + 24;
   uint32_t left = size;
-  uint8_t comps = sid->num_auths;
-  char* ret_val = malloc(size);
-  
+  uint8_t comps;
+  char* ret_val;
+
+  if(sid == NULL)
+    return NULL;
+  comps = sid->num_auths;
+
+  ret_val = malloc(size);
   if(ret_val == NULL)
     return NULL;
 
