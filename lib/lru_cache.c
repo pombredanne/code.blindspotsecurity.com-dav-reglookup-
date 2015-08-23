@@ -60,7 +60,8 @@ static uint32_t lru_cache_floor_log2(uint32_t n)
 }
 
 #if 0
-static void lru_cache_print(lru_cache* ht)
+_EXPORT()
+void lru_cache_print(lru_cache* ht)
 {
   uint32_t i;
   lru_cache_element* cur;
