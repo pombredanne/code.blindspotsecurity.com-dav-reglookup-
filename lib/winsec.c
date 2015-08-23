@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2006,2009-2011 Timothy D. Morgan
+ * Copyright (C) 2005-2006,2009-2011,2015 Timothy D. Morgan
  * Copyright (C) 1992-2005 Samba development team 
  *               (see individual files under Subversion for details.)
  *

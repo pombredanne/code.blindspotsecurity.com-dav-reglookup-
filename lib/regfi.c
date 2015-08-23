@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2011 Timothy D. Morgan
+ * Copyright (C) 2005-2011,2015 Timothy D. Morgan
  * Copyright (C) 2005 Gerald (Jerry) Carter
  *
  * This program is free software; you can redistribute it and/or modify
