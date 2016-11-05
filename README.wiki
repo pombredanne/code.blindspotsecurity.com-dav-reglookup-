@@ -1,0 +1,24 @@
+<h2>What is this?</h2>
+<p>
+The RegLookup project is devoted to direct analysis of Windows NT-based registry files. RegLookup is released under the GNU GPL, and is implemented in ANSI C. RegLookup provides command line tools, a C API, and a Python module for accessing registry data structures. The project has a focus on providing tools for digital forensic examiners (though is useful for many purposes), and includes algorithms for retrieving deleted data structures from registry hives.
+</p>
+
+<h2>Where do I learn more?</h2>
+<p>
+See the <a href="http://projects.sentinelchicken.org/reglookup/">main project site</a>.  You'll find official releases there and more documentation.
+</p>
+
+<h2> What if I have trouble? </h2>
+<p>
+Ask for help on the <a href="http://projects.sentinelchicken.org/reglookup/mailing-list">development mailing list</a> or <a href="https://code.blindspotsecurity.com/trac/reglookup/newticket">submit a ticket</a>.
+</p>
+
+<h2> Is this project maintained anymore? </h2>
+<p>
+RegLookup is largely feature-complete for what we wanted to accomplish.  So the releases are infrequent (typically only when bugs crop up), but the project is still maintained.
+</p>
+
+<h2> How do I contribute? </h2>
+<p>
+We love contributions.  To submit a patch, please check out the trunk, apply your changes and run "<code>svn diff</code>".  Save the resulting diff and attach it to a ticket.
+</p>
