@@ -40,7 +40,7 @@ things you could look into:
 
  - Documentation.  The security descriptor output format needs to be
    documented.  Also, function contracts should be added to the
-   lower-level functions of regfi.c. Continue adding
+   lower-level functions of regfi.c.
 
  - Consider switching from libiconv to Joachim Metz's libuna for
    increased portability and easier builds.
