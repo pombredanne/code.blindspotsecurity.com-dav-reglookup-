@@ -20,5 +20,9 @@ RegLookup is largely feature-complete for what we wanted to accomplish.  So the 
 
 <h2> How do I contribute? </h2>
 <p>
-We love contributions.  To submit a patch, please check out the trunk, apply your changes and run "<code>svn diff</code>".  Save the resulting diff and attach it to a ticket.
+We love contributions.  To submit a patch, please check out the latest revision with:
+</p>
+<pre>svn co https://code.blindspotsecurity.com/dav/reglookup/</pre>
+<p>
+Then apply your changes and run "<code>svn diff</code>".  Save the resulting diff and attach it to a ticket.
 </p>
