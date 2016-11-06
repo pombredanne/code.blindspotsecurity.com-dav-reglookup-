@@ -1,6 +1,0 @@
-# 
-
-sudo sh -c 'cd /sys/devices/system/cpu && echo performance | tee cpu*/cpufreq/scaling_governor'
-#
-scons -c
-LDFLAGS= CFLAGS= CC=/usr/local/src/afl-1.86b/afl-gcc scons
