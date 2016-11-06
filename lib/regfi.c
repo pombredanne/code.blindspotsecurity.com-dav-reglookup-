@@ -1699,7 +1699,7 @@ REGFI_FILE* regfi_alloc_cb(REGFI_RAW_FILE* file_cb,
                                         cache_secret, true);
 
   /* success */
-  talloc_set_destructor(rb, regfi_free_cb);
+  talloc_set_destructor((void*)rb, regfi_free_cb);
   return rb;
 
  fail:
