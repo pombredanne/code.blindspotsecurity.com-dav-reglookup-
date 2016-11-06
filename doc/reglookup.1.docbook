@@ -257,7 +257,7 @@
     <para>
       Note that some of the bits listed above have either not been allocated by 
       Microsoft, or simply aren't documented.  If any bits are set in the above 
-      two fields that aren't recognized, a hexidecimal representation of all of 
+      two fields that aren't recognized, a hexadecimal representation of all of 
       these mystery bits will be included in the output.  For instance, if the 
       lowest bit and third lowest bit were not recognized while being set, 
       the number "0x5" would be included as an element in the list.
