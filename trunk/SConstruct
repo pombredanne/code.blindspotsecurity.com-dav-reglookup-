@@ -10,7 +10,7 @@ ABI_VERSION=REGFI_VERSION.rsplit('.',1)[0]
 # package build, instead relying on CFLAGS/LDFLAGS to specify them when appropriate?
 cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
 cflags += ' -DREGFI_VERSION=\'"%s"\' ' % REGFI_VERSION
-cflags += os.environ.get('CFLAGS','-fPIE -pie -fstack-protector -D_FORTIFY_SOURCE=2')
+cflags += os.environ.get('CFLAGS','-fPIE -pie -fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2')
 
 linkflags = "-fPIC " + os.environ.get('LDFLAGS',"-Wl,-z,relro,-z,now")
 
@@ -25,8 +25,8 @@ env = Environment(ENV=os.environ,
                   CC=cc,
                   CFLAGS=cflags,
                   LINKFLAGS=linkflags,
-                  CPPPATH=['include', '/usr/local/include'],
-                  LIBPATH=['lib', '/usr/local/lib'],
+                  CPPPATH=['include', '/usr/local/include', '/usr/include'],
+                  LIBPATH=['lib', '/usr/local/lib','/usr/lib'],
                   LIBS=['m', 'pthread', 'regfi', 'talloc'])
 
 
