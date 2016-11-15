@@ -8,7 +8,7 @@ ABI_VERSION=REGFI_VERSION.rsplit('.',1)[0]
 
 # Package Maintainers: should any of these options in the first line be omitted during
 # package build, instead relying on CFLAGS/LDFLAGS to specify them when appropriate?
-cflags = '-std=gnu99 -pedantic -Wall -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
+cflags = '-std=gnu99 -pedantic -Wall -Werror=format-security -D_FILE_OFFSET_BITS=64 -fvisibility=hidden'
 cflags += ' -DREGFI_VERSION=\'"%s"\' ' % REGFI_VERSION
 cflags += os.environ.get('CFLAGS','-fPIE -pie -fstack-protector-strong -D_FORTIFY_SOURCE=2 -O2')
 
